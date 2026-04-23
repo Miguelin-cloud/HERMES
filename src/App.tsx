@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PROPELLANTS, SimulationInputs, SimulationResults } from './lib/types';
 import { runSimulation } from './lib/simulator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Label as ChartLabel } from 'recharts';
+import { Download, Monitor } from 'lucide-react';
 
 import { GrainViewer } from './components/GrainViewer';
 import { EngineViewer } from './components/EngineViewer';
@@ -116,8 +117,30 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('inputs');
   const [lang, setLang] = useState<Language>('en');
   const [showSplash, setShowSplash] = useState(true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
   
   const [showCfdInfo, setShowCfdInfo] = useState(false);
+
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+      setShowInstallBtn(false);
+    }
+  };
   
   const [motor, setMotor] = useState({ Dc: 60.5, Lc: 483, Gstar: 2, kv: 0, etac: 0.85, paso_de_tiempo: 0.0005, Pamb: 0.101325 });
   const [nozzle, setNozzle] = useState({ Dt0: 18.8, Ds: 41.1, e: 0, alpha: 12, ro: 2, etanoz: 0.75 });
@@ -254,6 +277,17 @@ export default function App() {
               V 1.0.0 • {new Date().toISOString().split('T')[0]}
             </div>
           </div>
+
+          {showInstallBtn && (
+            <Button 
+              onClick={handleInstallClick}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-[10px] font-bold px-3 gap-2 shadow-lg animate-bounce hover:animate-none"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {lang === 'es' ? 'INSTALAR APP' : (lang === 'fr' ? 'INSTALLER' : 'INSTALL APP')}
+            </Button>
+          )}
+
           <Select value={lang} onValueChange={(v) => setLang(v as Language)}>
             <SelectTrigger className="w-20 bg-slate-800 border-slate-700 text-white h-8 text-xs font-medium">
               <SelectValue />

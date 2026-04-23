@@ -1,21 +1,18 @@
 {
-  "name": "HERMES Engine Simulator",
-  "short_name": "HERMES",
-  "description": "Professional Solid Propellant Rocket Engine Simulator",
+  "name": "HERMES: Rocket Launcher Simulator",
+  "short_name": "HERMES Simulator",
+  "description": "Professional tool for solid propellant rocket engine simulation and design.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "orientation": "any",
+  "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "icons": [
     {
-      "src": "/vite.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml"
-    },
-    {
-      "src": "/vite.svg",
+      "src": "https://cdn-icons-png.flaticon.com/512/3061/3061483.png",
       "sizes": "512x512",
-      "type": "image/svg+xml"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

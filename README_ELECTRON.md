@@ -1,34 +1,69 @@
-# Guía para crear el Ejecutable de HERMES (.exe)
+# 🛠️ Guía Maestra: Crea tu Aplicación HERMES (.exe) para Escritorio
 
-Has exportado el proyecto para convertirlo en una aplicación de escritorio profesional usando **Electron**. Sigue estos pasos en tu ordenador:
+¡Hola! Has elegido la opción de **Electron** para convertir este simulador en un programa profesional que cualquiera pueda instalar en su ordenador. Como es tu primera vez, he preparado esta guía paso a paso para que no te pierdas.
 
-## Requisitos previos
-1. Descarga e instala **Node.js** (versión LTS recomendada) desde [nodejs.org](https://nodejs.org/).
+> **Importante**: La creación del archivo instalador (`.exe`) se debe hacer **en tu propio ordenador**, ya que requiere acceso a las herramientas del sistema que no están disponibles en el navegador.
 
-## Pasos para crear el ejecutable
+---
 
-1.  **Descomprime el archivo ZIP** en una carpeta en tu escritorio.
-2.  **Abre una terminal** (Símbolo del sistema o PowerShell en Windows) dentro de esa carpeta.
-3.  **Instala las dependencias**:
-    ```bash
-    npm install
-    ```
-4.  **Genera el ejecutable**:
-    Ejecuta el siguiente comando para compilar el código y empaquetarlo:
-    ```bash
-    npm run electron:build
-    ```
-5.  **Recoge tu App**:
-    Cuando termine, aparecerá una carpeta llamada `release`. Dentro encontrarás el instalador `.exe` (o el ejecutable portable).
+## 1️⃣ Paso 1: Descarga el Código
+Primero, saca todo el trabajo que hemos hecho de aquí a tu escritorio:
+1.  Arriba a la derecha, busca el botón **Settings** (Ajustes).
+2.  Pulsa en **Export to ZIP**.
+3.  Guarda el archivo en tu ordenador y **descomprímelo** (clic derecho -> Extraer todo) en una carpeta que tengas a mano, por ejemplo, en el Escritorio.
 
-## Personalización del Icono
-El sistema está configurado para buscar un icono en `public/icon.png`. 
-*   **Diseño propuesto**: He diseñado conceptualmente un logo que une el casco alado de Hermes con el cuerpo aerodinámico de un cohete en tonos azules eléctricos y oro titanio.
-*   **Cómo cambiarlo**: Simplemente reemplaza el archivo `public/icon.png` por tu imagen favorita y vuelve a ejecutar el comando de build.
+---
 
-## Probar en modo desarrollo
-Si quieres ver cómo queda la ventana antes de crear el ejecutable, usa:
+## 2️⃣ Paso 2: Prepara tu Ordenador (Solo la primera vez)
+Para que tu PC pueda "cocinar" el código y convertirlo en una app, necesita un pequeño motor llamado **Node.js**:
+1.  Ve a [nodejs.org](https://nodejs.org/).
+2.  Descarga la versión que dice **LTS** (es la más estable).
+3.  Instálala como cualquier otro programa (Siguiente, Siguiente, Aceptar).
+
+---
+
+## 3️⃣ Paso 3: Abre la "Cocina" (Terminal)
+Ahora vamos a decirle al ordenador que trabaje con los archivos que descargaste:
+1.  Entra en la carpeta donde extrajiste el código.
+2.  En la barra de direcciones de la carpeta (arriba, donde pone la ruta), escribe `cmd` y pulsa **Enter**. Se abrirá una ventana negra (la terminal).
+
+---
+
+## 4️⃣ Paso 4: Comandos Mágicos
+Escribe estos comandos en la ventana negra uno por uno (pulsa Enter después de cada uno y espera a que terminen):
+
+### A) Instalar las herramientas necesarias:
+Este paso descarga todas las librerías (React, Recharts, Electron...) en tu carpeta.
 ```bash
-npm run dev          # En una terminal para arrancar el servidor web
-npm run electron:dev # En otra terminal para abrir la ventana de escritorio
+npm install
 ```
+
+### B) Crear el instalador (.exe):
+Este es el comando que hace todo el trabajo pesado. Limpia el código, lo prepara para Windows y crea el instalador.
+```bash
+npm run electron:build
+```
+
+---
+
+## 5️⃣ ¡Ya lo tienes!
+Cuando el proceso termine (verás que pone "Done" o vuelve a aparecer el cursor), ve a tu carpeta del proyecto. 
+*   Verás que ha aparecido una carpeta nueva llamada **`release`**.
+*   Dentro de `release` encontrarás un archivo llamado **`HERMES Rocket Simulator Setup.exe`**.
+
+**¡Ese es tu instalador!** Puedes enviárselo a quien quieras, subirlo a una web o mandarlo por correo. Al ejecutarlo, se instalará en el PC con el icono de HERMES.
+
+---
+
+## 🎨 Personalización Final
+Si quieres cambiar el icono antes de crear el `.exe`:
+1.  Reemplaza el archivo `public/icon.png` por cualquier otro con el mismo nombre.
+2.  Vuelve a ejecutar `npm run electron:build`.
+
+---
+
+## 💡 Consejos de Profesional
+*   **Aviso de Windows**: Como tu app es nueva, Windows dirá "Protegió su PC". No te asustes, pulsa en *"Más información"* y luego en *"Ejecutar de todas formas"*.
+*   **Probar sin instalar**: Si solo quieres ver cómo queda la ventana sin instalarla, usa el comando `npm run electron:dev` (teniendo en otra terminal abierto el comando `npm run dev`).
+
+¡Disfruta de tu nueva aplicación de escritorio de HERMES! 🚀
