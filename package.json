@@ -57,15 +57,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "public/icon.png",
-      "verifyUpdateCodeSignature": false
-    },
-    "mac": {
-      "target": "dmg",
-      "identity": null
-    },
-    "linux": {
-      "target": "AppImage"
+      "icon": "public/icon.png"
     }
   }
 }
