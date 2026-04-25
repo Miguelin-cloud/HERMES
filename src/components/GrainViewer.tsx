@@ -6,21 +6,21 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
   if (!results || !results.grains || !results.t || results.t.length === 0) return null;
 
   return (
-    <Card className="h-full flex flex-col bg-white border border-slate-200 text-slate-800 shadow-md">
-      <CardHeader className="border-b border-slate-100 pb-3 bg-slate-50/50 flex-none text-slate-800 font-mono tracking-tight text-sm">
+    <Card className="h-full flex flex-col bg-card border-border shadow-sm text-card-foreground">
+      <CardHeader className="border-b border-border pb-3 bg-muted/50 flex-none text-cyan-400 font-mono tracking-tight text-[11px] uppercase">
         <div className="flex justify-between items-center">
-            {t?.geometric_analysis || 'Geometric Regression Analysis'}
-            <div className="text-xs font-mono text-slate-500 uppercase">{t?.propellant_geometry || 'PROPELLANT GEOMETRY'}</div>
+            <span className="font-bold tracking-widest">{t?.geometric_analysis || 'Geometric Regression Analysis'}</span>
+            <div className="text-[10px] text-slate-400">{t?.propellant_geometry || 'PROPELLANT GEOMETRY'}</div>
         </div>
       </CardHeader>
       <CardContent className="flex-1 min-h-0 flex flex-col p-4 overflow-y-auto no-scrollbar">
         <div className="flex flex-col gap-6">
           {/* Longitudinal View */}
           <div>
-             <h3 className="text-sm font-semibold text-neutral-500 mb-2 uppercase tracking-wider">{t?.side_profile || 'Longitudinal View'}</h3>
-             <div className="w-full flex justify-center bg-neutral-100 rounded-xl p-4 overflow-hidden border border-neutral-200">
+             <h3 className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-widest flex items-center gap-2"><div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>{t?.side_profile || 'Longitudinal View'}</h3>
+             <div className="w-full flex justify-center bg-muted/50 rounded-xl p-4 overflow-hidden border border-border shadow-inner">
                 <svg width="100%" height="80" viewBox="0 0 400 80" preserveAspectRatio="xMidYMid meet" style={{ maxWidth: '400px' }}>
-                  <line x1="0" y1="40" x2="400" y2="40" stroke="#cbd5e1" strokeDasharray="4 4" />
+                  <line x1="0" y1="40" x2="400" y2="40" stroke="#334155" strokeDasharray="4 4" />
                   {results.grains.map((g, i) => {
                      const xInfo = results.grains_x && results.grains_x[i] ? results.grains_x[i][timeIndex] : 0;
                      const x = xInfo || 0;
@@ -60,10 +60,10 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
                            return (
                              <g key={`seg-${j}`}>
                                {segmentW > 0 && gHeight > 0 && (
-                                 <rect x={segmentX} y={gTop} width={segmentW} height={gHeight} fill="#64748b" />
+                                 <rect x={segmentX} y={gTop} width={segmentW} height={gHeight} fill="#94a3b8" />
                                )}
                                {g.shape !== 3 && segmentW > 0 && coreHeight > 0 && (
-                                 <rect x={segmentX} y={coreTop} width={segmentW} height={coreHeight} fill="#f5f5f5" />
+                                 <rect x={segmentX} y={coreTop} width={segmentW} height={coreHeight} fill="#0f172a" />
                                )}
                              </g>
                            )
@@ -77,7 +77,7 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
 
           {/* Cross Section View */}
           <div>
-            <h3 className="text-sm font-semibold text-neutral-500 mb-2 uppercase tracking-wider">{t?.cross_section || 'Cross-Sectional View'}</h3>
+            <h3 className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-widest flex items-center gap-2"><div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>{t?.cross_section || 'Cross-Sectional View'}</h3>
             <div className="flex justify-center gap-4 flex-wrap overflow-y-auto no-scrollbar pb-6 min-h-0">
               {results.grains.map((g, i) => {
                 const xInfo = results.grains_x && results.grains_x[i] ? results.grains_x[i][timeIndex] : 0;
@@ -128,22 +128,22 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
                 }
 
                 return (
-                  <div key={g.id} className="flex flex-col items-center p-2 border border-slate-100 rounded-lg bg-white shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-tighter">{t?.grains || 'Grain'} {i+1}</span>
-                    <svg width={drawSize} height={drawSize} viewBox={`0 0 ${drawSize} ${drawSize}`} className="bg-neutral-50 rounded border border-neutral-100">
-                      <line x1={drawSize/2} y1="0" x2={drawSize/2} y2={drawSize} stroke="#e5e5e5" strokeDasharray="2 2" />
-                      <line x1="0" y1={drawSize/2} x2={drawSize} y2={drawSize/2} stroke="#e5e5e5" strokeDasharray="2 2" />
+                  <div key={g.id} className="flex flex-col items-center p-2 border border-border rounded-lg bg-card shadow-md bg-card border-border shadow-sm text-card-foreground">
+                    <span className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">{t?.grains || 'Grain'} {i+1}</span>
+                    <svg width={drawSize} height={drawSize} viewBox={`0 0 ${drawSize} ${drawSize}`} className="bg-card rounded border border-border">
+                      <line x1={drawSize/2} y1="0" x2={drawSize/2} y2={drawSize} stroke="#334155" strokeDasharray="2 2" />
+                      <line x1="0" y1={drawSize/2} x2={drawSize} y2={drawSize/2} stroke="#334155" strokeDasharray="2 2" />
                       
                       {pathStr && (
-                        <path d={pathStr} fill="#64748b" fillRule="evenodd" />
+                        <path d={pathStr} fill="#94a3b8" fillRule="evenodd" />
                       )}
                       
                       {g.shape === 2 && corePathStr && (
-                        <polygon points={corePathStr.replace(/M |L |Z/g, "")} fill="#fafafa" />
+                        <polygon points={corePathStr.replace(/M |L |Z/g, "")} fill="#0f172a" />
                       )}
                       
                       {g.shape === 1 && corePathStr && (
-                        <path d={corePathStr} fill="#fafafa" />
+                        <path d={corePathStr} fill="#0f172a" />
                       )}
                     </svg>
                   </div>

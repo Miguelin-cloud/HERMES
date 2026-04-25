@@ -68,7 +68,7 @@ export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
                     width={gWidth} 
                     height={gHeight} 
                     fill={fillColor} 
-                    stroke="#1e293b" 
+                    stroke="#64748b" 
                     strokeWidth="1" 
                     opacity={g.D0 > motor.Dc ? 0.4 : 1}
                   />
@@ -80,8 +80,8 @@ export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
                       y={coreTop} 
                       width={gWidth} 
                       height={coreHeight} 
-                      fill="#ffffff" 
-                      stroke="#64748b"
+                      fill="#090e17" 
+                      stroke="#475569"
                       strokeWidth="0.5"
                       strokeDasharray="2 1"
                     />
@@ -95,7 +95,7 @@ export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
                       y1={gTop} 
                       x2={startX + j * g.L0 * scale} 
                       y2={gTop + gHeight} 
-                      stroke="#0f172a" 
+                      stroke="#475569" 
                       strokeWidth="1"
                     />
                   ))}
@@ -106,7 +106,7 @@ export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
                       x={startX + gWidth/2} 
                       y={center_y} 
                       fontSize="9" 
-                      fill="#1e293b" 
+                      fill="#090e17" 
                       textAnchor="middle" 
                       dominantBaseline="middle"
                       fontWeight="black"
@@ -125,25 +125,25 @@ export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
               width={motor.Lc*scale} 
               height={motor.Dc*scale} 
               fill="none" 
-              stroke="#0f172a" 
+              stroke="#60a5fa" 
               strokeWidth="2"
             />
             
             {/* Front Closure */}
-            <rect x="15" y={center_y - motor.Dc/2*scale} width="5" height={motor.Dc*scale} fill="#1e293b" />
+            <rect x="15" y={center_y - motor.Dc/2*scale} width="5" height={motor.Dc*scale} fill="#60a5fa" />
 
             {/* Centerline */}
             <line x1="0" y1={center_y} x2={drawWidth} y2={center_y} stroke="#ef4444" strokeWidth="0.5" strokeDasharray="8 4" />
             
             {/* Dimension Lines */}
             <g markerEnd="url(#arrow)" markerStart="url(#arrow)">
-               <line x1="20" y1={center_y + motor.Dc/2*scale + 20} x2={20 + motor.Lc*scale} y2={center_y + motor.Dc/2*scale + 20} stroke="#475569" strokeWidth="1" />
+               <line x1="20" y1={center_y + motor.Dc/2*scale + 20} x2={20 + motor.Lc*scale} y2={center_y + motor.Dc/2*scale + 20} stroke="#94a3b8" strokeWidth="1" />
             </g>
-            <text x={20 + (motor.Lc*scale)/2} y={center_y + motor.Dc/2*scale + 35} fontSize="9" fill="#1e293b" textAnchor="middle" fontWeight="bold">Lc = {motor.Lc} mm</text>
+            <text x={20 + (motor.Lc*scale)/2} y={center_y + motor.Dc/2*scale + 35} fontSize="9" fill="#cbd5e1" textAnchor="middle" fontWeight="bold">Lc = {motor.Lc} mm</text>
             
             <defs>
               <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3" markerHeight="3" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
               </marker>
             </defs>
         </svg>

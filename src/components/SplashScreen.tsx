@@ -2,8 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { Rocket } from 'lucide-react';
 import { translations, Language } from '../lib/i18n';
 
+const QUOTES = [
+  { text: "The Earth is the cradle of humanity, but mankind cannot stay in the cradle forever.", author: "Konstantin Tsiolkovsky" },
+  { text: "To confine our attention to terrestrial matters would be to limit the human spirit.", author: "Stephen Hawking" },
+  { text: "Once you have tasted flight, you will forever walk the earth with your eyes turned skyward.", author: "Leonardo da Vinci" },
+  { text: "That's one small step for man, one giant leap for mankind.", author: "Neil Armstrong" },
+  { text: "Spaceflight will never tolerate carelessness, incapacity, and neglect.", author: "Gene Kranz" },
+  { text: "There is no sound in space, but the roar of a rocket makes up for it.", author: "Unknown" },
+  { text: "Any sufficiently advanced technology is indistinguishable from magic.", author: "Arthur C. Clarke" },
+  { text: "If we can conquer space, we can conquer childhood hunger.", author: "Buzz Aldrin" },
+];
+
 export function SplashScreen({ lang, onComplete }: { lang: Language, onComplete: () => void }) {
   const [progress, setProgress] = useState(0);
+  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
   const t = translations[lang];
 
   useEffect(() => {
@@ -32,21 +44,28 @@ export function SplashScreen({ lang, onComplete }: { lang: Language, onComplete:
         style={{ backgroundImage: 'url(https://picsum.photos/seed/rocketengine/1920/1080?blur=4)' }}
       />
       
-      <div className="relative z-10 flex flex-col items-center max-w-md w-full px-6 text-center">
-        <div className="p-4 bg-blue-600 rounded-2xl shadow-[0_0_40px_rgba(37,99,235,0.8)] mb-8">
-           <Rocket size={48} className="text-white" />
+      <div className="relative z-10 flex flex-col items-center max-w-lg w-full px-6 text-center">
+        <div className="p-4 bg-primary/20 border border-primary/50 shadow-[0_0_40px_rgba(56,189,248,0.4)] rounded-2xl mb-8 relative">
+           <div className="absolute inset-0 rounded-2xl bg-primary/20 blur-xl animate-pulse" />
+           <Rocket size={48} className="text-primary relative z-10" />
         </div>
         
-        <h1 className="text-3xl md:text-5xl font-black tracking-widest text-white mb-2 shadow-sm">
+        <h1 className="text-3xl md:text-5xl font-black tracking-widest text-slate-100 mb-2 drop-shadow-lg">
            HERMES
         </h1>
-        <p className="text-blue-400 font-mono tracking-widest text-xs md:text-sm uppercase mb-12">
+        <p className="text-primary font-mono tracking-widest text-xs md:text-sm uppercase mb-16">
            {t.loading}
         </p>
+
+        {/* Quote Section */}
+        <div className="h-16 flex flex-col items-center justify-center mb-12">
+           <p className="text-slate-300 italic text-sm md:text-base font-serif mb-2">"{quote.text}"</p>
+           <p className="text-slate-500 font-mono text-[10px] md:text-xs tracking-widest uppercase">— {quote.author}</p>
+        </div>
         
-        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-4 border border-slate-700">
+        <div className="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden mb-4 border border-slate-700/50 backdrop-blur-sm">
            <div 
-             className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,1)] transition-all duration-75 ease-linear"
+             className="h-full bg-primary shadow-[0_0_15px_rgba(56,189,248,0.8)] transition-all duration-75 ease-linear"
              style={{ width: `${progress}%` }}
            />
         </div>

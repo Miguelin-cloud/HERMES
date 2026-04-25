@@ -46,13 +46,13 @@ function NumberInput({
   }, [value, decimals]);
 
   return (
-    <div className="flex items-center justify-between gap-1 w-full border-b border-slate-100/50 pb-[2px] mb-[2px]" title={tooltip}>
-      <UiLabel className="text-[10px] text-slate-600 font-semibold whitespace-nowrap">{label}</UiLabel>
+    <div className="flex items-center justify-between gap-1 w-full border-b border-border pb-1 mb-[2px] hover:bg-muted/50 px-1 rounded transition-colors" title={tooltip}>
+      <UiLabel className="text-[10px] text-muted-foreground font-mono tracking-tight whitespace-nowrap">{label}</UiLabel>
       <Input
         type="number"
         step={step}
         value={internal}
-        className="w-[65px] h-5 min-h-0 text-[10px] py-0 px-1 text-right bg-slate-50/80 border-slate-200"
+        className="w-[65px] h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background border-border text-primary font-mono ring-offset-background focus-visible:ring-ring focus-visible:ring-1 focus-visible:ring-offset-0"
         onChange={(e) => {
           setInternal(e.target.value);
           if (e.target.value !== '') {
@@ -145,7 +145,7 @@ export default function App() {
   const [motor, setMotor] = useState({ Dc: 60.5, Lc: 483, Gstar: 2, kv: 0, etac: 0.85, paso_de_tiempo: 0.0005, Pamb: 0.101325 });
   const [nozzle, setNozzle] = useState({ Dt0: 18.8, Ds: 41.1, e: 0, alpha: 12, ro: 2, etanoz: 0.75 });
   const [grains, setGrains] = useState([
-    { id: '1', shape: 1 as const, propellantType: 1 as const, D0: 56, d0: 25, d0mayor: 0, L0: 60, N: 5, Np: 0, osi: 1, ci: 1, ei: 1, rhorat: 0.94 }
+    { id: '1', shape: 1 as 1 | 2 | 3, propellantType: 1 as 1 | 2 | 3 | 4 | 5 | 6 | 7, D0: 56, d0: 25, d0mayor: 0, L0: 60, N: 5, Np: 0, osi: 1, ci: 1, ei: 1, rhorat: 0.94 }
   ]);
   const [results, setResults] = useState<SimulationResults | null>(null);
 
@@ -250,30 +250,30 @@ export default function App() {
   const t = translations[lang];
 
   return (
-    <div className="h-screen max-h-screen bg-slate-50 flex flex-col font-sans overflow-hidden">
+    <div className="h-screen max-h-screen bg-background text-foreground flex flex-col font-sans overflow-hidden">
       {showSplash && <SplashScreen lang={lang} onComplete={() => setShowSplash(false)} />}
 
-      <header className="bg-slate-900 text-slate-100 py-2 px-4 md:px-6 shadow-md flex justify-between items-center border-b-4 border-blue-600 shrink-0">
+      <header className="bg-card border-border shadow-sm text-slate-200 py-2 px-4 md:px-6 flex justify-between items-center border-b-4 border-primary shrink-0 relative z-10">
         <div className="flex items-center gap-4">
-          <div className="bg-blue-600 p-2 rounded-lg shadow-inner">
-             <Rocket className="w-6 h-6 text-white" />
+          <div className="bg-primary/20 border border-primary p-2 rounded-lg shadow-sm">
+             <Rocket className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-black tracking-widest text-white flex items-center gap-2">
-              {t.title.split(' ')[0]} <span className="text-blue-400 font-light hidden sm:inline">{t.title.substring(t.title.indexOf(' ')+1)}</span>
+            <h1 className="text-xl md:text-2xl font-black tracking-widest text-slate-200 flex items-center gap-2 ">
+              {t.title.split(' ')[0]} <span className="text-primary font-light hidden sm:inline">{t.title.substring(t.title.indexOf(' ')+1)}</span>
             </h1>
-            <p className="text-[10px] md:text-xs text-slate-400 font-mono tracking-widest uppercase mt-0.5">
+            <p className="text-[10px] md:text-xs text-primary/70 font-mono tracking-widest uppercase mt-0.5">
               {t.subtitle}
             </p>
           </div>
         </div>
         <div className="text-right flex items-center gap-6">
           <div className="hidden lg:flex flex-col items-end">
-            <div className="text-[10px] md:text-xs font-mono bg-slate-800 px-2 py-1 rounded text-emerald-400 border border-slate-700 shadow-inner flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+            <div className="text-[10px] md:text-xs font-mono bg-slate-900/80 px-2 py-1 rounded text-cyan-400 border border-cyan-900/50 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_5px_#22d3ee]"></div>
               {t.system_op}
             </div>
-            <div className="text-[10px] text-slate-500 mt-1.5 font-medium uppercase tracking-wider hidden sm:block">
+            <div className="text-[10px] text-slate-400 mt-1.5 font-medium uppercase tracking-wider hidden sm:block">
               V 1.0.0 • {new Date().toISOString().split('T')[0]}
             </div>
           </div>
@@ -281,7 +281,7 @@ export default function App() {
           {showInstallBtn && (
             <Button 
               onClick={handleInstallClick}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-[10px] font-bold px-3 gap-2 shadow-lg animate-bounce hover:animate-none"
+              className="bg-emerald-600/80 hover:bg-emerald-500 text-slate-200 border border-emerald-400/50 h-8 text-[10px] font-bold px-3 gap-2 shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-pulse hover:animate-none"
             >
               <Download className="w-3.5 h-3.5" />
               {lang === 'es' ? 'INSTALAR APP' : (lang === 'fr' ? 'INSTALLER' : 'INSTALL APP')}
@@ -289,10 +289,10 @@ export default function App() {
           )}
 
           <Select value={lang} onValueChange={(v) => setLang(v as Language)}>
-            <SelectTrigger className="w-20 bg-slate-800 border-slate-700 text-white h-8 text-xs font-medium">
+            <SelectTrigger className="w-20 bg-slate-900/80 border-slate-700/50 text-slate-200 h-8 text-xs font-medium backdrop-blur-sm">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-800 text-white border-slate-700">
+            <SelectContent className="bg-slate-900 text-slate-200 border-slate-700">
               <SelectItem value="en">ENG</SelectItem>
               <SelectItem value="es">ESP</SelectItem>
               <SelectItem value="fr">FRA</SelectItem>
@@ -302,40 +302,40 @@ export default function App() {
         </div>
       </header>
 
-      <main className="flex-1 p-2 md:p-4 max-w-[1600px] mx-auto w-full flex flex-col overflow-hidden">
+      <main className="flex-1 p-2 md:p-4 max-w-[1600px] mx-auto w-full flex flex-col overflow-hidden relative z-0">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col w-full min-h-0">
           <div className="flex justify-between items-center mb-1 shrink-0 overflow-x-auto">
-            <TabsList className="flex h-8 w-max shrink-0 bg-slate-100">
-              <TabsTrigger value="inputs">{t.inputs}</TabsTrigger>
-              <TabsTrigger value="results" disabled={!results}>{t.results}</TabsTrigger>
-              <TabsTrigger value="analysis" disabled={!results}>{t.analysis || "Análisis"}</TabsTrigger>
-              <TabsTrigger value="cfd" disabled={!results}>{t.cfd || "CFD Animation"}</TabsTrigger>
+            <TabsList className="flex h-8 w-max shrink-0 bg-slate-900/50 border border-slate-700/50 backdrop-blur-md">
+              <TabsTrigger value="inputs" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.inputs}</TabsTrigger>
+              <TabsTrigger value="results" disabled={!results} className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.results}</TabsTrigger>
+              <TabsTrigger value="analysis" disabled={!results} className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.analysis || "Análisis"}</TabsTrigger>
+              <TabsTrigger value="cfd" disabled={!results} className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.cfd || "CFD Animation"}</TabsTrigger>
             </TabsList>
-            <Button onClick={simulate} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md whitespace-nowrap min-w-[150px] h-9 ml-4 shrink-0">
+            <Button onClick={simulate} className="bg-destructive hover:bg-destructive/80 text-slate-200 font-bold shadow-[0_0_15px_rgba(249,115,22,0.5)] whitespace-nowrap min-w-[150px] h-9 ml-4 shrink-0 transition-all">
                {t.run}
             </Button>
           </div>
 
-          <TabsContent value="inputs" className="flex-1 flex flex-col min-h-0 gap-1 px-1 overflow-y-auto no-scrollbar">
+          <TabsContent value="inputs" className="flex-1 flex flex-col min-h-0 gap-2 px-1 overflow-y-auto no-scrollbar pt-2">
               
             {/* TOP ROW: Motor & Nozzle Settings + Visualizations */}
-            <div className="flex-none grid grid-cols-1 xl:grid-cols-3 gap-2 min-h-[170px] mb-1">
-                <Card className="border border-slate-300 shadow-sm flex flex-col rounded-sm overflow-visible bg-white">
-                  <CardHeader className="py-1 px-2 bg-slate-50 border-b flex-none"><CardTitle className="text-[10px] uppercase">{t.motor}</CardTitle></CardHeader>
-                  <CardContent className="flex-1 p-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5">
+            <div className="flex-none grid grid-cols-1 xl:grid-cols-3 gap-3 min-h-[170px] mb-1">
+                <Card className="bg-card border-border shadow-sm shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-primary">
+                  <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50 flex-none"><CardTitle className="text-[11px] uppercase tracking-widest text-primary">{t.motor}</CardTitle></CardHeader>
+                  <CardContent className="flex-1 p-2 grid grid-cols-2 gap-x-4 gap-y-1">
                     <NumberInput label={t.chamber_d + " [mm]"} value={motor.Dc} onChange={(v:any) => setMotor({...motor, Dc: v})} tooltip={t.dc_desc} />
                     <NumberInput label={t.chamber_l + " [mm]"} value={motor.Lc} onChange={(v:any) => setMotor({...motor, Lc: v})} tooltip={t.lc_desc} />
                     <NumberInput label={t.gstar} step="0.1" value={motor.Gstar} onChange={(v:any) => setMotor({...motor, Gstar: v})} tooltip={t.gstar_desc} />
                     <NumberInput label={t.kv} step="0.1" value={motor.kv} onChange={(v:any) => setMotor({...motor, kv: v})} tooltip={t.kv_desc} />
                     <NumberInput label={t.eff_c} step="0.01" value={motor.etac} onChange={(v:any) => setMotor({...motor, etac: v})} tooltip={t.etac_desc} />
-                    <NumberInput label={t.time_step + " [s]"} step="0.00001" decimals={5} value={motor.paso_de_tiempo} onChange={(v:any) => setMotor({...motor, paso_de_tiempo: v})} tooltip={t.dt_desc} />
-                    <NumberInput label={t.p_amb + " [MPa]"} step="0.001" value={motor.Pamb} onChange={(v:any) => setMotor({...motor, Pamb: v})} tooltip={t.pamb_desc} />
+                    <NumberInput label={t.time_step } step="0.00001" decimals={5} value={motor.paso_de_tiempo} onChange={(v:any) => setMotor({...motor, paso_de_tiempo: v})} tooltip={t.dt_desc} />
+                    <NumberInput label={t.p_amb } step="0.001" value={motor.Pamb} onChange={(v:any) => setMotor({...motor, Pamb: v})} tooltip={t.pamb_desc} />
                   </CardContent>
                 </Card>
 
-                <Card className="border border-slate-300 shadow-sm flex flex-col rounded-sm overflow-visible bg-white">
-                  <CardHeader className="py-1 px-2 bg-slate-50 border-b flex-none"><CardTitle className="text-[10px] uppercase">{t.nozzle}</CardTitle></CardHeader>
-                  <CardContent className="flex-1 p-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5">
+                <Card className="bg-card border-border shadow-sm shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-cyan-500">
+                  <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50 flex-none"><CardTitle className="text-[11px] uppercase tracking-widest text-cyan-400">{t.nozzle}</CardTitle></CardHeader>
+                  <CardContent className="flex-1 p-2 grid grid-cols-2 gap-x-4 gap-y-1">
                     <NumberInput label={t.throat_d + " [mm]"} value={nozzle.Dt0} onChange={(v:any) => setNozzle({...nozzle, Dt0: v})} tooltip={t.dt0_desc} />
                     <NumberInput label={t.exit_d + " [mm]"} value={nozzle.Ds} onChange={(v:any) => setNozzle({...nozzle, Ds: v})} tooltip={t.ds_desc} />
                     <NumberInput label={t.div_angle + " [º]"} step="1" value={nozzle.alpha} onChange={(v:any) => setNozzle({...nozzle, alpha: v})} tooltip={t.alpha_desc} />
@@ -345,40 +345,42 @@ export default function App() {
                   </CardContent>
                 </Card>
 
-                <div className="bg-white border border-slate-200 rounded-sm shadow-sm relative overflow-hidden flex flex-col min-h-[160px] justify-center items-center">
-                   <span className="absolute top-0.5 left-1.5 text-[9px] font-bold text-slate-400 uppercase bg-white/50 px-1 rounded z-10">{t.motor_chamber} SCHEMATIC</span>
+                <div className="bg-card border-border shadow-sm rounded-md shadow-sm relative overflow-hidden flex flex-col min-h-[160px] justify-center items-center border-t-2 border-t-slate-400">
+                   <span className="absolute top-1.5 left-2 text-[9px] font-bold text-slate-300 uppercase bg-slate-900/50 backdrop-blur-sm px-1.5 py-0.5 rounded border border-slate-700/50 z-10 shadow-sm">{t.motor_chamber} SCHEMATIC</span>
                    <MotorPreview motor={motor} grains={grains} />
                 </div>
             </div>
 
             {/* BOTTOM AREA: Vertical list of horizontal grain rows */}
-            <Card className="flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden bg-slate-100/50 rounded-sm border-t border-slate-200">
-               <CardHeader className="py-1 px-3 bg-slate-50 border-b flex flex-row justify-between items-center shrink-0">
-                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-700">{t.grains}</CardTitle>
-                  <Button onClick={addGrain} size="sm" className="h-6 text-[10px] px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-sm font-bold shadow-sm">
+            <Card className="flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden bg-card border-border shadow-sm rounded-md">
+               <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50 flex flex-row justify-between items-center shrink-0">
+                  <CardTitle className="text-[12px] font-bold uppercase tracking-widest text-slate-300">{t.grains}</CardTitle>
+                  <Button onClick={addGrain} size="sm" className="h-7 text-[10px] px-4 bg-primary/20 hover:bg-primary/40 border border-primary text-primary rounded font-bold shadow-[0_0_10px_rgba(6,182,212,0.2)] transition-all">
                     {t.new_grain}
                   </Button>
                </CardHeader>
                
-               <CardContent className="flex-1 overflow-y-auto p-2 flex flex-col gap-3 no-scrollbar">
+               <CardContent className="flex-1 overflow-y-auto p-3 flex flex-col gap-4 no-scrollbar">
                   {grains.map((g, index) => (
-                    <div key={g.id} className="w-full flex shrink-0 border border-slate-200 bg-white rounded-sm shadow-sm min-h-[140px] overflow-hidden">
+                    <div key={g.id} className="w-full flex shrink-0 border border-slate-700/50 bg-slate-800/40 rounded-md shadow-md min-h-[140px] overflow-hidden backdrop-blur-sm relative group hover:border-slate-600/80 transition-colors">
                         {/* 1. Index & Remove */}
-                        <div className="w-8 shrink-0 bg-slate-800 text-white flex flex-col items-center justify-center border-r border-slate-200 relative">
-                           <span className="text-xs font-bold transform -rotate-90 whitespace-nowrap uppercase">{t.grains} {index + 1}</span>
-                           <Button variant="ghost" size="icon" onClick={() => removeGrain(g.id)} disabled={grains.length === 1} className="h-6 w-6 text-red-400 hover:text-red-500 hover:bg-red-950/30 p-0 text-[12px] absolute top-1">
+                        <div className="w-8 shrink-0 bg-slate-900/80 text-primary flex flex-col items-center justify-center border-r border-slate-700/50 relative">
+                           <span className="text-xs font-bold transform -rotate-90 whitespace-nowrap uppercase tracking-widest drop-shadow-[0_0_5px_rgba(6,182,212,0.5)]">{t.grains} {index + 1}</span>
+                           <Button variant="ghost" size="icon" onClick={() => removeGrain(g.id)} disabled={grains.length === 1} className="h-6 w-6 text-red-500 hover:text-red-400 hover:bg-red-950/50 p-0 text-[12px] absolute top-1 opacity-50 group-hover:opacity-100 transition-opacity">
                              ✕
                            </Button>
                         </div>
 
                         {/* 2. Inputs (Propellant/Shape & Main dimensions) */}
-                        <div className="flex-1 p-2 grid grid-cols-2 gap-x-4 gap-y-0.5 min-w-[300px]">
-                            <div className="space-y-1">
+                        <div className="flex-1 p-2.5 grid grid-cols-2 gap-x-6 gap-y-1 min-w-[300px]">
+                            <div className="space-y-1.5">
                                 <div>
-                                  <UiLabel className="text-[9px] mb-0.5 block px-0.5 uppercase tracking-tight text-slate-500 font-bold">{t.propellant}</UiLabel>
+                                  <UiLabel className="text-[10px] mb-1 block px-0.5 uppercase tracking-wider text-slate-400 font-bold">{t.propellant}</UiLabel>
                                   <Select value={String(g.propellantType)} onValueChange={v => setGrains(grains.map(x => x.id === g.id ? {...x, propellantType: +v as any} : x))}>
-                                    <SelectTrigger className="bg-white h-6 text-[11px] px-2 py-0 border-slate-200 min-h-0"><SelectValue/></SelectTrigger>
-                                    <SelectContent className="bg-white">{PROPELLANTS.map(p => <SelectItem key={p.id} value={String(p.id)} className="text-[11px]">{p.name}</SelectItem>)}</SelectContent>
+                                    <SelectTrigger className="bg-slate-900/80 h-7 text-[11px] px-2 py-0 border-slate-700/50 min-h-0 text-slate-200"><SelectValue/></SelectTrigger>
+                                    <SelectContent className="bg-slate-900 text-slate-200 border-slate-700">
+                                      {PROPELLANTS.map(p => <SelectItem key={p.id} value={String(p.id)} className="text-[11px] focus:bg-slate-800">{p.name}</SelectItem>)}
+                                    </SelectContent>
                                   </Select>
                                 </div>
                                 <NumberInput label={t.outer_d0 + " [mm]"} value={g.D0} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, D0: v} : x))} tooltip={t.outer_d0_desc} />
@@ -387,12 +389,16 @@ export default function App() {
                                 <NumberInput label={t.rho_rat} step="0.01" value={g.rhorat} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, rhorat: v} : x))} tooltip={t.rho_rat_desc} />
                             </div>
 
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                                 <div>
-                                  <UiLabel className="text-[9px] mb-0.5 block px-0.5 uppercase tracking-tight text-slate-500 font-bold">{t.shape}</UiLabel>
+                                  <UiLabel className="text-[10px] mb-1 block px-0.5 uppercase tracking-wider text-slate-400 font-bold">{t.shape}</UiLabel>
                                   <Select value={String(g.shape)} onValueChange={v => setGrains(grains.map(x => x.id === g.id ? {...x, shape: +v as any} : x))}>
-                                    <SelectTrigger className="bg-white h-6 text-[11px] px-2 py-0 border-slate-200 min-h-0"><SelectValue/></SelectTrigger>
-                                    <SelectContent className="bg-white"><SelectItem value="1" className="text-[11px]">Tubular</SelectItem><SelectItem value="2" className="text-[11px]">Star</SelectItem><SelectItem value="3" className="text-[11px]">Solid</SelectItem></SelectContent>
+                                    <SelectTrigger className="bg-slate-900/80 h-7 text-[11px] px-2 py-0 border-slate-700/50 min-h-0 text-slate-200"><SelectValue/></SelectTrigger>
+                                    <SelectContent className="bg-slate-900 text-slate-200 border-slate-700">
+                                      <SelectItem value="1" className="text-[11px] focus:bg-slate-800">Tubular</SelectItem>
+                                      <SelectItem value="2" className="text-[11px] focus:bg-slate-800">Star</SelectItem>
+                                      <SelectItem value="3" className="text-[11px] focus:bg-slate-800">Solid</SelectItem>
+                                    </SelectContent>
                                   </Select>
                                 </div>
                                 {g.shape !== 3 && <NumberInput label={t.inner_d0 + " [mm]"} value={g.d0} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, d0: v} : x))} tooltip={t.inner_d0_desc} />}
@@ -405,12 +411,11 @@ export default function App() {
                                       const isInvalid = g.d0mayor <= minD0mayor || g.d0mayor >= g.D0 || g.Np < 3;
                                       if (isInvalid) {
                                         return (
-                                          <div className="col-span-2 bg-amber-50 border border-amber-200 p-1 rounded-sm flex flex-col gap-0.5 mt-0.5">
-                                            <span className="text-[8px] font-bold text-amber-700 uppercase leading-none">Star Configuration Alert</span>
-                                            {g.Np < 3 && <span className="text-[8px] text-amber-600 line-clamp-1 italic">• Need at least 3 points for a star shape</span>}
-                                            {g.d0mayor <= minD0mayor && <span className="text-[8px] text-amber-600 line-clamp-1 italic">• Valley (Dp) is too small: must be &gt; {(minD0mayor).toFixed(1)}mm for {g.Np} points</span>}
-                                            {g.d0mayor >= g.D0 && <span className="text-[8px] text-amber-600 line-clamp-1 italic">• Valley (Dp) must be smaller than Outer D0</span>}
-                                            <span className="text-[7px] text-amber-500 mt-0.5">Tip: Low Np or small Dp can lose the star geometry.</span>
+                                          <div className="col-span-2 bg-destructive/10 border border-destructive/30 p-1.5 rounded-sm flex flex-col gap-0.5 mt-1 backdrop-blur-sm">
+                                            <span className="text-[9px] font-bold text-destructive uppercase tracking-widest leading-none drop-shadow-md">Star Configuration Alert</span>
+                                            {g.Np < 3 && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Need &gt;= 3 points</span>}
+                                            {g.d0mayor <= minD0mayor && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Valley (Dp) &gt; {(minD0mayor).toFixed(1)}mm</span>}
+                                            {g.d0mayor >= g.D0 && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Valley (Dp) &lt; Outer D0</span>}
                                           </div>
                                         );
                                       }
@@ -419,23 +424,26 @@ export default function App() {
                                   </>
                                 )}
                                 
-                                <div className="border-t border-slate-100 pt-1.5 mt-1 flex justify-between items-center px-1">
-                                  <UiLabel className="text-[9px] text-slate-500 uppercase font-bold">{t.burn_faces}</UiLabel>
-                                  <div className="flex gap-3">
-                                  <div className="flex items-center space-x-1" title={t.external}><Checkbox className="w-3.5 h-3.5 rounded-sm" checked={g.osi===1} onCheckedChange={c => setGrains(grains.map(x => x.id === g.id ? {...x, osi: c ? 1 : 0} : x))} id={`osi-${g.id}`} /><UiLabel className="text-[10px] font-semibold cursor-pointer" htmlFor={`osi-${g.id}`}>EXT</UiLabel></div>
-                                  <div className="flex items-center space-x-1" title={t.ends}><Checkbox className="w-3.5 h-3.5 rounded-sm" checked={g.ei===1} onCheckedChange={c => setGrains(grains.map(x => x.id === g.id ? {...x, ei: c ? 1 : 0} : x))} id={`ei-${g.id}`} /><UiLabel className="text-[10px] font-semibold cursor-pointer" htmlFor={`ei-${g.id}`}>ENDS</UiLabel></div>
-                                  {g.shape !== 3 && <div className="flex items-center space-x-1" title={t.internal}><Checkbox className="w-3.5 h-3.5 rounded-sm" checked={g.ci===1} onCheckedChange={c => setGrains(grains.map(x => x.id === g.id ? {...x, ci: c ? 1 : 0} : x))} id={`ci-${g.id}`} /><UiLabel className="text-[10px] font-semibold cursor-pointer" htmlFor={`ci-${g.id}`}>INT</UiLabel></div>}
+                                <div className="border-t border-slate-700/50 pt-2 mt-2 flex justify-between items-center px-1">
+                                  <UiLabel className="text-[10px] text-primary/80 uppercase font-bold tracking-wider">{t.burn_faces}</UiLabel>
+                                  <div className="flex gap-4">
+                                  <div className="flex items-center space-x-1.5" title={t.external}><Checkbox className="w-4 h-4 rounded-sm border-slate-600 data-[state=checked]:bg-primary data-[state=checked]:border-primary" checked={g.osi===1} onCheckedChange={c => setGrains(grains.map(x => x.id === g.id ? {...x, osi: c ? 1 : 0} : x))} id={`osi-${g.id}`} /><UiLabel className="text-[11px] font-mono text-slate-300 font-semibold cursor-pointer" htmlFor={`osi-${g.id}`}>EXT</UiLabel></div>
+                                  <div className="flex items-center space-x-1.5" title={t.ends}><Checkbox className="w-4 h-4 rounded-sm border-slate-600 data-[state=checked]:bg-primary data-[state=checked]:border-primary" checked={g.ei===1} onCheckedChange={c => setGrains(grains.map(x => x.id === g.id ? {...x, ei: c ? 1 : 0} : x))} id={`ei-${g.id}`} /><UiLabel className="text-[11px] font-mono text-slate-300 font-semibold cursor-pointer" htmlFor={`ei-${g.id}`}>ENDS</UiLabel></div>
+                                  {g.shape !== 3 && <div className="flex items-center space-x-1.5" title={t.internal}><Checkbox className="w-4 h-4 rounded-sm border-slate-600 data-[state=checked]:bg-primary data-[state=checked]:border-primary" checked={g.ci===1} onCheckedChange={c => setGrains(grains.map(x => x.id === g.id ? {...x, ci: c ? 1 : 0} : x))} id={`ci-${g.id}`} /><UiLabel className="text-[11px] font-mono text-slate-300 font-semibold cursor-pointer" htmlFor={`ci-${g.id}`}>INT</UiLabel></div>}
                                   </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* 3. Previews (Transversal & Longitudinal) */}
-                        <div className="w-[350px] shrink-0 bg-slate-50 border-l border-slate-200 flex flex-row overflow-hidden">
-                            <div className="w-1/2 h-full border-r border-slate-200 relative">
+                        <div className="w-[350px] shrink-0 bg-slate-900/50 border-l border-slate-700/50 flex flex-row overflow-hidden relative">
+                            {/* Inner glow effect */}
+                            <div className="absolute inset-0 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] z-0 pointer-events-none"></div>
+                            
+                            <div className="w-1/2 h-full border-r border-slate-700/30 relative z-10">
                                <GrainPreview grain={g} t={t} mode="transversal" />
                             </div>
-                            <div className="w-1/2 h-full relative">
+                            <div className="w-1/2 h-full relative z-10">
                                <GrainPreview grain={g} t={t} mode="longitudinal" />
                             </div>
                         </div>
@@ -448,66 +456,73 @@ export default function App() {
           <TabsContent value="results" className="flex-1 overflow-y-auto w-full p-2">
             {results && (
               <div className="flex flex-col gap-6 pb-20">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                  <h2 className="text-xl font-bold tracking-tight text-slate-800">{t.simulation_analytics}</h2>
-                  <Button onClick={() => exportToCsv(results)} variant="outline" size="sm" className="bg-white h-9 shadow-sm border-slate-300">{t.export_csv}</Button>
+                <div className="flex justify-end">
+                  <Button onClick={() => exportToCsv(results)} variant="outline" size="sm" className="bg-card h-9 shadow-sm border-border text-primary">{t.export_csv}</Button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-                  <Card className="col-span-2 lg:col-span-1 border border-slate-200"><CardContent className="p-3"><p className="text-xs font-medium text-neutral-500">{t.shape} (Motor)</p><h3 className="text-lg font-bold text-neutral-900">{results.summary.motorClass}</h3></CardContent></Card>
-                  <Card className="col-span-2 lg:col-span-1"><CardContent className="p-3"><p className="text-xs font-medium text-neutral-500">{t.total_impulse} (IT)</p><h3 className="text-lg font-bold">{(results.summary.It_total_N_s || 0).toFixed(0)} N·s</h3></CardContent></Card>
-                  <Card className="col-span-2 lg:col-span-1"><CardContent className="p-3"><p className="text-xs font-medium text-neutral-500">{t.specific_impulse} (ISP)</p><h3 className="text-lg font-bold">{(results.summary.Isp_total_s || 0).toFixed(1)} s</h3></CardContent></Card>
+                  <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-cyan-500"><CardContent className="p-3"><p className="text-xs font-mono text-cyan-400/80 uppercase">{t.shape} (Motor)</p><h3 className="text-[17px] font-bold text-slate-200 tracking-widest mt-1">{results.summary.motorClass}</h3></CardContent></Card>
+                  <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-cyan-500"><CardContent className="p-3"><p className="text-xs font-mono text-cyan-400/80 uppercase">{t.total_impulse} (IT)</p><h3 className="text-lg font-bold text-slate-200 mt-1">{(results.summary.It_total_N_s || 0).toFixed(0)} <span className="text-[11px] text-cyan-500 font-normal">N·s</span></h3></CardContent></Card>
+                  <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-cyan-500"><CardContent className="p-3"><p className="text-xs font-mono text-cyan-400/80 uppercase">{t.specific_impulse} (ISP)</p><h3 className="text-lg font-bold text-slate-200 mt-1">{(results.summary.Isp_total_s || 0).toFixed(1)} <span className="text-[11px] text-cyan-500 font-normal">s</span></h3></CardContent></Card>
                   
-                  <Card className="col-span-2 lg:col-span-1"><CardContent className="p-2 gap-1 flex flex-col justify-center">
-                    <p className="text-xs font-medium text-neutral-500 text-center mb-1 uppercase tracking-tighter ">{t.times}</p>
-                    <div className="flex justify-between text-[10px] items-center"><span className="text-neutral-500">{t.burn}</span><span className="font-bold">{(results.summary.t_quemado || 0).toFixed(2)} s</span></div>
-                    <div className="flex justify-between text-[10px] items-center"><span className="text-neutral-500">{t.action}</span><span className="font-bold">{(results.summary.t_fin || 0).toFixed(2)} s</span></div>
+                  <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-slate-500"><CardContent className="p-2 gap-1 flex flex-col justify-center">
+                    <p className="text-[10px] font-mono text-slate-400 text-center mb-1 uppercase tracking-widest">{t.times}</p>
+                    <div className="flex justify-between text-[11px] font-mono items-center"><span className="text-slate-400">{t.burn}</span><span className="font-bold text-slate-200 shadow-[0_0_5px_rgba(255,255,255,0.2)] px-1">{(results.summary.t_quemado || 0).toFixed(3)}s</span></div>
+                    <div className="flex justify-between text-[11px] font-mono items-center"><span className="text-slate-400">{t.action}</span><span className="font-bold text-slate-200 shadow-[0_0_5px_rgba(255,255,255,0.2)] px-1">{(results.summary.t_fin || 0).toFixed(3)}s</span></div>
                   </CardContent></Card>
                   
-                  <Card className="col-span-2 lg:col-span-1"><CardContent className="p-3">
-                    <p className="text-xs font-medium text-neutral-500">{t.max_p}</p>
-                    <h3 className="text-lg font-bold text-blue-600">{(results.summary.Pmax_MPa || 0).toFixed(1)} MPa</h3>
+                  <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-cyan-500"><CardContent className="p-3">
+                    <p className="text-xs font-mono text-blue-400/80 uppercase">{t.max_p}</p>
+                    <h3 className="text-lg font-bold text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.6)] mt-1">{(results.summary.Pmax_MPa || 0).toFixed(2)} <span className="text-[11px] font-normal">MPa</span></h3>
                   </CardContent></Card>
-                  <Card className="col-span-2 lg:col-span-1"><CardContent className="p-3">
-                    <p className="text-xs font-medium text-neutral-500">{t.avg_p}</p>
-                    <h3 className="text-lg font-bold text-blue-600">{(results.summary.Pmed_MPa || 0).toFixed(1)} MPa</h3>
+                  <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-cyan-500"><CardContent className="p-3">
+                    <p className="text-xs font-mono text-blue-400/80 uppercase">{t.avg_p}</p>
+                    <h3 className="text-lg font-bold text-blue-400 mt-1">{(results.summary.Pmed_MPa || 0).toFixed(2)} <span className="text-[11px] font-normal">MPa</span></h3>
                   </CardContent></Card>
-                  <Card className="col-span-2 lg:col-span-1"><CardContent className="p-3">
-                    <p className="text-xs font-medium text-neutral-500">{t.max_f}</p>
-                    <h3 className="text-lg font-bold text-red-600">{(results.summary.Fmax_N || 0).toFixed(0)} N</h3>
+                  <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-orange-500"><CardContent className="p-3">
+                    <p className="text-xs font-mono text-orange-400/80 uppercase">{t.max_f}</p>
+                    <h3 className="text-lg font-bold text-orange-500 drop-shadow-[0_0_8px_rgba(249,115,22,0.6)] mt-1">{(results.summary.Fmax_N || 0).toFixed(0)} <span className="text-[11px] font-normal">N</span></h3>
                   </CardContent></Card>
-                  <Card className="col-span-2 lg:col-span-1"><CardContent className="p-3">
-                    <p className="text-xs font-medium text-neutral-500">{t.avg_f}</p>
-                    <h3 className="text-lg font-bold text-red-600">{(results.summary.Fmed_N || 0).toFixed(0)} N</h3>
+                  <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-orange-500"><CardContent className="p-3">
+                    <p className="text-xs font-mono text-orange-400/80 uppercase">{t.avg_f}</p>
+                    <h3 className="text-lg font-bold text-orange-500 mt-1">{(results.summary.Fmed_N || 0).toFixed(0)} <span className="text-[11px] font-normal">N</span></h3>
                   </CardContent></Card>
                 </div>
                 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 flex-1 min-h-0">
-                  <Card className="flex flex-col border border-slate-200">
-                    <CardHeader className="py-2"><CardTitle className="text-sm">{t.pressure_vs_time}</CardTitle></CardHeader>
-                    <CardContent className="p-0 pt-2 h-[400px]">
+                  <Card className="flex flex-col bg-card border-border shadow-sm">
+                    <CardHeader className="py-2 border-b border-border"><CardTitle className="text-[13px] uppercase tracking-widest text-blue-400">{t.pressure_vs_time}</CardTitle></CardHeader>
+                    <CardContent className="p-0 pt-4 h-[400px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData} margin={{ top: 20, right: 40, left: 70, bottom: 80 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
+                          <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#334155" />
                           <XAxis 
                             dataKey="time" 
                             type="number" 
                             domain={[0, 'dataMax']} 
                             tickCount={10} 
                             tickFormatter={(value) => value.toFixed(2)}
-                            tick={{ fontSize: 11, fill: '#64748b' }}
+                            tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'monospace' }}
                             height={60}
+                            axisLine={{ stroke: '#475569' }}
+                            tickLine={{ stroke: '#475569' }}
                           >
-                            <ChartLabel value={t.axis_time} position="bottom" offset={0} fill="#475569" style={{ fontSize: '13px', fontWeight: 700, textAnchor: 'middle' }} />
+                            <ChartLabel value={t.axis_time} position="bottom" offset={0} fill="#cbd5e1" style={{ fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, textAnchor: 'middle' }} />
                           </XAxis>
                           <YAxis 
                             domain={[0, (dataMax: number) => (dataMax * 1.1)]} 
                             tickFormatter={(value) => value.toFixed(1)} 
-                            tick={{ fontSize: 11, fill: '#64748b' }}
+                            tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'monospace' }}
                             width={70}
+                            axisLine={{ stroke: '#475569' }}
+                            tickLine={{ stroke: '#475569' }}
                           >
-                            <ChartLabel value={t.axis_pressure} angle={-90} position="left" offset={0} fill="#475569" style={{ fontSize: '13px', fontWeight: 700, textAnchor: 'middle' }} />
+                            <ChartLabel value={t.axis_pressure} angle={-90} position="left" offset={0} fill="#cbd5e1" style={{ fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, textAnchor: 'middle' }} />
                           </YAxis>
-                          <Tooltip formatter={(value: number) => value.toFixed(2) + " MPa"} />
+                          <Tooltip 
+                            formatter={(value: number) => value.toFixed(2) + " MPa"} 
+                            labelFormatter={(lbl) => "T+ " + Number(lbl).toFixed(3) + "s"}
+                            contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid #334155', borderRadius: '4px', fontFamily: 'monospace', fontSize: '12px', color: '#f8fafc' }}
+                          />
                           <Legend 
                             verticalAlign="top" 
                             align="right"
@@ -515,46 +530,55 @@ export default function App() {
                               display: 'inline-block',
                               width: 'auto',
                               right: '0px',
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e5e5', 
+                              backgroundColor: 'rgba(15, 23, 42, 0.8)', 
+                              border: '1px solid rgba(51, 65, 85, 0.8)', 
                               borderRadius: '4px', 
-                              padding: '2px 6px', 
-                              opacity: 0.9,
-                              fontSize: '12px'
+                              padding: '4px 8px', 
+                              fontFamily: 'monospace',
+                              fontSize: '11px',
+                              color: '#cbd5e1'
                             }} 
                           />
-                          <Line type="monotone" dataKey="P0_gage" stroke="#2563eb" dot={false} strokeWidth={2} name="Pressure" />
+                          <Line type="monotone" dataKey="P0_gage" stroke="#3b82f6" dot={false} strokeWidth={2.5} name="Chamber Pressure (MPa)" style={{ filter: 'drop-shadow(0px 0px 5px rgba(59,130,246,0.6))' }} />
                         </LineChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
 
-                  <Card className="flex flex-col border border-slate-200">
-                    <CardHeader className="py-2"><CardTitle className="text-sm">{t.thrust_vs_time}</CardTitle></CardHeader>
-                    <CardContent className="p-0 pt-2 h-[400px]">
+                  <Card className="flex flex-col bg-card border-border shadow-sm">
+                    <CardHeader className="py-2 border-b border-border"><CardTitle className="text-[13px] uppercase tracking-widest text-orange-400">{t.thrust_vs_time}</CardTitle></CardHeader>
+                    <CardContent className="p-0 pt-4 h-[400px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData} margin={{ top: 20, right: 40, left: 70, bottom: 80 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
+                          <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#334155" />
                           <XAxis 
                             dataKey="time" 
                             type="number" 
                             domain={[0, 'dataMax']} 
                             tickCount={10} 
                             tickFormatter={(value) => value.toFixed(2)}
-                            tick={{ fontSize: 11, fill: '#64748b' }}
+                            tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'monospace' }}
                             height={60}
+                            axisLine={{ stroke: '#475569' }}
+                            tickLine={{ stroke: '#475569' }}
                           >
-                            <ChartLabel value={t.axis_time} position="bottom" offset={0} fill="#475569" style={{ fontSize: '13px', fontWeight: 700, textAnchor: 'middle' }} />
+                            <ChartLabel value={t.axis_time} position="bottom" offset={0} fill="#cbd5e1" style={{ fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, textAnchor: 'middle' }} />
                           </XAxis>
                           <YAxis 
                             domain={[0, (dataMax: number) => (dataMax * 1.1)]} 
                             tickFormatter={(value) => value.toFixed(0)} 
-                            tick={{ fontSize: 11, fill: '#64748b' }}
+                            tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'monospace' }}
                             width={70}
+                            axisLine={{ stroke: '#475569' }}
+                            tickLine={{ stroke: '#475569' }}
                           >
-                            <ChartLabel value={t.axis_thrust} angle={-90} position="left" offset={0} fill="#475569" style={{ fontSize: '13px', fontWeight: 700, textAnchor: 'middle' }} />
+                            <ChartLabel value={t.axis_thrust} angle={-90} position="left" offset={0} fill="#cbd5e1" style={{ fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, textAnchor: 'middle' }} />
                           </YAxis>
-                          <Tooltip formatter={(value: number) => value.toFixed(1) + " N"} />
+                          <Tooltip 
+                            formatter={(value: number) => value.toFixed(1) + " N"} 
+                            labelFormatter={(lbl) => "T+ " + Number(lbl).toFixed(3) + "s"}
+                            contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid #334155', borderRadius: '4px', fontFamily: 'monospace', fontSize: '12px', color: '#f8fafc' }}
+                          />
                           <Legend 
                             verticalAlign="top" 
                             align="right"
@@ -563,16 +587,17 @@ export default function App() {
                               display: 'inline-block',
                               width: 'auto',
                               right: '0px',
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e5e5', 
+                              backgroundColor: 'rgba(15, 23, 42, 0.8)', 
+                              border: '1px solid rgba(51, 65, 85, 0.8)', 
                               borderRadius: '4px', 
-                              padding: '2px 6px', 
-                              opacity: 0.9,
-                              fontSize: '12px'
+                              padding: '4px 8px', 
+                              fontFamily: 'monospace',
+                              fontSize: '11px',
+                              color: '#cbd5e1'
                             }} 
                           />
-                          <Line type="monotone" dataKey="F_N" stroke="#16a34a" dot={false} strokeWidth={2} name={t.r_nakka} />
-                          <Line type="monotone" dataKey="E_N" stroke="#dc2626" dot={false} strokeWidth={2} name={t.ideal_tti} />
+                          <Line type="monotone" dataKey="F_N" stroke="#f97316" dot={false} strokeWidth={2.5} name={t.r_nakka + " (N)"} style={{ filter: 'drop-shadow(0px 0px 5px rgba(249,115,22,0.6))' }} />
+                          <Line type="monotone" dataKey="E_N" stroke="#10b981" dot={false} strokeWidth={1.5} strokeDasharray="3 3" name={t.ideal_tti + " (N)"} />
                         </LineChart>
                       </ResponsiveContainer>
                     </CardContent>
@@ -585,48 +610,54 @@ export default function App() {
            <TabsContent value="analysis" className="flex-1 overflow-y-auto w-full no-scrollbar p-1">
              {results && (
                 <div className="flex flex-col h-full gap-4 pb-10">
-                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                      <h2 className="text-xl font-bold tracking-tight">{t.detailed_analysis}</h2>
-                   </div>
-                   <div className="flex flex-wrap gap-4 shrink-0">
+                   <div className="flex flex-wrap gap-4 shrink-0 mt-2">
                     {results.grains.map((g, idx) => (
-                      <Card key={g.id} className="flex flex-col shadow-sm flex-1 min-w-[320px] border border-slate-200">
-                        <CardHeader className="py-2 px-3 bg-slate-50 border-b">
-                          <CardTitle className="text-xs text-blue-800 tracking-wide font-semibold">{t.grains} {idx + 1} - Area</CardTitle>
+                      <Card key={g.id} className="flex flex-col bg-card border-border shadow-sm flex-1 min-w-[320px]">
+                        <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border">
+                          <CardTitle className="text-[13px] uppercase tracking-widest text-cyan-400">{t.grains} {idx + 1} - Area</CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0 pt-2 h-[420px]">
+                        <CardContent className="p-0 pt-4 h-[420px]">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData} margin={{ top: 10, right: 20, left: 70, bottom: 80 }}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
+                              <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#334155" />
                               <XAxis 
                                 dataKey="time" 
                                 type="number" 
                                 domain={[0, 'dataMax']} 
                                 tickCount={8} 
                                 tickFormatter={(value) => value.toFixed(2)}
-                                tick={{fontSize: 10}}
+                                tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'monospace' }}
+                                height={60}
+                                axisLine={{ stroke: '#475569' }}
+                                tickLine={{ stroke: '#475569' }}
                               >
-                                <ChartLabel value={t.axis_time} position="insideBottom" offset={-55} fill="#64748b" style={{ fontSize: '11px', fontWeight: 700, textAnchor: 'middle' }} />
+                                <ChartLabel value={t.axis_time} position="bottom" offset={0} fill="#cbd5e1" style={{ fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, textAnchor: 'middle' }} />
                               </XAxis>
                               <YAxis 
                                 domain={[0, 'auto']} 
                                 tickFormatter={(value) => (value/1000).toFixed(1)} 
-                                width={50}
-                                tick={{fontSize: 10}}
+                                width={70}
+                                tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'monospace' }}
+                                axisLine={{ stroke: '#475569' }}
+                                tickLine={{ stroke: '#475569' }}
                               >
-                                <ChartLabel value={t.axis_area} angle={-90} position="insideLeft" offset={-55} fill="#64748b" style={{ fontSize: '11px', fontWeight: 700, textAnchor: 'middle' }} />
+                                <ChartLabel value={t.axis_area} angle={-90} position="left" offset={0} fill="#cbd5e1" style={{ fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, textAnchor: 'middle' }} />
                               </YAxis>
-                              <Tooltip formatter={(value: number) => (value/100).toFixed(2) + " cm²"} labelFormatter={(label) => `t = ${Number(label).toFixed(3)}s`} />
+                              <Tooltip 
+                                formatter={(value: number) => (value/100).toFixed(2) + " cm²"} 
+                                labelFormatter={(label) => `T+ ${Number(label).toFixed(3)}s`} 
+                                contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid #334155', borderRadius: '4px', fontFamily: 'monospace', fontSize: '12px', color: '#f8fafc' }}
+                              />
                               <Legend 
                                 verticalAlign="top" 
                                 align="right"
                                 iconSize={8}
-                                wrapperStyle={{ fontSize: '10px', paddingTop: '5px' }} 
+                                wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', paddingTop: '5px', color: '#cbd5e1' }} 
                               />
                               {g.ci === 1 && g.shape !== 3 && <Line type="monotone" dataKey={`g${idx}_Abc`} stroke="#ef4444" dot={false} strokeWidth={2} name={t.internal} />}
                               {g.ei === 1 && <Line type="monotone" dataKey={`g${idx}_Abe`} stroke="#3b82f6" dot={false} strokeWidth={2} name={t.ends} />}
                               {g.osi === 1 && <Line type="monotone" dataKey={`g${idx}_Abs`} stroke="#eab308" dot={false} strokeWidth={2} name={t.external} />}
-                              <Line type="monotone" dataKey={`g${idx}_Ab`} stroke="#16a34a" dot={false} strokeWidth={2} strokeDasharray="4 4" name={t.total_area} />
+                              <Line type="monotone" dataKey={`g${idx}_Ab`} stroke="#10b981" dot={false} strokeWidth={2} strokeDasharray="4 4" name={t.total_area} style={{ filter: 'drop-shadow(0px 0px 3px rgba(16,185,129,0.5))' }} />
                             </LineChart>
                           </ResponsiveContainer>
                         </CardContent>
@@ -642,12 +673,12 @@ export default function App() {
               <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-4 pb-10">
                  <Button variant="outline" size="sm" className="w-fit self-end h-6 text-[10px]" onClick={() => setShowCfdInfo(!showCfdInfo)}>{t.more_info}</Button>
                  {showCfdInfo && (
-                   <div className="p-3 bg-slate-900 text-white rounded text-[10px] leading-relaxed">
+                   <div className="p-3 bg-slate-900 text-slate-200 rounded text-[10px] leading-relaxed">
                      <p className="font-bold text-blue-400 mb-1">{t.cfd_solver_title}</p>
                      {t.cfd_solver_desc}
                    </div>
                  )}
-                 <div className="flex flex-col mx-auto bg-white rounded-lg shadow-sm border overflow-hidden shrink-0 w-full min-h-[300px]">
+                 <div className="flex flex-col mx-auto bg-card rounded-lg shadow-sm border overflow-hidden shrink-0 w-full min-h-[300px]">
                     <PlaybackWrapper results={results} t_parent={t} />
                  </div>
               </div>
@@ -660,10 +691,10 @@ export default function App() {
       <footer className="bg-slate-900 text-slate-400 py-3 border-t-4 border-slate-800 mt-auto">
         <div className="max-w-100 mx-auto w-full px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-mono">
            <div className="flex items-center gap-2">
-              <span className="text-slate-500">AUTHOR:</span>
+              <span className="text-slate-400">AUTHOR:</span>
               <span className="text-slate-200 font-semibold uppercase tracking-wider">MIGUEL TEJERA LESMES</span>
            </div>
-           <div className="text-slate-500 text-center md:text-right">
+           <div className="text-slate-400 text-center md:text-right">
               © {new Date().getFullYear()} HERMES
            </div>
         </div>

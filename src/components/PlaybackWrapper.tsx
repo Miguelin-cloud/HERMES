@@ -19,8 +19,8 @@ export function PlaybackWrapper({ results, t_parent }: { results: SimulationResu
   const [speed, setSpeed] = useState(1);
   const [timeIndex, setTimeIndex] = useState(0);
   
-  const requestRef = useRef<number>();
-  const previousTimeRef = useRef<number>();
+  const requestRef = useRef<number>(0);
+  const previousTimeRef = useRef<number>(0);
   const simulatedTimeRef = useRef<number>(0);
 
   useEffect(() => {
@@ -82,8 +82,8 @@ export function PlaybackWrapper({ results, t_parent }: { results: SimulationResu
     <div className="flex flex-col gap-4 w-full h-full min-h-[300px] shrink-0 pb-4 overflow-hidden">
       
       {/* Global Controls */}
-      <div className="flex-none flex items-center gap-4 bg-white p-3 rounded-lg border border-neutral-200 shadow-sm shrink-0">
-         <Button onClick={handlePlayToggle} className="w-24 h-8 bg-blue-600 hover:bg-blue-700">
+      <div className="flex-none flex items-center gap-4 p-3 rounded-lg border border-border shadow-sm shrink-0 bg-card">
+         <Button onClick={handlePlayToggle} className="w-24 h-8 bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_10px_rgba(8,145,178,0.4)] transition-all font-mono">
             {isPlaying ? t.pause : timeIndex === results.t.length - 1 ? t.restart : t.play}
          </Button>
          <div className="flex-1 px-2">
@@ -93,22 +93,22 @@ export function PlaybackWrapper({ results, t_parent }: { results: SimulationResu
              max={results.t.length - 1} 
              value={timeIndex} 
              onChange={handleSeek} 
-             className="w-full h-1.5 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
+             className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500" 
            />
-           <div className="flex justify-between text-[10px] text-neutral-500 mt-1 font-mono">
-             <span>0.000 s</span>
-             <span className="font-semibold text-neutral-800 text-xs">{Number(results.t[timeIndex] || 0).toFixed(3)} s</span>
-             <span>{(results.summary.t_quemado || results.t[results.t.length-1]).toFixed(3)} s</span>
+           <div className="flex justify-between text-[11px] text-slate-500 mt-2 font-mono">
+             <span>0.000s</span>
+             <span className="font-bold text-white text-[13px] drop-shadow-[0_0_5px_rgba(255,255,255,0.4)]">T+ {Number(results.t[timeIndex] || 0).toFixed(3)}s</span>
+             <span>{(results.summary.t_quemado || results.t[results.t.length-1]).toFixed(3)}s</span>
            </div>
          </div>
          
          <div className="flex items-center gap-2 w-[120px]">
-           <Label className="text-[10px]">{t.speed}</Label>
+           <Label className="text-[10px] text-slate-400 font-mono uppercase">{t.speed}</Label>
            <Select value={String(speed)} onValueChange={v => setSpeed(Number(v))}>
-              <SelectTrigger className="h-7 text-[10px] border-neutral-300">
+              <SelectTrigger className="h-7 text-[10px] border-border bg-card text-cyan-100 font-mono focus:ring-cyan-500">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-white text-[10px]">
+              <SelectContent className="bg-card text-cyan-100 font-mono text-[10px] border-border">
                 <SelectItem value="0.25">0.25x</SelectItem>
                 <SelectItem value="0.5">0.5x</SelectItem>
                 <SelectItem value="1">1.0x ({t.real_time})</SelectItem>
@@ -121,10 +121,10 @@ export function PlaybackWrapper({ results, t_parent }: { results: SimulationResu
       </div>
 
       <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0 overflow-y-auto no-scrollbar pb-2">
-        <div className="flex-1 min-h-[200px] p-0.5">
+        <div className="flex-1 min-h-[300px] xl:min-h-[200px] p-0.5 rounded-xl border border-border overflow-hidden relative bg-card">
            <EngineViewer results={results} timeIndex={timeIndex} t={t} />
         </div>
-        <div className="flex-1 min-h-[200px] p-0.5">
+        <div className="flex-1 min-h-[300px] xl:min-h-[200px] p-0.5 rounded-xl border border-border overflow-hidden relative bg-card">
            <GrainViewer results={results} timeIndex={timeIndex} t={t} />
         </div>
       </div>

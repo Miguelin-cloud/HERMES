@@ -26,52 +26,24 @@ Bienvenido al desarrollo de **HERMES Rocket Simulator**. Este documento está di
 
 ---
 
-## 🌿 Flujo de Trabajo en GitHub (Ramas / Branches) y Sincronización
+## 🌿 Flujo de Trabajo y Colaboración
 
-Para que tú y el resto del equipo estéis sincronizados como verdaderos profesionales, vamos a usar el sistema de ramas (branches) de GitHub. Aquí te explico paso a paso cómo crearlo y cómo debe conectarse tu compañero.
+Actualmente **Google AI Studio (Build)** está enfocado en el prototipado rápido y la exportación, pero **no funciona como un cliente Git bidireccional**. Es decir, no puedes cambiar de ramas (`main` a `develop`) directamente desde el chat, ni hacer un "git pull" automático de los cambios de otro desarrollador.
 
-### Parte 1: Creación de la Rama de Desarrollo (Lo que debes hacer TÚ)
+Para colaborar con tu equipo en este proyecto, tienes DOS Opciones:
 
-Como tú eres el creador original que tiene el código "perfecto" en la versión 1.0, debes aislar ese código para protegerlo y crear una "pista de pruebas" para tu compañero.
+### Opción 1: Colaboración Nativa en AI Studio (Share & Remix)
+Si quieres que tu compañero siga usando este mismo entorno web con la IA:
+1. Presiona el botón de **Share (Compartir)** en la esquina superior derecha de AI Studio.
+2. Pásale el enlace generado a tu compañero.
+3. Tu compañero debe abrir el enlace y presionar el botón **"Remix"**. Esto creará un espacio de trabajo idéntico y aislado en su propia cuenta de Google.
+4. Él puede continuar pidiendo cambios a la IA.
+5. Cuando finalice, debe exportar su proyecto (descargar el ZIP) y pasarte los archivos modificados para que tú integres los cambios.
 
-1. **Sube el código inicial**: Sincroniza este proyecto con un nuevo repositorio en tu cuenta de GitHub (desde el botón superior de AI Studio "Sync to GitHub"). Por defecto, esto se subirá a la rama principal, que a partir de ahora llamaremos la **Rama de Usuarios** (`main`).
-2. **Ve a tu repositorio en GitHub.com**.
-3. Busca el botón desplegable que dice **"main"** (suele estar arriba a la izquierda de la lista de archivos).
-4. Escribe la palabra **`develop`** (o `desarrollo`) en la caja de texto. 
-5. Aparecerá una opción debajo que dice *"Create branch: develop from 'main'"*. Haz clic ahí.
-
-¡Listo! Acabas de clonar todo el código perfecto a una rama paralela llamada `develop`. 
-*   Tu rama `main` está **protegida** para generar los `.exe`.
-*   Tu rama `develop` está **lista** para que tu compañero empiece a destrozar y mejorar el código.
-
-### Parte 2: Cómo debe conectarse tu Compañero (Lo que debe hacer ÉL)
-
-Tu compañero *no* se va a descargar zips ni archivos sueltos. Se conectará directamente al "cerebro central" de tu GitHub. Pásale estos pasos exactos:
-
-**Paso A: Acceso en GitHub**
-1. (Tú) Tienes que invitarle a tu repositorio de GitHub como colaborador (Settings -> Collaborators -> Add people).
-2. (Compañero) Debe aceptar la invitación que le llegará a su email.
-
-**Paso B: Importar a Google AI Studio**
-1. Él debe entrar en su propia cuenta de **Google AI Studio (Build)**.
-2. Hacer clic en el botón de la carpeta **"Import"** u "Open Project".
-3. Seleccionar la opción de **"GitHub"**.
-4. Ahora, AI Studio le mostrará sus repositorios y los tuyos (como tiene permiso). Debe buscar el repositorio de HERMES.
-5. **¡PASO CRÍTICO!**: Antes de abrirlo, AI Studio le preguntará o le mostrará una opción de qué rama (*branch*) quiere importar. **Dile que NUNCA elija `main`. Debe elegir SIEMPRE la rama `develop`**.
-6. Le da a cargar.
-
-**Paso C: Iniciar el trabajo con la IA**
-1. Una vez cargado el código en su AI Studio, él debe pegar el **Prompt Creador** (el texto gigante de la sección superior de este documento) en el chat con la IA.
-2. Al hacer esto, la IA repasará todos los archivos, entenderá la arquitectura y estará lista para programar. 
-
-**Paso D: Guardar su trabajo**
-1. Cuando haya probado las mejoras en el visor, él debe darle al botón de arríba a la derecha de AI Studio: **"Sync to GitHub"**.
-2. Al hacerlo, esos cambios irán directamente a la rama `develop` de GitHub. No habrá tocado vuestro ejecutable original, pero los archivos de desarrollo estarán actualizados para mañana.
-
-### Parte 3: ¿Qué pasa cuando queremos sacar la Versión 2.0 en .exe?
-
-1. Tú entras en GitHub.com a tu rama `develop` y compruebas que todo el trabajo de tu compañero mola.
-2. Le das al botón de GitHub que pone **"Pull Request"**.
-3. Indicas que quieres fusionar `develop` hacia `main`.
-4. Aceptas el Pull request ("Merge").
-5. ¡Magia! El código perfecto y el nuevo invento de tu colega se abrazan en la rama principal. Descargas el ZIP de `main`, empaquetas el `.exe` como de costumbre y anuncias la V2 al público.
+### Opción 2: Desarrollo Local (GitHub + VS Code) - *Recomendado*
+Si queréis usar un sistema profesional de ramas (`main` para el `.exe` final, y `develop` para pruebas) debéis llevar el desarrollo a vuestros propios ordenadores:
+1. Exporta el código desde AI Studio descargando el ZIP.
+2. Abre la carpeta del proyecto en **Visual Studio Code** (VS Code).
+3. Utiliza la aplicación **GitHub Desktop** para publicar el repositorio y crear ramas.
+4. Invita a tu compañero como colaborador en GitHub.
+5. Ahora sí podéis subir y descargar cambios en directo usando la rama `develop`. Podéis seguir programando usando extensiones de IA locales (como Copilot o Cursor) o copiando fragmentos de código de vuelta a chats de IA como Gemini Advanced.
