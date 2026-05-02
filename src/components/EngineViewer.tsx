@@ -197,34 +197,10 @@ export function EngineViewer({ results, timeIndex, t }: { results: SimulationRes
               {/* Outer Casing */}
               <rect x="50" y="110" width="300" height="80" rx="4" fill="url(#metallic)" stroke="#475569" strokeWidth="1.5" />
               
-              {/* Heat Map Overlay inside chamber based on pressure */}
-              <rect x="52" y="112" width="296" height="76" rx="3" fill="#ef4444" opacity={0.05 + (normalizedPressure * 0.3)} />
+              {/* Internal Chamber (shows pressure heat) */}
+              <rect x="52" y="112" width="296" height="76" rx="3" fill="#1e293b" />
+              <rect x="52" y="112" width="296" height="76" rx="3" fill="url(#heatMap)" opacity={0.1 + (normalizedPressure * 0.85)} style={{ mixBlendMode: 'screen' }} />
               
-              {/* Dynamic Propellant Core (showing regression) */}
-              {results.grains.map((g, i) => {
-                 const x = results.grains_x && results.grains_x[i] ? results.grains_x[i][timeIndex] || 0 : 0;
-                 let startX = 60;
-                 for (let j = 0; j < i; j++) {
-                    startX += (results.grains[j].L0 * (results.grains[j].N || 1)) / totalL * 280;
-                 }
-                 const w = (g.L0 * g.N / totalL) * 280;
-                 // Simplification: just show a central hole getting bigger if tubular, 
-                 // or outside getting smaller.
-                 const isBurnedOut = g.L0 - g.ei * x * 2 <= 0 || g.D0 - g.osi * x * 2 <= 0;
-                 if (isBurnedOut) return null;
-                 
-                 const holeRatio = g.shape === 1 ? Math.min(1, (g.d0 + g.ci * x * 2) / g.D0) : 1;
-                 const holeHeight = 80 * holeRatio;
-                 
-                 return (
-                   <g key={`grain-${i}`}>
-                     {/* The solid grain */}
-                     <rect x={startX} y={112} width={w} height={38 - holeHeight/2} fill="#cbd5e1" stroke="#94a3b8" />
-                     <rect x={startX} y={150 + holeHeight/2} width={w} height={38 - holeHeight/2} fill="#cbd5e1" stroke="#94a3b8" />
-                   </g>
-                 )
-              })}
-
               {/* Nozzle Profile */}
               <path d="M 350 110 
                        C 365 110, 368 135, 370 135
@@ -232,9 +208,9 @@ export function EngineViewer({ results, timeIndex, t }: { results: SimulationRes
                        C 368 165, 365 190, 350 190 Z" 
                     fill="url(#metallicDark)" stroke="#1e293b" strokeWidth="1" />
               <path d="M 370 135 
-                       C 375 135, 385 105, 395 105
+                       C 375 135, 385 110, 395 105
                        L 395 195
-                       C 385 195, 375 165, 370 165 Z" 
+                       C 385 190, 375 165, 370 165 Z" 
                     fill="url(#metallicDark)" stroke="#1e293b" strokeWidth="1" />
               
               {/* EXHAUST PLUME */}
@@ -245,7 +221,7 @@ export function EngineViewer({ results, timeIndex, t }: { results: SimulationRes
                   {/* Outer boundary layer (low density/temp) */}
                   {hasFlame && (
                      <path 
-                       d={`M 390 105 Q ${390 + flameLength*0.6} ${150 - flameWidth*1.5} ${390 + flameLength*1.2} 150 Q ${390 + flameLength*0.6} ${150 + flameWidth*1.5} 390 195 Z`} 
+                       d={`M 390 106 L ${390 + flameLength*0.4} ${150 - flameWidth*0.7} Q ${390 + flameLength*0.8} ${150 - flameWidth*1.1} ${390 + flameLength*1.2} 150 Q ${390 + flameLength*0.8} ${150 + flameWidth*1.1} ${390 + flameLength*0.4} ${150 + flameWidth*0.7} L 390 194 Z`} 
                        fill="#fca5a5" 
                        opacity={0.6 * normalizedThrust}
                        style={{ filter: 'blur(8px)', mixBlendMode: 'screen' }}
@@ -254,7 +230,7 @@ export function EngineViewer({ results, timeIndex, t }: { results: SimulationRes
                   {/* Mid shear layer */}
                   {hasFlame && (
                      <path 
-                       d={`M 390 115 Q ${390 + flameLength*0.5} ${150 - flameWidth} ${390 + flameLength} 150 Q ${390 + flameLength*0.5} ${150 + flameWidth} 390 185 Z`} 
+                       d={`M 390 115 L ${390 + flameLength*0.3} ${150 - flameWidth*0.5} Q ${390 + flameLength*0.6} ${150 - flameWidth} ${390 + flameLength} 150 Q ${390 + flameLength*0.6} ${150 + flameWidth} ${390 + flameLength*0.3} ${150 + flameWidth*0.5} L 390 185 Z`} 
                        fill="url(#plumeBase)" 
                        opacity={0.9}
                        style={{ filter: 'blur(4px)', mixBlendMode: 'screen' }}

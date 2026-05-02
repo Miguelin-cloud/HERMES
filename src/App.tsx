@@ -18,6 +18,7 @@ import { EngineViewer } from './components/EngineViewer';
 import { GrainPreview } from './components/GrainPreview';
 import { MotorPreview } from './components/MotorPreview';
 import { PlaybackWrapper } from './components/PlaybackWrapper';
+import { MissionControl } from './components/MissionControl';
 import { SplashScreen } from './components/SplashScreen';
 import { Language, translations } from './lib/i18n';
 
@@ -27,21 +28,24 @@ function NumberInput({
   label, 
   step = "1",
   tooltip,
-  decimals
+  decimals,
+  inputWidth = "w-[65px]"
 }: { 
   value: number, 
   onChange: (v: number) => void, 
   label: string, 
   step?: string,
   tooltip?: string,
-  decimals?: number
+  decimals?: number,
+  inputWidth?: string
 }) {
   const [internal, setInternal] = useState(decimals !== undefined ? value.toFixed(decimals) : value.toString());
+  const lastPushedValue = React.useRef(value);
 
   React.useEffect(() => {
-    const formatted = decimals !== undefined ? value.toFixed(decimals) : value.toString();
-    if (!isNaN(value) && (parseFloat(internal) !== value || internal === "")) {
-      setInternal(formatted);
+    if (value !== lastPushedValue.current) {
+      setInternal(decimals !== undefined ? value.toFixed(decimals) : value.toString());
+      lastPushedValue.current = value;
     }
   }, [value, decimals]);
 
@@ -52,14 +56,22 @@ function NumberInput({
         type="number"
         step={step}
         value={internal}
-        className="w-[65px] h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background border-border text-primary font-mono ring-offset-background focus-visible:ring-ring focus-visible:ring-1 focus-visible:ring-offset-0"
+        className={`${inputWidth} h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background border-border text-primary font-mono ring-offset-background focus-visible:ring-ring focus-visible:ring-1 focus-visible:ring-offset-0`}
         onChange={(e) => {
           setInternal(e.target.value);
-          if (e.target.value !== '') {
+          if (e.target.value !== '' && e.target.value !== '-' && e.target.value !== '.') {
              const parsed = parseFloat(e.target.value);
              if (!isNaN(parsed)) {
+               lastPushedValue.current = parsed;
                onChange(parsed);
              }
+          }
+        }}
+        onBlur={() => {
+          if (decimals !== undefined && !isNaN(value)) {
+            const formatted = value.toFixed(decimals);
+            setInternal(formatted);
+            lastPushedValue.current = value;
           }
         }}
         onFocus={e => e.target.select()}
@@ -113,14 +125,18 @@ function InteractiveGrain3D({ grain }: { grain: any }) {
   );
 }
 
+import { ApogeeResult } from './lib/apogee';
+import { FlightViewer } from './components/FlightViewer';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('inputs');
   const [lang, setLang] = useState<Language>('en');
   const [showSplash, setShowSplash] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
-  
   const [showCfdInfo, setShowCfdInfo] = useState(false);
+  const [simApogee, setSimApogee] = useState<ApogeeResult | null>(null);
+  const [expApogee, setExpApogee] = useState<ApogeeResult | null>(null);
 
   React.useEffect(() => {
     const handler = (e: any) => {
@@ -143,7 +159,7 @@ export default function App() {
   };
   
   const [motor, setMotor] = useState({ Dc: 60.5, Lc: 483, Gstar: 2, kv: 0, etac: 0.85, paso_de_tiempo: 0.0005, Pamb: 0.101325 });
-  const [nozzle, setNozzle] = useState({ Dt0: 18.8, Ds: 41.1, e: 0, alpha: 12, ro: 2, etanoz: 0.75 });
+  const [nozzle, setNozzle] = useState({ Dt0: 18.8, Ds: 41.1, e: 0, alpha: 12, etanoz: 0.75 });
   const [grains, setGrains] = useState([
     { id: '1', shape: 1 as 1 | 2 | 3, propellantType: 1 as 1 | 2 | 3 | 4 | 5 | 6 | 7, D0: 56, d0: 25, d0mayor: 0, L0: 60, N: 5, Np: 0, osi: 1, ci: 1, ei: 1, rhorat: 0.94 }
   ]);
@@ -309,6 +325,7 @@ export default function App() {
               <TabsTrigger value="inputs" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.inputs}</TabsTrigger>
               <TabsTrigger value="results" disabled={!results} className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.results}</TabsTrigger>
               <TabsTrigger value="analysis" disabled={!results} className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.analysis || "Análisis"}</TabsTrigger>
+              <TabsTrigger value="mission_control" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.mission_control || "Mission Control"}</TabsTrigger>
               <TabsTrigger value="cfd" disabled={!results} className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">{t.cfd || "CFD Animation"}</TabsTrigger>
             </TabsList>
             <Button onClick={simulate} className="bg-destructive hover:bg-destructive/80 text-slate-200 font-bold shadow-[0_0_15px_rgba(249,115,22,0.5)] whitespace-nowrap min-w-[150px] h-9 ml-4 shrink-0 transition-all">
@@ -328,8 +345,8 @@ export default function App() {
                     <NumberInput label={t.gstar} step="0.1" value={motor.Gstar} onChange={(v:any) => setMotor({...motor, Gstar: v})} tooltip={t.gstar_desc} />
                     <NumberInput label={t.kv} step="0.1" value={motor.kv} onChange={(v:any) => setMotor({...motor, kv: v})} tooltip={t.kv_desc} />
                     <NumberInput label={t.eff_c} step="0.01" value={motor.etac} onChange={(v:any) => setMotor({...motor, etac: v})} tooltip={t.etac_desc} />
-                    <NumberInput label={t.time_step } step="0.00001" decimals={5} value={motor.paso_de_tiempo} onChange={(v:any) => setMotor({...motor, paso_de_tiempo: v})} tooltip={t.dt_desc} />
-                    <NumberInput label={t.p_amb } step="0.001" value={motor.Pamb} onChange={(v:any) => setMotor({...motor, Pamb: v})} tooltip={t.pamb_desc} />
+                    <NumberInput label={t.time_step } step="0.001" decimals={3} value={motor.paso_de_tiempo} onChange={(v:any) => setMotor({...motor, paso_de_tiempo: v})} tooltip={t.dt_desc} inputWidth="w-[75px]" />
+                    <NumberInput label={t.p_amb } step="0.001" decimals={3} value={motor.Pamb} onChange={(v:any) => setMotor({...motor, Pamb: v})} tooltip={t.pamb_desc} inputWidth="w-[75px]" />
                   </CardContent>
                 </Card>
 
@@ -339,7 +356,6 @@ export default function App() {
                     <NumberInput label={t.throat_d + " [mm]"} value={nozzle.Dt0} onChange={(v:any) => setNozzle({...nozzle, Dt0: v})} tooltip={t.dt0_desc} />
                     <NumberInput label={t.exit_d + " [mm]"} value={nozzle.Ds} onChange={(v:any) => setNozzle({...nozzle, Ds: v})} tooltip={t.ds_desc} />
                     <NumberInput label={t.div_angle + " [º]"} step="1" value={nozzle.alpha} onChange={(v:any) => setNozzle({...nozzle, alpha: v})} tooltip={t.alpha_desc} />
-                    <NumberInput label={t.throat_ro + " [mm]"} step="0.1" value={nozzle.ro} onChange={(v:any) => setNozzle({...nozzle, ro: v})} tooltip={t.ro_desc} />
                     <NumberInput label={t.erosion + " [mm]"} step="0.1" value={nozzle.e} onChange={(v:any) => setNozzle({...nozzle, e: v})} tooltip={t.e_desc} />
                     <NumberInput label={t.eff_n} step="0.01" value={nozzle.etanoz} onChange={(v:any) => setNozzle({...nozzle, etanoz: v})} tooltip={t.etanoz_desc} />
                   </CardContent>
@@ -597,7 +613,7 @@ export default function App() {
                             }} 
                           />
                           <Line type="monotone" dataKey="F_N" stroke="#f97316" dot={false} strokeWidth={2.5} name={t.r_nakka + " (N)"} style={{ filter: 'drop-shadow(0px 0px 5px rgba(249,115,22,0.6))' }} />
-                          <Line type="monotone" dataKey="E_N" stroke="#10b981" dot={false} strokeWidth={1.5} strokeDasharray="3 3" name={t.ideal_tti + " (N)"} />
+                          <Line type="monotone" dataKey="E_N" stroke="#10b981" dot={false} strokeWidth={1.5} name={t.ideal_tti + " (N)"} />
                         </LineChart>
                       </ResponsiveContainer>
                     </CardContent>
@@ -670,19 +686,35 @@ export default function App() {
 
            <TabsContent value="cfd" className="flex-1 overflow-hidden w-full relative min-h-0 flex flex-col gap-2">
              {results && (
-              <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-4 pb-10">
-                 <Button variant="outline" size="sm" className="w-fit self-end h-6 text-[10px]" onClick={() => setShowCfdInfo(!showCfdInfo)}>{t.more_info}</Button>
-                 {showCfdInfo && (
-                   <div className="p-3 bg-slate-900 text-slate-200 rounded text-[10px] leading-relaxed">
-                     <p className="font-bold text-blue-400 mb-1">{t.cfd_solver_title}</p>
-                     {t.cfd_solver_desc}
-                   </div>
-                 )}
-                 <div className="flex flex-col mx-auto bg-card rounded-lg shadow-sm border overflow-hidden shrink-0 w-full min-h-[300px]">
-                    <PlaybackWrapper results={results} t_parent={t} />
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col xl:flex-row gap-4 pb-10">
+                 <div className="flex-1 flex flex-col gap-4">
+                     <div className="flex justify-between items-center bg-muted/50 p-2 rounded-lg border border-border">
+                        <span className="text-xs uppercase font-bold text-slate-300 font-mono tracking-widest">{t.exhaust_sim}</span>
+                        <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => setShowCfdInfo(!showCfdInfo)}>{t.more_info}</Button>
+                     </div>
+                     {showCfdInfo && (
+                       <div className="p-3 bg-slate-900 text-slate-200 rounded-lg text-[10px] leading-relaxed border border-border shadow-inner">
+                         <p className="font-bold text-blue-400 mb-1">{t.cfd_solver_title}</p>
+                         {t.cfd_solver_desc}
+                       </div>
+                     )}
+                     <div className="flex flex-col flex-1 min-h-[350px] bg-card rounded-lg shadow-sm border overflow-hidden shrink-0 w-full">
+                        <PlaybackWrapper results={results} t_parent={t} />
+                     </div>
+                 </div>
+                 <div className="flex-1 flex flex-col min-h-[400px]">
+                     <FlightViewer simApogee={simApogee} expApogee={expApogee} t={t} propellantType={results?.propellantType || 1} />
                  </div>
               </div>
             )}
+          </TabsContent>
+          <TabsContent value="mission_control" className="flex-1 flex flex-col min-h-0 gap-2 px-1 overflow-y-auto pt-2">
+             <MissionControl 
+               results={results} 
+               lang={lang} 
+               onApogeeUpdate={(sim, exp) => { setSimApogee(sim); setExpApogee(exp); }} 
+               nozzleParams={nozzle}
+             />
           </TabsContent>
         </Tabs>
       </main>

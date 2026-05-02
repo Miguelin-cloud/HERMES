@@ -7,7 +7,9 @@ export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
   const drawHeight = 160;
   
   const totalLength = motor.Lc;
-  const scale = (drawWidth - 60) / Math.max(totalLength, 10);
+  const scaleX = (drawWidth - 60) / Math.max(totalLength, 10);
+  const scaleY = (drawHeight - 40) / Math.max(motor.Dc, 10);
+  const scale = Math.min(scaleX, scaleY);
   const center_y = drawHeight / 2;
 
   let totalGrainLength = 0;
@@ -29,11 +31,11 @@ export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
   return (
     <>
       {hasError && (
-          <div className="absolute top-1 right-2 text-[8px] font-medium text-red-600 bg-red-50 px-1 py-0.5 rounded border border-red-200 flex items-center gap-1 z-20">
-            <AlertCircle size={10} /> <span>Design Violations</span>
+          <div className="absolute top-1 right-2 text-[10px] font-bold text-red-400 bg-red-950/80 px-1.5 py-0.5 rounded border border-red-900/50 flex items-center gap-1 z-20 shadow-md backdrop-blur-sm">
+            <AlertCircle size={12} /> <span className="tracking-wider uppercase">Design Violations</span>
           </div>
       )}
-      <div className={`w-full h-full min-h-[120px] overflow-hidden rounded-sm flex items-center justify-center p-2 ${hasError ? 'bg-red-50' : 'bg-transparent'}`}>
+      <div className={`w-full h-full min-h-[120px] overflow-hidden rounded-sm flex items-center justify-center p-2 transition-colors duration-300 ${hasError ? 'bg-red-950/20' : 'bg-transparent'}`}>
         <svg width="100%" height="100%" viewBox={`0 0 ${drawWidth} ${drawHeight + 50}`} preserveAspectRatio="xMidYMid meet" className="max-h-[140px] max-w-[95%]">
             {/* GRAINS */}
             {grains.map((g, index) => {

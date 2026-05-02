@@ -29,7 +29,6 @@ export interface NozzleInput {
   Ds: number; // mm
   e: number; // mm
   alpha: number; // deg (divergence)
-  ro: number; // mm (throat curvature)
   etanoz: number;
 }
 
