@@ -177,6 +177,9 @@ export default function App() {
   const [simApogee, setSimApogee] = useState<ApogeeResult | null>(null);
   const [expApogee, setExpApogee] = useState<ApogeeResult | null>(null);
   const [showCredits, setShowCredits] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFilename, setExportFilename] = useState('');
+  const [csvBlob, setCsvBlob] = useState<Blob | null>(null);
 
   React.useEffect(() => {
     if (theme === 'light') {
@@ -279,17 +282,9 @@ export default function App() {
       csv += row;
     }
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `HERMES_Results_${motor.Dc}mm.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    // Quick alert instructing user on charts
-    setTimeout(() => {
-      alert("Note: Data and Summary Table have been exported to CSV. Graphs must be manually generated in Excel by inserting plots from these columns.");
-    }, 500);
+    setCsvBlob(blob);
+    setExportFilename(`HERMES_Results_${motor.Dc}mm.csv`);
+    setShowExportModal(true);
   };
 
   const chartData = results ? results.t.map((time, i) => {
@@ -960,6 +955,33 @@ export default function App() {
               )}
            </div>
         </div>
+        {showExportModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-card w-full max-w-sm rounded-lg p-6 shadow-xl border border-border">
+              <h2 className="text-lg font-bold mb-4">{lang === 'es' ? 'Exportar Resultados' : 'Export Results'}</h2>
+              <UiLabel>{lang === 'es' ? 'Nombre del archivo' : 'Filename'}</UiLabel>
+              <Input 
+                value={exportFilename} 
+                onChange={(e) => setExportFilename(e.target.value)} 
+                className="mb-4"
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowExportModal(false)}>{lang === 'es' ? 'Cancelar' : 'Cancel'}</Button>
+                <Button onClick={() => {
+                  if (csvBlob) {
+                    const url = URL.createObjectURL(csvBlob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = exportFilename;
+                    a.click();
+                    setShowExportModal(false);
+                    URL.revokeObjectURL(url);
+                  }
+                }}>{lang === 'es' ? 'Descargar' : 'Download'}</Button>
+              </div>
+            </div>
+          </div>
+        )}
       </footer>
     </div>
   );

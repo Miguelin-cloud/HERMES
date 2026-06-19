@@ -12,14 +12,13 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   const E_kg: number[] = [];
 
   const Ntipos = grains.length;
-  const Patm = motor.Pamb || 0.101325; // MPa
+  const Patm = motor.Pamb || 0.101325; // MPa (Presión ambiental de diseño)
   const Runiv = 8314; // J/(mol K) 
   
   if (Ntipos === 0) throw new Error("No grains defined");
 
-  // Initial State Struct per grain
+  // Estructura de estado inicial para cada grano de propelente
   let state = grains.map(g => {
-    // Initial geometry calculation
     let Vg = 0;
     let d0_mayor = g.shape === 2 ? g.d0mayor : 0;
     let tweb0 = 0;
@@ -29,11 +28,11 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     let miguel = 1;
     let alpha_deg = nozzle.alpha || 12;
 
-    if (g.shape === 1) { // Cylinder
+    if (g.shape === 1) { // Geometría Cilíndrica
       Vg = (Math.PI / 4) * (Math.pow(g.D0, 2) - Math.pow(g.d0, 2)) * g.L0;
       tweb0 = (g.D0 - g.d0) / 2;
       Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * (Math.pow(g.D0, 2) - Math.pow(g.d0, 2));
-    } else if (g.shape === 2) { // Star
+    } else if (g.shape === 2) { // Geometría en Estrella
       const Np = g.Np || 5;
       const Mx = g.d0mayor / 2;
       
@@ -49,13 +48,13 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       Vg = ( (Math.PI / 4) * Math.pow(g.D0, 2) - star_hole_area ) * g.L0;
       tweb0 = (g.D0 - g.d0) / 2; 
       Aduct = (Math.PI/4) * Math.pow(motor.Dc, 2) - ( (Math.PI/4)*Math.pow(g.D0, 2) - star_hole_area );
-    } else { // Solid
+    } else { // Grano Macizo (Solid)
       Vg = (Math.PI / 4) * Math.pow(g.D0, 2) * g.L0;
       tweb0 = g.D0 / 2;
       Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * Math.pow(g.D0, 2);
     }
     
-    // total length = N blocks
+    // Dimensionado de masa y longitudes para el bloque completo (N bloques)
     let Lg0 = g.L0 * g.N;
     let Vg0 = Vg * g.N;
     
@@ -98,13 +97,13 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   let current_t = 0;
   let mgra_total_val = state.reduce((sum, s) => sum + s.mg, 0);
   const initialMassTotal = mgra_total_val;
-  let P0 = Patm; // initial pressure MPa
+  let P0 = Patm; // Presión inicial en MPa (Absoluta)
 
   const Vc_m3 = (Math.PI / 4) * Math.pow(motor.Dc, 2) * motor.Lc / 1e9; 
   let msto_total_acc = 0;
-  let P0_prod_Pa = 0; // absolute pressure of product gas (Pa), starts at 0
+  let P0_prod_Pa = 0; // Presión manométrica de gases de combustión
   let Vfree_total = Vc_m3;
-  let R_total = state[0] ? 8314 / state[0].prop.M : 287; // default R if state empty
+  let R_total = state[0] ? 8314 / state[0].prop.M : 287; 
   let T0real_total = state[0] ? state[0].prop.T0 * motor.etac : 1710 * motor.etac;
   let k_total = state[0]?.prop.k || 1.13;
 
@@ -113,7 +112,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   let k_sum_steps = 0;
   let k_active_count = 0;
   
-  // Push initial state at t=0
+  // Guardar estado inicial en t=0
   hist.push({
     t: 0,
     P0_MPa: Patm,
@@ -129,7 +128,6 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     grains_Abs: state.map(s => s.Abs || 0),
     grains_Ab: state.map(s => s.Ab || 0)
   });
-
   while (mgra_total_val >= 0.00001 && step < 10000) {
     step++;
     const dt = motor.paso_de_tiempo;
@@ -157,10 +155,8 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
 
       let prev_mg = s.mg;
 
-      let prev_Ab = s.Ab;
-
-      // GEOMETRY
-      if (s.shape === 1) { // Cilindro
+      // GEOMETRÍA Y QUEMADO DE GRANOS
+      if (s.shape === 1) { // Grano Cilíndrico
         s.d = s.d0 + s.ci * 2 * s.x;
         s.D = s.D0 - s.osi * 2 * s.x;
         s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
@@ -181,8 +177,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           s.Vg = (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2)) * s.L;
           s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
         }
-      } else if (s.shape === 3) {
-        // Solid generic
+      } else if (s.shape === 3) { // Grano Macizo (Solid)
         s.D = s.D0 - s.osi * 2 * s.x;
         s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
         
@@ -202,15 +197,14 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           s.Vg = (Math.PI / 4) * Math.pow(s.D, 2) * s.L;
           s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
         }
-      } else {
-        // Estrella shape (2)
+      } else { // Grano en Estrella (2)
         const Np = s.Np || 5;
         s.D = s.D0 - s.osi * 2 * s.x;
         s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
         
         s.dmenor = s.d0 + s.ci * (2 * s.x / s.pablo);
         s.dmayor = s.d0mayor + s.ci * (2 * s.x / s.miguel);
-        s.d = s.dmenor; // d is dmenor in star representation
+        s.d = s.dmenor; 
 
         let stopFlag = false;
         if (s.D <= 0 || s.L <= 0 || s.dmenor >= s.D) stopFlag = true;
@@ -221,7 +215,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
           s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e, 2);
         } else if (s.dmayor < s.D) {
-          // Phase 1: Both dmenor and dmayor are inside the grain boundary D
+          // Fase 1: Ambas puntas están dentro del límite exterior D
           s.tweb = (s.D - s.dmenor) / 2;
           s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
           
@@ -238,7 +232,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           
           s.Aduct = Math.max(1e-6, (Math.PI / 4) * Math.pow(motor.Dc, 2) - ((Math.PI/4)*Math.pow(s.D,2) - area_hole));
         } else {
-          // Phase 2: Tips of the star reached boundary D, but dmenor is still inside.
+          // Fase 2: Las puntas de la estrella alcanzan el límite D, pero dmenor sigue quemando por dentro
           s.tweb = (s.D - s.dmenor) / 2;
           s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
           
@@ -278,7 +272,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       let mgen = (prev_mg - s.mg) / dt; // kg/s
       if (mgen < 0) mgen = 0;
 
-      let molesb_s = s.prop.M > 0 ? (mgen * 1000) / s.prop.M : 0; // mol/s
+      let molesb_s = s.prop.M > 0 ? (mgen * 1000) / s.prop.M : 0; 
       total_mgen += mgen;
       total_molesb += molesb_s;
       
@@ -291,7 +285,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
 
     mgra_total_val = sum_mg;
 
-    // Averages
+    // Propiedades medias ponderadas de los gases generados
     let M_total = total_molesb > 0 ? sum_M_moles / total_molesb : state[0].prop.M;
     k_total = total_molesb > 0 ? sum_k_moles / total_molesb : state[0].prop.k;
     let T0_total = total_molesb > 0 ? sum_T0_moles / total_molesb : state[0].prop.T0;
@@ -304,11 +298,11 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       k_active_count++;
     }
 
-    // Average dynamic throat area At across all grain blocks
+    // Área media de la garganta en el paso actual
     const At_total_val = state.reduce((sum, s) => sum + (s.At || At0), 0) / Ntipos;
     const current_exprat2 = Ae / At_total_val;
 
-    // mnoz_total is the mass flow of gas escaping the chamber, driven by the absolute product gas pressure
+    // Gasto másico que escapa por la tobera (mnoz_total)
     const mnoz_total = P0_prod_Pa * (At_total_val / 1e6) * Math.sqrt(k_total / (R_total * T0real_total)) * Math.pow(2 / (k_total + 1), (k_total + 1) / (2 * (k_total - 1)));
     
     const msto_total = total_mgen - mnoz_total;
@@ -318,10 +312,9 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     Vfree_total = Math.max(1e-9, Vc_m3 - Vgra_total);
     const rhoprod = Math.max(0, msto_total_acc / Vfree_total);
 
-    // The pressure from the accumulated gas density is already an absolute pressure by the Ideal Gas Law (P = rho*R*T).
-    // Adding Patm on top of this was a redundant double addition that shifted the pressure upward by Patm.
+    // CORRECCIÓN FÍSICA APLICADA: Sumar Patm de manera rigurosa para obtener la presión absoluta real
     P0_prod_Pa = rhoprod * R_total * T0real_total;
-    P0 = Math.max(Patm, P0_prod_Pa / 1e6); // Chamber absolute pressure (never below Patm)
+    P0 = P0_prod_Pa / 1e6 + Patm; 
 
     hist.push({
       t: current_t,
@@ -339,18 +332,15 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       grains_Ab: state.map(s => s.Ab)
     });
   }
-
-  // Post combustion
+  // Post combustión (Vaciado de cámara tras el quemado de los granos)
   let tbout = current_t;
   let pbout = P0;
   let gauge_bout = pbout - Patm;
   let k_enfriamiento = 0.02;
   
-  // Use final active burn temperature as starting point for exponential cooling
   let T02real_total = T0real_total; 
-  let Cstar_total = Math.sqrt(R_total * T02real_total) / 1.1; // Approx
+  let Cstar_total = Math.sqrt(R_total * T02real_total) / 1.1; 
   
-  // Get the final dynamic throat area at burnout
   const final_At_total_val = state.reduce((sum, s) => sum + (s.At || At0), 0) / Ntipos;
 
   while ((P0 - Patm) > 0.01 && step < 12000) {
@@ -378,37 +368,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       grains_Ab: hist[hist.length-1]?.grains_Ab || grains.map(() => 0)
     });
   }
-
-// =============================================================================
-// BLOQUE DE REEMPLAZO: Cálculo de Empuje TTI y Richard Nakka
-// Sustituye el bucle de integración de rendimiento en runSimulation(),
-// desde el comentario "// TTI performance calculator for each step" hasta
-// el final del bucle for (incluyendo la inicialización de variables arriba).
-//
-// CORRECCIONES APLICADAS (alineación exacta con MATLAB):
-//
-//  [RN-1] etanoz multiplica SOLO al término de momento (momentum_CF), NO a la presión.
-//         MATLAB: C_Fsum = etanoz * momentum_CF + pressure_CF
-//         TS anterior: etanoz * (lambda * momentum_CF + pressure_CF)  ← INCORRECTO
-//
-//  [RN-2] Se elimina el factor lambda de divergencia (lambda_RN) de la formulación
-//         de Richard Nakka. El MATLAB original no lo usa.
-//
-//  [RN-3] Pe_RN se limita a Patm en sobre-expansión: if Pe < Patm => Pe = Patm
-//         Evita empujes de presión negativos durante encendido/apagado.
-//
-//  [TTI-4] MachFactor multiplica a etanoz*(momentum+pressure), es decir, al empuje
-//          neto completo ya escalado, no solo al término de momento.
-//          MATLAB: E(i) = etanoz*(momentum+pressure); E(i) = E(i)*cos(Teta*pi/180)
-//
-//  [TTI-5] Límite de Teta en la zona de expansión (Prandtl-Meyer) replica la
-//          discrepancia de unidades de MATLAB:
-//          Teta está en grados, Teta_max está en radianes.
-//          Cuando Teta_deg > Teta_max_rad, se fija Teta_deg = Teta_max_rad.
-//          Ej: Teta_max_rad ≈ 4.19 rad → limita Teta_deg ≈ 4.19°
-//          ⟹ cos(4.19° × π/180) ≈ 0.9973 ≈ 1 → MachFactor ≈ 1 durante quemado.
-// =============================================================================
-
+ 
   // ── Variables de seguimiento de performance ──────────────────────────────
   let Pmax_MPa = 0;
   let P_sum = 0;
@@ -418,25 +378,25 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   let active_burn_steps = 0;
   let t_quemado = 0;
   let t_fin = 0;
-
+ 
   const grains_x: number[][] = grains.map(() => []);
   const grains_Abc: number[][] = grains.map(() => []);
   const grains_Abe: number[][] = grains.map(() => []);
   const grains_Abs: number[][] = grains.map(() => []);
   const grains_Ab: number[][] = grains.map(() => []);
-
-  // ── Bucle principal de performance ───────────────────────────────────────
+ 
+  // ── Bucle principal de cálculo de performance (TTI y Nakka) ───────────────
   for (let i = 0; i < hist.length; i++) {
     const step = hist[i];
-
-    const P0        = step.P0_MPa;          // presión cámara [MPa]
+ 
+    const P0        = step.P0_MPa;          // presión cámara [MPa] (Absoluta)
     const T0r       = step.T0real_total;    // temperatura real [K]
-    const R_tot     = step.R_total;         // constante gas [J/(kg·K)]
+    const R_tot     = step.R_total;         // constante de gas [J/(kg·K)]
     const k         = step.k_total;         // gamma
-    const At_val    = step.At_total_val;    // área garganta [mm²]
-    const exprat_i  = Ae / At_val;          // relación de expansión actual
-
-    // ── CASO ESPECIAL: presión nula (i=0 o P0 ≈ Patm) ─────────────────────
+    const At_val    = step.At_total_val;    // área de garganta [mm²]
+    const exprat_i  = Ae / At_val;          // relación de expansión geométrica actual
+ 
+    // CASO ESPECIAL: presión de cámara en niveles atmosféricos iniciales o de parada
     if (i === 0 || P0 <= Patm + 0.0001) {
       t.push(step.t);
       P0_MPa.push(step.P0_MPa);
@@ -455,56 +415,57 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       }
       continue;
     }
-
+ 
     // ══════════════════════════════════════════════════════════════════════
     //  CÁLCULO TTI  —  Teoría de Toberas Ideales
     // ══════════════════════════════════════════════════════════════════════
-
-    // Relaciones de presión crítica (mismo Mach supersónico/subsónico para
-    // el exprat geométrico de este paso de tiempo)
+ 
+    // Relación de área a Mach isentrópico
     const funMs = (Ms: number): number =>
       (1 / Math.max(1e-9, Ms)) *
       Math.pow(
         (1 + (k - 1) / 2 * Ms * Ms) / ((k + 1) / 2),
         (k + 1) / (2 * (k - 1))
       ) - exprat_i;
-
+ 
     let Ms1_tti = fzeroSearch(funMs, [0.01, 1.0], 100);
     let Ms2_tti = fzeroSearch(funMs, [1.0, 20.0], 100);
     if (isNaN(Ms1_tti) || Ms1_tti <= 0) Ms1_tti = 0.3;
     if (isNaN(Ms2_tti) || Ms2_tti <= 1) Ms2_tti = 2.0;
-
-    // Presiones críticas normalizadas (respecto a P0)
+ 
+    // Límites críticos de expansión de presión
     const pis1 = Math.pow(1 + (k - 1) / 2 * Ms1_tti * Ms1_tti, -k / (k - 1));
     const pis2 = Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, -k / (k - 1));
     const pich = (2 * k * Ms2_tti * Ms2_tti - (k - 1)) / (k + 1);
-
-    const Pp = Patm / P0; // relación presión ambiental / presión cámara
-
-    // Gasto másico estequiométrico (solo regímenes bloqueados en garganta)
+    
+    // Corrección física: Límite correcto de presión para choque en salida (pich_correct)
+    const pich_correct = pis2 * pich;
+ 
+    const Pp = Patm / P0; 
+ 
+    // Flujo crítico bloqueado (Choked)
     const mDot_choked =
       P0 * 1e6 *
       (At_val / 1e6) *
       Math.sqrt(k / (R_tot * T0r)) *
       Math.pow(2 / (k + 1), (k + 1) / (2 * (k - 1)));
-
-    let Ps_tti   = Patm;     // presión estática en salida [MPa]
-    let vs_tti   = 0;        // velocidad de salida [m/s]
-    let GastoOut = 0;        // gasto másico [kg/s]
-    let MachFactor = 1.0;    // factor corrección oblicua (cos θ)
-
+ 
+    let Ps_tti   = Patm;     
+    let vs_tti   = 0;        
+    let GastoOut = 0;        
+    let MachFactor = 1.0;    
+ 
     if (Pp >= pis1) {
       // ── Régimen subsónico ─────────────────────────────────────────────
       Ps_tti   = Patm;
-      GastoOut = 0;       // tobera sin bloquear: gasto irrelevante para empuje
+      GastoOut = 0;       
       vs_tti   = 0;
       MachFactor = 1.0;
-
-    } else if (Pp < pis1 && Pp >= pich) {
-      // ── Onda de choque normal dentro de la tobera ─────────────────────
+ 
+    } else if (Pp < pis1 && Pp >= pich_correct) {
+      // ── Onda de choque normal (OCN) dentro de la tobera ───────────────
       Ps_tti   = Patm;
       GastoOut = mDot_choked;
-      // Velocidad post-choque (Ms subsónico tras la onda)
       const funOCN = (Ms: number): number =>
         exprat_i * Pp *
         Math.pow((k + 1) / 2, (k + 1) / (2 * (k - 1))) *
@@ -515,16 +476,15 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       const Ts_ocn = T0r / (1 + (k - 1) / 2 * ms_ocn * ms_ocn);
       vs_tti = Math.sqrt(k * R_tot * Ts_ocn) * ms_ocn;
       MachFactor = 1.0;
-
-    } else if (Pp < pich && Pp > pis2) {
+ 
+    } else if (Pp < pich_correct && Pp > pis2) {
       // ── Onda de choque oblicua a la salida (OCO) ─────────────────────
       const Ps_isentropic = P0 / Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, k / (k - 1));
-      Ps_tti   = Ps_isentropic;   // [MPa]
+      Ps_tti   = Ps_isentropic;   
       GastoOut = mDot_choked;
       const Ts_out = T0r * Math.pow(Ps_isentropic / P0, (k - 1) / k);
       vs_tti = Math.sqrt(k * R_tot * Ts_out) * Ms2_tti;
-
-      // Ángulo de la onda oblicua
+ 
       const Mn_s2_val = (Patm / (P0 * pis2) * (k + 1) + (k - 1)) / (2 * k);
       const Mn_s2 = Math.sqrt(Math.max(0, Mn_s2_val));
       const BetaOut_deg = Math.asin(Math.min(1, Math.max(0, Mn_s2 / Ms2_tti))) * 180 / Math.PI;
@@ -533,9 +493,9 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       const Alfa_OCO_deg =
         BetaOut_deg -
         Math.atan(Mn_ext / Ms2_tti / Math.cos(BetaOut_deg * Math.PI / 180)) * 180 / Math.PI;
-
+ 
       MachFactor = Math.cos(Alfa_OCO_deg * Math.PI / 180);
-
+ 
     } else if (Pp === pis2) {
       // ── Tobera adaptada ───────────────────────────────────────────────
       Ps_tti   = Patm;
@@ -543,19 +503,18 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       const Ts_out = T0r * Math.pow(Patm / P0, (k - 1) / k);
       vs_tti = Math.sqrt(k * R_tot * Ts_out) * Ms2_tti;
       MachFactor = 1.0;
-
+ 
     } else {
-      // ── Sub-expansión: onda de expansión en la salida (Prandtl-Meyer) ─
+      // ── Sub-expansión: abanico de expansión de Prandtl-Meyer ──────────
       const Ps_isentropic = P0 / Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, k / (k - 1));
-      Ps_tti   = Ps_isentropic;   // [MPa]
+      Ps_tti   = Ps_isentropic;   
       GastoOut = mDot_choked;
       const Ts_out = T0r * Math.pow(Ps_isentropic / P0, (k - 1) / k);
       vs_tti = Math.sqrt(k * R_tot * Ts_out) * Ms2_tti;
-
-      // Ángulo de Prandtl-Meyer para el Mach exterior (a Patm)
+ 
       const coreMext = Math.pow(Patm / P0, (1 - k) / k) - 1;
       const MextOut  = Math.sqrt(Math.max(0, coreMext * 2 / (k - 1)));
-
+ 
       const nuPM = (M: number): number => {
         const term = Math.sqrt(Math.max(0, M * M - 1));
         return (
@@ -564,53 +523,43 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           Math.atan(term)
         );
       };
-
+ 
       const Nu_Mext = nuPM(MextOut);
       const Nu_Ms2  = nuPM(Ms2_tti);
-
-      // [TTI-5] Réplica exacta del bug de unidades de MATLAB:
-      //   Teta_deg = (Nu_Mext - Nu_Ms2) * 180/π   → valor en grados
-      //   Teta_max_rad = Nu_max - Nu_Ms2           → valor en radianes
-      //   Comparación: if Teta_deg > Teta_max_rad  → mezcla deg con rad
-      //   Resultado: Teta_deg se limita a ~4.19° ⟹ MachFactor ≈ 1
+ 
+      // Réplica exacta del límite de Prandtl-Meyer con mismatch de unidades de MATLAB
       const TetaOut_deg   = (Nu_Mext - Nu_Ms2) * 180 / Math.PI;
       const Nu_max        = (Math.PI / 2) * (Math.sqrt((k + 1) / (k - 1)) - 1);
-      const Teta_max_rad  = Nu_max - Nu_Ms2;   // ← en radianes (intencional)
-
-      // Límite cruzado (grados comparados con radianes), igual que MATLAB
+      const Teta_max_rad  = Nu_max - Nu_Ms2;   
+ 
       const TetaLimited_deg = TetaOut_deg > Teta_max_rad ? Teta_max_rad : TetaOut_deg;
-
+ 
       MachFactor = Math.cos(TetaLimited_deg * Math.PI / 180);
     }
-
-    // Saneamiento
+ 
     if (isNaN(GastoOut) || GastoOut < 0) GastoOut = 0;
     if (isNaN(vs_tti)   || vs_tti < 0)   vs_tti   = 0;
     if (isNaN(MachFactor))                MachFactor = 1.0;
     MachFactor = Math.min(1.0, Math.max(0.0, MachFactor));
-
-    // Componentes de empuje TTI
-    const momentumThrust_TTI = GastoOut * vs_tti;                                       // [N]
-    const pressureThrust_TTI = (Ps_tti - Patm) * 1e6 * (Math.PI * Math.pow(nozzle.Ds / 2000, 2)); // [N]
-
-    // [TTI-4] MachFactor multiplica al empuje neto completo (tras etanoz)
-    //   MATLAB: E(i) = etanoz*(Gasto*vs + (Ps-Patm)*Ae); E(i) = E(i)*cos(Teta*pi/180)
+ 
+    // Empuje TTI parcial (Momento y Diferencia de Presiones)
+    const momentumThrust_TTI = GastoOut * vs_tti;                                       
+    const pressureThrust_TTI = (Ps_tti - Patm) * 1e6 * (Math.PI * Math.pow(nozzle.Ds / 2000, 2)); 
+ 
+    // Aplicación del factor de corrección de flujo al empuje neto completo
     const TTI_Thrust_N = nozzle.etanoz * (momentumThrust_TTI + pressureThrust_TTI) * MachFactor;
-
+ 
     // ══════════════════════════════════════════════════════════════════════
     //  CÁLCULO RICHARD NAKKA
     // ══════════════════════════════════════════════════════════════════════
-
-    // Presión de salida isentrópica con el Mach supersónico
-    let Pe_RN = P0 / Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, k / (k - 1)); // [MPa]
-
-    // [RN-3] Límite inferior de Pe en sobre-expansión (replica "if Pe<Patm, Pe=Patm" de MATLAB)
+ 
+    let Pe_RN = P0 / Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, k / (k - 1)); 
+ 
+    // Evitar presiones negativas limitando Pe_RN a Patm
     if (Pe_RN < Patm) {
       Pe_RN = Patm;
     }
-
-    // Coeficiente de empuje de momento (termo cinético, Ec. de Nakka)
-    //   sqrt( 2k²/(k-1) · (2/(k+1))^((k+1)/(k-1)) · (1-(Pe/P0)^((k-1)/k)) )
+ 
     const Pe_P0 = Math.max(0, Math.min(1, Pe_RN / P0));
     const momentum_CF_RN =
       Math.sqrt(
@@ -618,18 +567,16 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
         Math.pow(2 / (k + 1), (k + 1) / (k - 1)) *
         (1 - Math.pow(Pe_P0, (k - 1) / k))
       );
-
-    // Coeficiente de empuje de presión (término estático)
+ 
     const pressure_CF_RN = ((Pe_RN - Patm) / P0) * exprat_i;
-
-    // [RN-1] etanoz SOLO sobre el término de momento; [RN-2] sin factor lambda
-    //   MATLAB: C_Fsum = etanoz * momentum_CF_RN + pressure_CF_RN
+ 
+    // Nozzle efficiency aplicada únicamente al término de momento cinético (Nakka estándar)
     const CF_RN = nozzle.etanoz * momentum_CF_RN + pressure_CF_RN;
-
-    // Empuje Nakka [N]  (At_val en mm² → ÷1e6 para m²; P0 en MPa → ×1e6 para Pa)
+ 
+    // Conversión de fuerza a Newtons
     const F_RN_N = isNaN(CF_RN) ? 0 : Math.max(0, CF_RN * (At_val / 1e6) * (P0 * 1e6));
-
-    // ── Acumulación de resultados ─────────────────────────────────────────
+ 
+    // ── Almacenar vectores de la serie temporal ───────────────────────────
     t.push(step.t);
     P0_MPa.push(step.P0_MPa);
     P0_gage.push(step.P0_gage);
@@ -638,7 +585,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     F_kg.push(F_RN_N / 9.81);
     E_N.push(TTI_Thrust_N);
     E_kg.push(TTI_Thrust_N / 9.81);
-
+ 
     for (let g = 0; g < grains.length; g++) {
       grains_x[g].push(step.grains_x?.[g] ?? 0);
       grains_Abc[g].push(step.grains_Abc?.[g] ?? 0);
@@ -646,25 +593,25 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       grains_Abs[g].push(step.grains_Abs?.[g] ?? 0);
       grains_Ab[g].push(step.grains_Ab?.[g] ?? 0);
     }
-
-    // ── Estadísticas de resumen ───────────────────────────────────────────
+ 
+    // ── Integraciones métricas ────────────────────────────────────────────
     if (step.P0_MPa > Pmax_MPa)    Pmax_MPa = step.P0_MPa;
     if (TTI_Thrust_N > Fmax_N)     Fmax_N   = TTI_Thrust_N;
-
+ 
     if (step.mgra_total > 0) {
       P_sum += step.P0_gage;
       active_burn_steps++;
       t_quemado = step.t;
     }
     if (TTI_Thrust_N > 1) t_fin = step.t;
-
+ 
     if (i > 0) {
       const dt_i = step.t - hist[i - 1].t;
       It_total_N_s += ((TTI_Thrust_N + E_N[i - 1]) / 2) * dt_i;
     }
   }
-  // ── Fin del bucle de performance ──────────────────────────────────────────
-
+ 
+  // ── Métricas resumidas y clasificación del motor ─────────────────────────
   const Pmed_MPa = active_burn_steps > 0 ? P_sum / active_burn_steps : 0;
   const Fmed_N = active_burn_steps > 0 ? It_total_N_s / t_quemado : 0;
   
@@ -672,7 +619,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   const motorClass = classifyMotor(It_total_N_s);
   const k_avg = k_active_count > 0 ? k_sum_steps / k_active_count : (state[0]?.prop.k || 1.13);
 
-  // Find dominant propellant type
+  // Determinar propelente dominante para el resumen
   const propTypes = grains.map(g => g.propellantType);
   const dominantPropellantType = propTypes.sort((a,b) =>
       propTypes.filter(v => v===a).length - propTypes.filter(v => v===b).length
