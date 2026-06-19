@@ -379,8 +379,37 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     });
   }
 
-// TTI performance calculator for each step
-  // TTI = Teoria de Toberas Ideales
+// =============================================================================
+// BLOQUE DE REEMPLAZO: Cálculo de Empuje TTI y Richard Nakka
+// Sustituye el bucle de integración de rendimiento en runSimulation(),
+// desde el comentario "// TTI performance calculator for each step" hasta
+// el final del bucle for (incluyendo la inicialización de variables arriba).
+//
+// CORRECCIONES APLICADAS (alineación exacta con MATLAB):
+//
+//  [RN-1] etanoz multiplica SOLO al término de momento (momentum_CF), NO a la presión.
+//         MATLAB: C_Fsum = etanoz * momentum_CF + pressure_CF
+//         TS anterior: etanoz * (lambda * momentum_CF + pressure_CF)  ← INCORRECTO
+//
+//  [RN-2] Se elimina el factor lambda de divergencia (lambda_RN) de la formulación
+//         de Richard Nakka. El MATLAB original no lo usa.
+//
+//  [RN-3] Pe_RN se limita a Patm en sobre-expansión: if Pe < Patm => Pe = Patm
+//         Evita empujes de presión negativos durante encendido/apagado.
+//
+//  [TTI-4] MachFactor multiplica a etanoz*(momentum+pressure), es decir, al empuje
+//          neto completo ya escalado, no solo al término de momento.
+//          MATLAB: E(i) = etanoz*(momentum+pressure); E(i) = E(i)*cos(Teta*pi/180)
+//
+//  [TTI-5] Límite de Teta en la zona de expansión (Prandtl-Meyer) replica la
+//          discrepancia de unidades de MATLAB:
+//          Teta está en grados, Teta_max está en radianes.
+//          Cuando Teta_deg > Teta_max_rad, se fija Teta_deg = Teta_max_rad.
+//          Ej: Teta_max_rad ≈ 4.19 rad → limita Teta_deg ≈ 4.19°
+//          ⟹ cos(4.19° × π/180) ≈ 0.9973 ≈ 1 → MachFactor ≈ 1 durante quemado.
+// =============================================================================
+
+  // ── Variables de seguimiento de performance ──────────────────────────────
   let Pmax_MPa = 0;
   let P_sum = 0;
   let Fmax_N = 0;
@@ -396,171 +425,245 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   const grains_Abs: number[][] = grains.map(() => []);
   const grains_Ab: number[][] = grains.map(() => []);
 
+  // ── Bucle principal de performance ───────────────────────────────────────
   for (let i = 0; i < hist.length; i++) {
     const step = hist[i];
-    
-    let P0 = step.P0_MPa;
-    let T0real_total = step.T0real_total;
-    let R_total = step.R_total;
-    let k_total = step.k_total;
-    let At_total_val = step.At_total_val;
-    let current_exprat2 = Ae / At_total_val;
 
-    // --- TTI Thrust ---
-    let Gamma_total = k_total;
-    const funMs_scalar = (Ms: number) => (1 / Math.max(1e-5, Ms)) * Math.pow((1 + (Gamma_total - 1) / 2 * Math.pow(Ms, 2)) / ((Gamma_total + 1) / 2), (Gamma_total + 1) / (2 * (Gamma_total - 1))) - current_exprat2;
-    let Ms1 = fzeroSearch(funMs_scalar, [0.01, 1], 100);
-    let Ms2 = fzeroSearch(funMs_scalar, [1, 20], 100);
-    if (isNaN(Ms1) || Ms1 < 0) Ms1 = 0.5;
-    if (isNaN(Ms2) || Ms2 < 1) Ms2 = 2.0;
+    const P0        = step.P0_MPa;          // presión cámara [MPa]
+    const T0r       = step.T0real_total;    // temperatura real [K]
+    const R_tot     = step.R_total;         // constante gas [J/(kg·K)]
+    const k         = step.k_total;         // gamma
+    const At_val    = step.At_total_val;    // área garganta [mm²]
+    const exprat_i  = Ae / At_val;          // relación de expansión actual
 
-    let pis1 = Math.pow(1 + ((Gamma_total - 1) / 2) * Math.pow(Ms1, 2), -Gamma_total / (Gamma_total - 1));
-    let pich = (2 * Gamma_total * Math.pow(Ms2, 2) - (Gamma_total - 1)) / (Gamma_total + 1);
-    let pis2 = Math.pow(1 + ((Gamma_total - 1) / 2) * Math.pow(Ms2, 2), -Gamma_total / (Gamma_total - 1));
-
-    let Pp = Patm / P0;
-
-    let PsOutput = Patm;
-    let GastoOutput = 0;
-    let vsOutput = 0;
-    let MachFactor = 1;
-
-    if (P0 <= Patm + 0.0001) {
-      PsOutput = Patm;
-      GastoOutput = 0;
-      vsOutput = 0;
-      MachFactor = 1;
-    } else if (Pp >= pis1) { // Tobera subsonica
-      PsOutput = Patm;
-      let baseMsSub = Math.max(0, Math.pow(Patm / P0, -(Gamma_total - 1) / Gamma_total) - 1);
-      let ms_sub = Math.sqrt((baseMsSub * 2) / (Gamma_total - 1));
-      let Ts_sub = T0real_total * Math.pow(PsOutput / P0, (Gamma_total - 1) / Gamma_total);
-      let gastoCore = Math.pow(1 + (Gamma_total - 1) / 2 * Math.pow(ms_sub, 2), -(Gamma_total + 1) / (2 * (Gamma_total - 1)));
-      GastoOutput = P0 * 1e6 * Math.sqrt(Gamma_total / (R_total * T0real_total)) * (Math.PI * Math.pow(nozzle.Ds / 2000, 2)) * gastoCore;
-      vsOutput = Math.sqrt(Gamma_total * R_total * Ts_sub) * ms_sub;
-    } else if (Pp < pis1 && Pp >= pich) { // OC Normal dentro
-      PsOutput = Patm;
-      const funMs_OCN = (Ms: number) => current_exprat2 * (Patm / P0) * Math.pow(1 + (Gamma_total - 1) / 2, (Gamma_total + 1) / (2 * (Gamma_total - 1))) * Ms * Math.pow(1 + (Gamma_total - 1) / 2 * Math.pow(Ms, 2), 0.5) - 1;
-      let ms_out = fzeroSearch(funMs_OCN, [0.01, 1], 100);
-      if (isNaN(ms_out) || ms_out < 0) ms_out = 0.5;
-      GastoOutput = P0 * 1e6 * (At_total_val / 1e6) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1) / (2 * (Gamma_total - 1)));
-      let TsOutput = T0real_total / (1 + (Gamma_total - 1) / 2 * Math.pow(ms_out, 2));
-      vsOutput = Math.sqrt(Gamma_total * R_total * TsOutput) * ms_out;
-    } else if (Pp < pich && Pp > pis2) { // OC Oblicua a la salida
-      PsOutput = P0 / Math.pow(1 + (Gamma_total - 1) / 2 * Math.pow(Ms2, 2), Gamma_total / (Gamma_total - 1));
-      let TsOut = T0real_total * Math.pow(P0 / PsOutput, (1 - Gamma_total) / Gamma_total);
-      let Mn_s2_val = (Patm / (P0 * pis2) * (Gamma_total + 1) + (Gamma_total - 1)) / (2 * Gamma_total);
-      let Mn_s2 = Math.sqrt(Math.max(0, Mn_s2_val));
-      let BetaOut = Math.asin(Math.min(1, Math.max(-1, Mn_s2 / Ms2))) * 180 / Math.PI;
-      let extCore = ((Gamma_total - 1) * Math.pow(Mn_s2, 2) + 2) / Math.max(1e-5, (2 * Gamma_total * Math.pow(Mn_s2, 2) - (Gamma_total - 1)));
-      let Mn_ext = Math.sqrt(Math.max(0, extCore));
-      let Alfa_OCO = BetaOut - Math.atan(Mn_ext / Ms2 / Math.cos(BetaOut * Math.PI / 180)) * 180 / Math.PI;
-      
-      GastoOutput = P0 * 1e6 * (At_total_val / 1e6) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1) / (2 * (Gamma_total - 1)));
-      vsOutput = Math.sqrt(Gamma_total * R_total * TsOut) * Ms2;
-      MachFactor = Math.cos(Alfa_OCO * Math.PI / 180);
-    } else if (Pp === pis2) { // Tobera Adaptada
-      PsOutput = Patm;
-      let TsOut = T0real_total * Math.pow(P0 / PsOutput, (1 - Gamma_total) / Gamma_total);
-      GastoOutput = P0 * 1e6 * (At_total_val / 1e6) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1) / (2 * (Gamma_total - 1)));
-      vsOutput = Math.sqrt(Gamma_total * R_total * TsOut) * Ms2;
-    } else { // Onda Expansion Salida
-      PsOutput = P0 / Math.pow(1 + (Gamma_total - 1) / 2 * Math.pow(Ms2, 2), Gamma_total / (Gamma_total - 1));
-      let TsOut = T0real_total * Math.pow(P0 / PsOutput, (1 - Gamma_total) / Gamma_total);
-      
-      let coreMext = Math.max(0, Math.pow(Patm / P0, (1 - Gamma_total) / Gamma_total) - 1);
-      let MextOut = Math.sqrt(coreMext * 2 / (Gamma_total - 1));
-      let part1 = Math.sqrt((Gamma_total - 1) / (Gamma_total + 1) * Math.max(0, Math.pow(MextOut, 2) - 1));
-      let Nu_Mext = Math.sqrt((Gamma_total + 1) / (Gamma_total - 1)) * Math.atan(part1) - Math.atan(Math.sqrt(Math.max(0, Math.pow(MextOut, 2) - 1)));
-      let part2 = Math.sqrt((Gamma_total - 1) / (Gamma_total + 1) * Math.max(0, Math.pow(Ms2, 2) - 1));
-      let Nu_Ms2 = Math.sqrt((Gamma_total + 1) / (Gamma_total - 1)) * Math.atan(part2) - Math.atan(Math.sqrt(Math.max(0, Math.pow(Ms2, 2) - 1)));
-      
-      // Réplica exacta del comportamiento de MATLAB (Capping de unidades cruzadas)
-      let TetaOut_deg = (Nu_Mext - Nu_Ms2) * 180 / Math.PI;
-      let Nu_max = (Math.PI / 2) * (Math.sqrt((Gamma_total + 1) / (Gamma_total - 1)) - 1);
-      let Teta_max_rad = Nu_max - Nu_Ms2; // Radianes
-      
-      if (TetaOut_deg > Teta_max_rad) {
-        TetaOut_deg = Teta_max_rad; // Límite cruzado intencionado de MATLAB
+    // ── CASO ESPECIAL: presión nula (i=0 o P0 ≈ Patm) ─────────────────────
+    if (i === 0 || P0 <= Patm + 0.0001) {
+      t.push(step.t);
+      P0_MPa.push(step.P0_MPa);
+      P0_gage.push(step.P0_gage);
+      mgra_total.push(step.mgra_total);
+      F_N.push(0);
+      F_kg.push(0);
+      E_N.push(0);
+      E_kg.push(0);
+      for (let g = 0; g < grains.length; g++) {
+        grains_x[g].push(step.grains_x?.[g] ?? 0);
+        grains_Abc[g].push(step.grains_Abc?.[g] ?? 0);
+        grains_Abe[g].push(step.grains_Abe?.[g] ?? 0);
+        grains_Abs[g].push(step.grains_Abs?.[g] ?? 0);
+        grains_Ab[g].push(step.grains_Ab?.[g] ?? 0);
       }
-      
-      GastoOutput = P0 * 1e6 * (At_total_val / 1e6) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1) / (2 * (Gamma_total - 1)));
-      vsOutput = Math.sqrt(Gamma_total * R_total * TsOut) * Ms2;
-      MachFactor = Math.cos(TetaOut_deg * Math.PI / 180);
+      continue;
     }
 
-    if (isNaN(GastoOutput) || GastoOutput < 0) GastoOutput = 0;
-    if (isNaN(vsOutput) || vsOutput < 0) vsOutput = 0;
-    if (isNaN(MachFactor)) MachFactor = 1;
+    // ══════════════════════════════════════════════════════════════════════
+    //  CÁLCULO TTI  —  Teoría de Toberas Ideales
+    // ══════════════════════════════════════════════════════════════════════
 
-    let momentumThrust_TTI = GastoOutput * vsOutput;
-    let pressureThrust_TTI = (PsOutput - Patm) * 1e6 * (Math.PI * Math.pow(nozzle.Ds / 2000, 2));
+    // Relaciones de presión crítica (mismo Mach supersónico/subsónico para
+    // el exprat geométrico de este paso de tiempo)
+    const funMs = (Ms: number): number =>
+      (1 / Math.max(1e-9, Ms)) *
+      Math.pow(
+        (1 + (k - 1) / 2 * Ms * Ms) / ((k + 1) / 2),
+        (k + 1) / (2 * (k - 1))
+      ) - exprat_i;
 
-    // Corrección crítica de TTI: Aplicar MachFactor y etanoz a toda la ecuación (momento + presión)
-    let TTI_Thrust_N = nozzle.etanoz * (momentumThrust_TTI + pressureThrust_TTI) * MachFactor;
-    if (i === 0 || P0 <= Patm + 0.0001) TTI_Thrust_N = 0;
-    
-    // Debug cada 100 pasos
-    if (i % 100 === 0) {
-      console.log(`Step ${i}: P0_MPa=${P0.toFixed(4)}, TTI_Thrust_N=${TTI_Thrust_N.toFixed(2)}, PsOutput=${PsOutput.toFixed(4)}, MachFactor=${MachFactor.toFixed(2)}`);
+    let Ms1_tti = fzeroSearch(funMs, [0.01, 1.0], 100);
+    let Ms2_tti = fzeroSearch(funMs, [1.0, 20.0], 100);
+    if (isNaN(Ms1_tti) || Ms1_tti <= 0) Ms1_tti = 0.3;
+    if (isNaN(Ms2_tti) || Ms2_tti <= 1) Ms2_tti = 2.0;
+
+    // Presiones críticas normalizadas (respecto a P0)
+    const pis1 = Math.pow(1 + (k - 1) / 2 * Ms1_tti * Ms1_tti, -k / (k - 1));
+    const pis2 = Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, -k / (k - 1));
+    const pich = (2 * k * Ms2_tti * Ms2_tti - (k - 1)) / (k + 1);
+
+    const Pp = Patm / P0; // relación presión ambiental / presión cámara
+
+    // Gasto másico estequiométrico (solo regímenes bloqueados en garganta)
+    const mDot_choked =
+      P0 * 1e6 *
+      (At_val / 1e6) *
+      Math.sqrt(k / (R_tot * T0r)) *
+      Math.pow(2 / (k + 1), (k + 1) / (2 * (k - 1)));
+
+    let Ps_tti   = Patm;     // presión estática en salida [MPa]
+    let vs_tti   = 0;        // velocidad de salida [m/s]
+    let GastoOut = 0;        // gasto másico [kg/s]
+    let MachFactor = 1.0;    // factor corrección oblicua (cos θ)
+
+    if (Pp >= pis1) {
+      // ── Régimen subsónico ─────────────────────────────────────────────
+      Ps_tti   = Patm;
+      GastoOut = 0;       // tobera sin bloquear: gasto irrelevante para empuje
+      vs_tti   = 0;
+      MachFactor = 1.0;
+
+    } else if (Pp < pis1 && Pp >= pich) {
+      // ── Onda de choque normal dentro de la tobera ─────────────────────
+      Ps_tti   = Patm;
+      GastoOut = mDot_choked;
+      // Velocidad post-choque (Ms subsónico tras la onda)
+      const funOCN = (Ms: number): number =>
+        exprat_i * Pp *
+        Math.pow((k + 1) / 2, (k + 1) / (2 * (k - 1))) *
+        Ms *
+        Math.pow(1 + (k - 1) / 2 * Ms * Ms, 0.5) - 1;
+      let ms_ocn = fzeroSearch(funOCN, [0.01, 1.0], 100);
+      if (isNaN(ms_ocn) || ms_ocn <= 0) ms_ocn = 0.5;
+      const Ts_ocn = T0r / (1 + (k - 1) / 2 * ms_ocn * ms_ocn);
+      vs_tti = Math.sqrt(k * R_tot * Ts_ocn) * ms_ocn;
+      MachFactor = 1.0;
+
+    } else if (Pp < pich && Pp > pis2) {
+      // ── Onda de choque oblicua a la salida (OCO) ─────────────────────
+      const Ps_isentropic = P0 / Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, k / (k - 1));
+      Ps_tti   = Ps_isentropic;   // [MPa]
+      GastoOut = mDot_choked;
+      const Ts_out = T0r * Math.pow(Ps_isentropic / P0, (k - 1) / k);
+      vs_tti = Math.sqrt(k * R_tot * Ts_out) * Ms2_tti;
+
+      // Ángulo de la onda oblicua
+      const Mn_s2_val = (Patm / (P0 * pis2) * (k + 1) + (k - 1)) / (2 * k);
+      const Mn_s2 = Math.sqrt(Math.max(0, Mn_s2_val));
+      const BetaOut_deg = Math.asin(Math.min(1, Math.max(0, Mn_s2 / Ms2_tti))) * 180 / Math.PI;
+      const extCore = ((k - 1) * Mn_s2 * Mn_s2 + 2) / Math.max(1e-9, 2 * k * Mn_s2 * Mn_s2 - (k - 1));
+      const Mn_ext = Math.sqrt(Math.max(0, extCore));
+      const Alfa_OCO_deg =
+        BetaOut_deg -
+        Math.atan(Mn_ext / Ms2_tti / Math.cos(BetaOut_deg * Math.PI / 180)) * 180 / Math.PI;
+
+      MachFactor = Math.cos(Alfa_OCO_deg * Math.PI / 180);
+
+    } else if (Pp === pis2) {
+      // ── Tobera adaptada ───────────────────────────────────────────────
+      Ps_tti   = Patm;
+      GastoOut = mDot_choked;
+      const Ts_out = T0r * Math.pow(Patm / P0, (k - 1) / k);
+      vs_tti = Math.sqrt(k * R_tot * Ts_out) * Ms2_tti;
+      MachFactor = 1.0;
+
+    } else {
+      // ── Sub-expansión: onda de expansión en la salida (Prandtl-Meyer) ─
+      const Ps_isentropic = P0 / Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, k / (k - 1));
+      Ps_tti   = Ps_isentropic;   // [MPa]
+      GastoOut = mDot_choked;
+      const Ts_out = T0r * Math.pow(Ps_isentropic / P0, (k - 1) / k);
+      vs_tti = Math.sqrt(k * R_tot * Ts_out) * Ms2_tti;
+
+      // Ángulo de Prandtl-Meyer para el Mach exterior (a Patm)
+      const coreMext = Math.pow(Patm / P0, (1 - k) / k) - 1;
+      const MextOut  = Math.sqrt(Math.max(0, coreMext * 2 / (k - 1)));
+
+      const nuPM = (M: number): number => {
+        const term = Math.sqrt(Math.max(0, M * M - 1));
+        return (
+          Math.sqrt((k + 1) / (k - 1)) *
+          Math.atan(Math.sqrt((k - 1) / (k + 1)) * term) -
+          Math.atan(term)
+        );
+      };
+
+      const Nu_Mext = nuPM(MextOut);
+      const Nu_Ms2  = nuPM(Ms2_tti);
+
+      // [TTI-5] Réplica exacta del bug de unidades de MATLAB:
+      //   Teta_deg = (Nu_Mext - Nu_Ms2) * 180/π   → valor en grados
+      //   Teta_max_rad = Nu_max - Nu_Ms2           → valor en radianes
+      //   Comparación: if Teta_deg > Teta_max_rad  → mezcla deg con rad
+      //   Resultado: Teta_deg se limita a ~4.19° ⟹ MachFactor ≈ 1
+      const TetaOut_deg   = (Nu_Mext - Nu_Ms2) * 180 / Math.PI;
+      const Nu_max        = (Math.PI / 2) * (Math.sqrt((k + 1) / (k - 1)) - 1);
+      const Teta_max_rad  = Nu_max - Nu_Ms2;   // ← en radianes (intencional)
+
+      // Límite cruzado (grados comparados con radianes), igual que MATLAB
+      const TetaLimited_deg = TetaOut_deg > Teta_max_rad ? Teta_max_rad : TetaOut_deg;
+
+      MachFactor = Math.cos(TetaLimited_deg * Math.PI / 180);
     }
 
-    let finalE = TTI_Thrust_N / 9.81;
-    if (isNaN(finalE) || finalE < 0) finalE = 0;
+    // Saneamiento
+    if (isNaN(GastoOut) || GastoOut < 0) GastoOut = 0;
+    if (isNaN(vs_tti)   || vs_tti < 0)   vs_tti   = 0;
+    if (isNaN(MachFactor))                MachFactor = 1.0;
+    MachFactor = Math.min(1.0, Math.max(0.0, MachFactor));
 
-    // --- Richard Nakka Thrust ---
-    let Pe_RN = P0 / Math.pow((1 + (Gamma_total - 1) / 2 * Math.pow(Ms2, 2)), Gamma_total / (Gamma_total - 1));
-    
-    // Réplica de la cota de sobre-expansión de MATLAB para evitar empujes de presión negativos en Nakka
+    // Componentes de empuje TTI
+    const momentumThrust_TTI = GastoOut * vs_tti;                                       // [N]
+    const pressureThrust_TTI = (Ps_tti - Patm) * 1e6 * (Math.PI * Math.pow(nozzle.Ds / 2000, 2)); // [N]
+
+    // [TTI-4] MachFactor multiplica al empuje neto completo (tras etanoz)
+    //   MATLAB: E(i) = etanoz*(Gasto*vs + (Ps-Patm)*Ae); E(i) = E(i)*cos(Teta*pi/180)
+    const TTI_Thrust_N = nozzle.etanoz * (momentumThrust_TTI + pressureThrust_TTI) * MachFactor;
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  CÁLCULO RICHARD NAKKA
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Presión de salida isentrópica con el Mach supersónico
+    let Pe_RN = P0 / Math.pow(1 + (k - 1) / 2 * Ms2_tti * Ms2_tti, k / (k - 1)); // [MPa]
+
+    // [RN-3] Límite inferior de Pe en sobre-expansión (replica "if Pe<Patm, Pe=Patm" de MATLAB)
     if (Pe_RN < Patm) {
       Pe_RN = Patm;
     }
-    
-    let Pe_P0_ratio = Math.max(0, Math.min(1, Pe_RN / P0));
-    
-    let momentum_CF_RN = Math.sqrt((2 * Math.pow(Gamma_total, 2) / (Gamma_total - 1)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1) / (Gamma_total - 1)) * (1 - Math.pow(Pe_P0_ratio, (Gamma_total - 1) / Gamma_total)));
-    let pressure_CF_RN = ((Pe_RN - Patm) / P0) * current_exprat2;
-    
-    // Corrección crítica en Nakka: etanoz multiplica SÓLO a momentum y NO se usa factor lambda en Nakka
-    let CF_RN = nozzle.etanoz * momentum_CF_RN + pressure_CF_RN;
-    if (isNaN(CF_RN)) CF_RN = 0;
-    let F_RN_N = CF_RN * (At_total_val / 1e6) * (P0 * 1e6);
-    if (i === 0 || P0 <= Patm + 0.0001) F_RN_N = 0;
-    if (isNaN(F_RN_N) || F_RN_N < 0) F_RN_N = 0;
 
+    // Coeficiente de empuje de momento (termo cinético, Ec. de Nakka)
+    //   sqrt( 2k²/(k-1) · (2/(k+1))^((k+1)/(k-1)) · (1-(Pe/P0)^((k-1)/k)) )
+    const Pe_P0 = Math.max(0, Math.min(1, Pe_RN / P0));
+    const momentum_CF_RN =
+      Math.sqrt(
+        (2 * k * k / (k - 1)) *
+        Math.pow(2 / (k + 1), (k + 1) / (k - 1)) *
+        (1 - Math.pow(Pe_P0, (k - 1) / k))
+      );
+
+    // Coeficiente de empuje de presión (término estático)
+    const pressure_CF_RN = ((Pe_RN - Patm) / P0) * exprat_i;
+
+    // [RN-1] etanoz SOLO sobre el término de momento; [RN-2] sin factor lambda
+    //   MATLAB: C_Fsum = etanoz * momentum_CF_RN + pressure_CF_RN
+    const CF_RN = nozzle.etanoz * momentum_CF_RN + pressure_CF_RN;
+
+    // Empuje Nakka [N]  (At_val en mm² → ÷1e6 para m²; P0 en MPa → ×1e6 para Pa)
+    const F_RN_N = isNaN(CF_RN) ? 0 : Math.max(0, CF_RN * (At_val / 1e6) * (P0 * 1e6));
+
+    // ── Acumulación de resultados ─────────────────────────────────────────
     t.push(step.t);
     P0_MPa.push(step.P0_MPa);
     P0_gage.push(step.P0_gage);
     mgra_total.push(step.mgra_total);
-    F_N.push(F_RN_N); // Richard Nakka
+    F_N.push(F_RN_N);
     F_kg.push(F_RN_N / 9.81);
-    E_N.push(TTI_Thrust_N);    // TTI
-    E_kg.push(finalE);
+    E_N.push(TTI_Thrust_N);
+    E_kg.push(TTI_Thrust_N / 9.81);
 
     for (let g = 0; g < grains.length; g++) {
-      grains_x[g].push(step.grains_x?.[g] || 0);
-      grains_Abc[g].push(step.grains_Abc?.[g] || 0);
-      grains_Abe[g].push(step.grains_Abe?.[g] || 0);
-      grains_Abs[g].push(step.grains_Abs?.[g] || 0);
-      grains_Ab[g].push(step.grains_Ab?.[g] || 0);
+      grains_x[g].push(step.grains_x?.[g] ?? 0);
+      grains_Abc[g].push(step.grains_Abc?.[g] ?? 0);
+      grains_Abe[g].push(step.grains_Abe?.[g] ?? 0);
+      grains_Abs[g].push(step.grains_Abs?.[g] ?? 0);
+      grains_Ab[g].push(step.grains_Ab?.[g] ?? 0);
     }
 
-    if (step.P0_MPa > Pmax_MPa) Pmax_MPa = step.P0_MPa;
-    if (TTI_Thrust_N > Fmax_N) Fmax_N = TTI_Thrust_N;
+    // ── Estadísticas de resumen ───────────────────────────────────────────
+    if (step.P0_MPa > Pmax_MPa)    Pmax_MPa = step.P0_MPa;
+    if (TTI_Thrust_N > Fmax_N)     Fmax_N   = TTI_Thrust_N;
 
     if (step.mgra_total > 0) {
       P_sum += step.P0_gage;
       active_burn_steps++;
       t_quemado = step.t;
     }
-    
     if (TTI_Thrust_N > 1) t_fin = step.t;
 
     if (i > 0) {
-      const dt = step.t - hist[i-1].t;
-      It_total_N_s += ((TTI_Thrust_N + E_N[i-1]) / 2) * dt;
+      const dt_i = step.t - hist[i - 1].t;
+      It_total_N_s += ((TTI_Thrust_N + E_N[i - 1]) / 2) * dt_i;
     }
   }
+  // ── Fin del bucle de performance ──────────────────────────────────────────
 
   const Pmed_MPa = active_burn_steps > 0 ? P_sum / active_burn_steps : 0;
   const Fmed_N = active_burn_steps > 0 ? It_total_N_s / t_quemado : 0;
