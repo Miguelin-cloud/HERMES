@@ -2,5 +2,5 @@
   "name": "HERMES Web Simulator",
   "description": "Simulador de motores cohete de propulsante sólido basado en HERMES y OpenMotor.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

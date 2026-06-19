@@ -20,8 +20,9 @@ import {
   Legend,
 } from "recharts";
 import { SimulationResults } from "../lib/types";
-import { calculateApogee, ApogeeResult } from "../lib/apogee";
+import { calculateApogee, ApogeeResult, getExitMach, getTTIThrustCoefficient } from "../lib/apogee";
 import { Language, translations } from "../lib/i18n";
+import { Download, FileSpreadsheet, Sparkles, CheckCircle2 } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const NumberInputMC = ({
@@ -50,10 +51,11 @@ const NumberInputMC = ({
 
   return (
     <div
-      className="flex items-center justify-between gap-1 w-full border-b border-border pb-1 mb-[2px] px-1 hover:bg-muted/50 rounded transition-colors"
+      className="group relative flex items-center justify-between gap-1 w-full border-b border-border pb-1 mb-[2px] px-1 hover:bg-muted/50 rounded transition-all focus-within:bg-purple-500/10 focus-within:shadow-[inset_0_0_8px_rgba(168,85,247,0.08)]"
       title={tooltip}
     >
-      <UiLabel className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">
+      <div className="absolute bottom-[-1px] left-0 right-0 h-[1.5px] bg-gradient-to-r from-purple-500 via-purple-300 to-blue-500 opacity-0 group-focus-within:opacity-100 transition-all duration-300 shadow-[0_0_10px_rgba(168,85,247,0.8)]"></div>
+      <UiLabel className="text-[10px] text-muted-foreground font-mono whitespace-nowrap group-focus-within:text-foreground transition-colors z-10">
         {label}
       </UiLabel>
       <input
@@ -84,7 +86,7 @@ const NumberInputMC = ({
           }
         }}
         onFocus={(e) => e.target.select()}
-        className="w-[65px] h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background border-border text-primary font-mono ring-offset-background outline-none rounded-sm focus-visible:ring-ring focus-visible:ring-1"
+        className="w-[65px] h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background border-transparent text-primary font-mono ring-offset-background outline-none rounded-sm transition-all z-10 focus:ring-0 focus:outline-none"
       />
     </div>
   );
@@ -104,14 +106,14 @@ export function MissionControl({
   const t = translations[lang];
 
   // Parameters for Apogee Simulation (Edit States)
-  const [dryMass, setDryMass] = useState(15.0); // kg
+  const [dryMass, setDryMass] = useState(7.5); // kg
   const [rocketDiameter, setRocketDiameter] = useState(80); // mm
   const [launchAltitude, setLaunchAltitude] = useState(169); // m
   const [launchTemp, setLaunchTemp] = useState(28); // ºC
 
   // Applied States for Calculation
   const [calcParams, setCalcParams] = useState({
-    dryMass: 15.0,
+    dryMass: 7.5,
     rocketDiameter: 80,
     launchAltitude: 169,
     launchTemp: 28,
@@ -213,7 +215,7 @@ export function MissionControl({
     setTimeout(() => {
       const simResult = calculateApogee(
         results.t,
-        results.F_N,
+        results.E_N,
         results.mgra_total.map((mg) => mg + calcParams.dryMass),
         calcParams.dryMass,
         calcParams.rocketDiameter / 1000,
@@ -243,18 +245,16 @@ export function MissionControl({
           const P_MPa = convertPresToMPa(d.p, calcExpParams.presUnit);
           const P_Pa = P_MPa * 1e6;
           const Dt = nozzleParams?.Dt0 || 18.8; // mm
+          const Ds = nozzleParams?.Ds || 37.6; // mm
+          const alpha_deg = nozzleParams?.alpha || 12; // deg
+          const etanoz = nozzleParams?.etanoz || 0.95;
           const At_m2 = Math.PI * Math.pow(Dt / 2000, 2);
+          const epsilon = Math.pow(Ds / Dt, 2);
           
-          let CF = 0;
           const k = results?.summary.k_avg || 1.13;
           const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
-          if (P_Pa > Pa) {
-            const t1 = (2 * k * k) / (k - 1);
-            const t2 = Math.pow(2 / (k + 1), (k + 1) / (k - 1));
-            const t3 = 1 - Math.pow(Pa / P_Pa, (k - 1) / k);
-            CF = Math.sqrt(t1 * t2 * t3);
-          }
           
+          const CF = getTTIThrustCoefficient(P_Pa, Pa, k, epsilon, alpha_deg, etanoz);
           f_N = P_Pa * At_m2 * CF;
         } else {
           f_N = convertForceToN(Math.max(0, d.f), calcExpParams.forceUnit);
@@ -288,6 +288,30 @@ export function MissionControl({
     }, 50);
   }, [calcExpParams, calcParams, results]);
 
+  const downloadTemplate = () => {
+    let headers = "";
+    let sample = "";
+    if (expDataType === "both") {
+      headers = "Time,Pressure,Force\n";
+      sample = "0.00,0.10,0.0\n0.05,1.25,120.5\n0.10,2.85,340.2\n0.15,4.10,510.9\n0.20,3.95,490.4\n0.25,1.80,180.1\n0.30,0.10,0.0\n";
+    } else if (expDataType === "pressure") {
+      headers = "Time,Pressure\n";
+      sample = "0.00,0.10\n0.05,1.25\n0.10,2.85\n0.15,4.10\n0.20,3.95\n0.25,1.80\n0.30,0.10\n";
+    } else {
+      headers = "Time,Force\n";
+      sample = "0.00,0.0\n0.05,120.5\n0.10,340.2\n0.15,510.9\n0.20,490.4\n0.25,180.1\n0.30,0.0\n";
+    }
+    const blob = new Blob([headers + sample], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `hermes_template_${expDataType}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -300,30 +324,109 @@ export function MissionControl({
       const ws = wb.Sheets[wsname];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      // Extract Col 1 (Time), Col 2 (Pressure), Col 3 (Force)
-      // Start from row 1 to skip header if it exists. We try parsing numbers.
+      if (data.length === 0) return;
+
+      // Robust Column Header Detection
+      let timeIdx = 0;
+      let pressIdx = -1;
+      let forceIdx = -1;
+      let hasHeader = false;
+
+      // Scan first 5 rows for potential header words to support any language or order
+      for (let r = 0; r < Math.min(5, data.length); r++) {
+        const row = data[r] as any[];
+        if (!row) continue;
+        
+        let foundTime = -1;
+        let foundPress = -1;
+        let foundForce = -1;
+
+        for (let c = 0; c < row.length; c++) {
+          const valStr = String(row[c] || "").toLowerCase().trim();
+          if (!valStr) continue;
+          
+          if (valStr.includes("time") || valStr.includes("tiempo") || valStr === "t" || valStr === "s" || valStr.includes("seconds") || valStr.includes("seg")) {
+            foundTime = c;
+          } else if (valStr.includes("press") || valStr.includes("pres") || valStr === "p" || valStr.includes("mpa") || valStr.includes("bar") || valStr.includes("psi") || valStr.includes("chamber") || valStr.includes("cámara")) {
+            foundPress = c;
+          } else if (valStr.includes("force") || valStr.includes("thrust") || valStr.includes("empuje") || valStr.includes("fuerza") || valStr === "f" || valStr === "n" || valStr.includes("load")) {
+            foundForce = c;
+          }
+        }
+
+        // We found a matching time plus at least one of the inputs
+        if (foundTime !== -1 && (foundPress !== -1 || foundForce !== -1)) {
+          timeIdx = foundTime;
+          if (foundPress !== -1) pressIdx = foundPress;
+          if (foundForce !== -1) forceIdx = foundForce;
+          hasHeader = true;
+          break;
+        }
+      }
+
+      // Default fallback if we did not auto-detect a header
+      if (!hasHeader) {
+        timeIdx = 0;
+        if (expDataType === "force") {
+          forceIdx = 1;
+          pressIdx = -1;
+        } else if (expDataType === "pressure") {
+          pressIdx = 1;
+          forceIdx = -1;
+        } else {
+          pressIdx = 1;
+          forceIdx = 2;
+        }
+      }
+
+      // Parse data
       const parsed: { t: number; p: number; f: number }[] = [];
       for (let i = 0; i < data.length; i++) {
         const row = data[i] as any[];
-        let t_val = NaN,
-          p_val = 0,
-          f_val = 0;
-        if (row.length >= 2) {
-          t_val = parseFloat(row[0]);
+        if (!row || row.length === 0) continue;
+
+        // Try extracting numeric values
+        const t_raw = parseFloat(String(row[timeIdx]).replace(",", "."));
+        const p_raw = pressIdx !== -1 && pressIdx < row.length ? parseFloat(String(row[pressIdx]).replace(",", ".")) : 0;
+        const f_raw = forceIdx !== -1 && forceIdx < row.length ? parseFloat(String(row[forceIdx]).replace(",", ".")) : 0;
+
+        // If time is completely non-numeric (e.g. the header itself), skip
+        if (isNaN(t_raw)) continue;
+
+        const t_val = t_raw;
+        const p_val = isNaN(p_raw) ? 0 : p_raw;
+        const f_val = isNaN(f_raw) ? 0 : f_raw;
+
+        parsed.push({ t: t_val, p: p_val, f: f_val });
+      }
+
+      // Fallback index-based parser if empty parsed array
+      if (parsed.length === 0) {
+        for (let i = 0; i < data.length; i++) {
+          const row = data[i] as any[];
+          if (!row || row.length < 2) continue;
+          
+          const t_val = parseFloat(String(row[0]).replace(",", "."));
+          let p_val = 0;
+          let f_val = 0;
+          
           if (expDataType === "force") {
-            f_val = parseFloat(row[1]);
+            f_val = parseFloat(String(row[1]).replace(",", "."));
           } else if (expDataType === "pressure") {
-            p_val = parseFloat(row[1]);
+            p_val = parseFloat(String(row[1]).replace(",", "."));
           } else if (expDataType === "both" && row.length >= 3) {
-            p_val = parseFloat(row[1]);
-            f_val = parseFloat(row[2]);
+            p_val = parseFloat(String(row[1]).replace(",", "."));
+            f_val = parseFloat(String(row[2]).replace(",", "."));
           }
+          
           if (!isNaN(t_val) && !isNaN(p_val) && !isNaN(f_val)) {
             parsed.push({ t: t_val, p: p_val, f: f_val });
           }
         }
       }
 
+      // Sort chronological
+      parsed.sort((a, b) => a.t - b.t);
       setExpDataRaw(parsed);
     };
     reader.readAsBinaryString(file);
@@ -339,7 +442,7 @@ export function MissionControl({
       if (t > results.t[results.t.length - 1]) return 0;
       let r_idx = 0;
       while (r_idx < results.t.length - 1 && results.t[r_idx] <= t) r_idx++;
-      return results.F_N[r_idx] || 0;
+      return results.E_N[r_idx] || 0;
     };
 
     // Helper to get experimental thrust
@@ -377,18 +480,16 @@ export function MissionControl({
         const P_MPa = convertPresToMPa(d.p, calcExpParams.presUnit);
         const P_Pa = P_MPa * 1e6;
         const Dt = nozzleParams?.Dt0 || 18.8; // mm
+        const Ds = nozzleParams?.Ds || 37.6; // mm
+        const alpha_deg = nozzleParams?.alpha || 12; // deg
+        const etanoz = nozzleParams?.etanoz || 0.95;
         const At_m2 = Math.PI * Math.pow(Dt / 2000, 2);
+        const epsilon = Math.pow(Ds / Dt, 2);
 
-        let CF = 0;
         const k = results?.summary.k_avg || 1.13;
         const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
-        if (P_Pa > Pa) {
-          const t1 = (2 * k * k) / (k - 1);
-          const t2 = Math.pow(2 / (k + 1), (k + 1) / (k - 1));
-          const t3 = 1 - Math.pow(Pa / P_Pa, (k - 1) / k);
-          CF = Math.sqrt(t1 * t2 * t3);
-        }
 
+        const CF = getTTIThrustCoefficient(P_Pa, Pa, k, epsilon, alpha_deg, etanoz);
         exp_P_F = Math.max(0, P_Pa * At_m2 * CF);
       }
       return { exp_F, exp_P_F };
@@ -454,8 +555,8 @@ export function MissionControl({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Rocket Parameters */}
         <Card className="bg-card border-border shadow-sm">
-          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50 flex flex-row items-center justify-between">
-            <CardTitle className="text-[12px] uppercase text-slate-300 font-bold">
+          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
+            <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
               {t.rocket_params || "Rocket Parameters"}
             </CardTitle>
             <Button
@@ -498,8 +599,8 @@ export function MissionControl({
 
         {/* Experimental Data Upload */}
         <Card className="bg-card border-border shadow-sm">
-          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50 flex flex-row items-center justify-between">
-            <CardTitle className="text-[12px] uppercase text-slate-300 font-bold">
+          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
+            <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
               {t.exp_data || "Experimental Data Import"}
             </CardTitle>
             <Button
@@ -514,17 +615,17 @@ export function MissionControl({
           </CardHeader>
           <CardContent className="p-3 flex flex-col gap-3">
             <div className="space-y-1">
-              <UiLabel className="text-[10px] text-slate-400 font-bold uppercase">
+              <UiLabel className="text-[10px] text-muted-foreground font-bold uppercase">
                 {t.data_cols || "Data Columns"}
               </UiLabel>
               <Select
                 value={expDataType}
                 onValueChange={(v: any) => setExpDataType(v)}
               >
-                <SelectTrigger className="h-7 text-xs bg-slate-900 border-slate-700 w-full">
+                <SelectTrigger className="h-7 text-xs bg-muted/60 dark:bg-slate-950 border-border text-foreground w-full">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-popover text-popover-foreground border-border">
                   <SelectItem value="both">
                     {t.cols_3 || "Time, Pressure, Force (3 cols)"}
                   </SelectItem>
@@ -537,12 +638,12 @@ export function MissionControl({
                 </SelectContent>
               </Select>
               {expDataType === "pressure" && (
-                <p className="text-[9px] text-emerald-400 italic mt-0.5 leading-tight">
+                <p className="text-[9px] text-emerald-500 italic mt-0.5 leading-tight">
                   {t.est_thrust_msg ||
                     "* Thrust will be estimated from pressure using nozzle data."}
                 </p>
               )}
-              <p className="text-[10px] text-slate-500 mt-2 leading-snug">
+              <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
                 {expDataType === "both"
                   ? t.import_desc_both ||
                     "Calculates altitude and thrust from experimental pressure and thrust from Excel. Plotted alongside simulation data if available."
@@ -553,16 +654,17 @@ export function MissionControl({
                       "Uses experimental thrust to calculate altitude. Plotted alongside simulation data if available."}
               </p>
             </div>
+            
             <div className="flex gap-4">
               <div className="flex-1 space-y-1">
-                <UiLabel className="text-[10px] text-slate-400 font-bold uppercase">
+                <UiLabel className="text-[10px] text-muted-foreground font-bold uppercase">
                   {t.pres_unit || "Pressure Unit"}
                 </UiLabel>
                 <Select value={presUnit} onValueChange={setPresUnit}>
-                  <SelectTrigger className="h-7 text-xs bg-slate-900 border-slate-700">
+                  <SelectTrigger className="h-7 text-xs bg-muted/60 dark:bg-slate-950 border-border text-foreground">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-popover text-popover-foreground border-border">
                     <SelectItem value="MPa">MPa</SelectItem>
                     <SelectItem value="Pa">Pa</SelectItem>
                     <SelectItem value="bar">bar</SelectItem>
@@ -572,14 +674,14 @@ export function MissionControl({
                 </Select>
               </div>
               <div className="flex-1 space-y-1">
-                <UiLabel className="text-[10px] text-slate-400 font-bold uppercase">
-                  {t.force_unit || "Force Unit"}
+                <UiLabel className="text-[10px] text-muted-foreground font-bold uppercase">
+                   {t.force_unit || "Force Unit"}
                 </UiLabel>
                 <Select value={forceUnit} onValueChange={setForceUnit}>
-                  <SelectTrigger className="h-7 text-xs bg-slate-900 border-slate-700">
+                  <SelectTrigger className="h-7 text-xs bg-muted/60 dark:bg-slate-950 border-border text-foreground">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-popover text-popover-foreground border-border">
                     <SelectItem value="N">N</SelectItem>
                     <SelectItem value="kN">kN</SelectItem>
                     <SelectItem value="kgf">kgf</SelectItem>
@@ -589,28 +691,74 @@ export function MissionControl({
               </div>
             </div>
 
-            <div className="relative border-2 border-dashed border-slate-700/50 p-4 rounded-md text-center hover:bg-slate-800/30 transition-colors cursor-pointer">
+            {/* Visual template helper diagram and Template Download button */}
+            <div className="bg-muted/40 border border-border p-2.5 rounded-lg text-[10px] space-y-2">
+              <div className="flex items-center justify-between text-muted-foreground font-semibold">
+                <span className="uppercase tracking-wider">
+                  {lang === "es" ? "Formato del archivo Excel/CSV" : "Excel/CSV File Structure"}
+                </span>
+                <Button
+                  onClick={downloadTemplate}
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[9px] gap-1 px-1.5 py-0 border-purple-500/30 hover:border-purple-500 bg-background/50 hover:bg-purple-500/5 text-purple-600 dark:text-purple-400 font-bold"
+                >
+                  <Download className="h-3 w-3" />
+                  {lang === "es" ? "Descargar Plantilla" : "Download Template"}
+                </Button>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-mono border-collapse">
+                  <thead>
+                    <tr className="border-b border-border/60 text-muted-foreground/80 text-[9px]">
+                      <th className="py-1 px-2">Col 1 ({lang === "es" ? "Tiempo" : "Time"})</th>
+                      <th className="py-1 px-2">Col 2 ({expDataType === "force" ? (lang === "es" ? "Empuje" : "Force") : (lang === "es" ? "Presión" : "Pressure")})</th>
+                      {expDataType === "both" && <th className="py-1 px-2">Col 3 ({lang === "es" ? "Empuje" : "Force"})</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-border/30 text-[9.5px]">
+                      <td className="py-1 px-2 font-bold text-foreground">0.00</td>
+                      <td className="py-1 px-2 text-[#a855f7]">{expDataType === "force" ? "0.0" : "0.10"}</td>
+                      {expDataType === "both" && <td className="py-1 px-2 text-[#3b82f6]">0.0</td>}
+                    </tr>
+                    <tr className="border-b border-border/30 text-[9.5px]">
+                      <td className="py-1 px-2 font-bold text-foreground">0.15</td>
+                      <td className="py-1 px-2 text-[#a855f7]">{expDataType === "force" ? "510.9" : "4.10"}</td>
+                      {expDataType === "both" && <td className="py-1 px-2 text-[#3b82f6]">510.9</td>}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="text-[9px] text-[#9333ea] dark:text-[#a855f7] leading-tight italic font-mono">
+                {lang === "es" 
+                  ? "💡 Inteligente: La app buscará palabras clave en tu cabecera (como 'time/tiempo', 'pressure/presión', 'force/fuerza/empuje') para colocar las columnas de manera automática. También puedes usar archivos sin cabeceras." 
+                  : "💡 Smart Auto-detect: The app looks for keywords in your headers (like 'time/tiempo', 'pressure/presión', 'force/thrust') to map columns automatically. Headers can also be omitted completely."}
+              </p>
+            </div>
+
+            <div className="relative border-2 border-dashed border-border p-4 rounded-md text-center hover:bg-muted/30 transition-colors cursor-pointer">
               <input
                 type="file"
                 accept=".csv, .xlsx, .xls"
                 onChange={handleFileUpload}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
-              <p className="text-[11px] text-slate-300 font-mono">
+              <FileSpreadsheet className="h-6 w-6 text-purple-500 mx-auto mb-1.5 opacity-80" />
+              <p className="text-[11px] text-foreground font-semibold">
                 {expDataRaw.length > 0 ? (
-                  <span className="text-green-400 font-bold">
-                    {expDataRaw.length} rows loaded. Import new file?
+                  <span className="text-emerald-500 dark:text-emerald-400 flex items-center justify-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 inline text-emerald-500" />
+                    {lang === "es" ? `${expDataRaw.length} filas cargadas con éxito.` : `${expDataRaw.length} rows loaded successfully.`}
                   </span>
                 ) : (
-                  t.drop_file || "Click or drop CSV/Excel file"
+                  lang === "es" ? "Haz clic o arrastra tu archivo CSV o Excel aquí" : "Click or drop your Excel/CSV file here"
                 )}
               </p>
-              <p className="text-[9px] text-slate-500 mt-1">
-                {expDataType === "both"
-                  ? t.col_help_3 || "Col 1: Time, Col 2: Pressure, Col 3: Force"
-                  : expDataType === "pressure"
-                    ? t.col_help_2p || "Col 1: Time, Col 2: Pressure"
-                    : t.col_help_2f || "Col 1: Time, Col 2: Force"}
+              <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                {lang === "es" ? "Soporta formatos .xlsx, .xls, .csv" : "Supports .xlsx, .xls, and .csv formats"}
               </p>
             </div>
           </CardContent>
@@ -623,7 +771,7 @@ export function MissionControl({
         <Card
           className={`bg-card border-border shadow-sm border-t-2 ${simApogee ? "border-t-primary" : "border-t-slate-700"}`}
         >
-          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50">
+          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border">
             <CardTitle className="text-[12px] uppercase text-primary font-bold">
               {t.sim_apogee || "Simulation Apogee"}
             </CardTitle>
@@ -632,44 +780,44 @@ export function MissionControl({
             {simApogee ? (
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
                     Apogee
                   </span>
-                  <span className="text-xl font-mono text-slate-100">
+                  <span className="text-xl font-mono text-foreground">
                     {simApogee.maxApogee.toFixed(1)}{" "}
-                    <span className="text-sm text-slate-500">m</span>
+                    <span className="text-sm text-muted-foreground">m</span>
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
                     Max Velocity
                   </span>
-                  <span className="text-xl font-mono text-slate-100">
+                  <span className="text-xl font-mono text-foreground">
                     {simApogee.maxVelocity.toFixed(1)}{" "}
-                    <span className="text-sm text-slate-500">m/s</span>
+                    <span className="text-sm text-muted-foreground">m/s</span>
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
                     Time to Apogee
                   </span>
-                  <span className="text-xl font-mono text-slate-100">
+                  <span className="text-xl font-mono text-foreground">
                     {simApogee.apogeeTime.toFixed(2)}{" "}
-                    <span className="text-sm text-slate-500">s</span>
+                    <span className="text-sm text-muted-foreground">s</span>
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
                     Max Acceleration
                   </span>
-                  <span className="text-xl font-mono text-slate-100">
+                  <span className="text-xl font-mono text-foreground">
                     {simApogee.maxAcceleration.toFixed(1)}{" "}
-                    <span className="text-sm text-slate-500">m/s²</span>
+                    <span className="text-sm text-muted-foreground">m/s²</span>
                   </span>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 {t.no_sim || "Run Simulation first to see predictions."}
               </p>
             )}
@@ -678,10 +826,10 @@ export function MissionControl({
 
         {/* Exp Results */}
         <Card
-          className={`bg-card border-border shadow-sm border-t-2 ${expApogee ? "border-t-cyan-500" : "border-t-slate-700"}`}
+          className={`bg-card border-border shadow-sm border-t-2 ${expApogee ? "border-t-purple-500" : "border-t-slate-700"}`}
         >
-          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50">
-            <CardTitle className="text-[12px] uppercase text-cyan-400 font-bold">
+          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border">
+            <CardTitle className="text-[12px] uppercase text-purple-400 font-bold">
               {t.exp_apogee || "Experimental Apogee"}
             </CardTitle>
           </CardHeader>
@@ -689,44 +837,44 @@ export function MissionControl({
             {expApogee ? (
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
                     Apogee
                   </span>
-                  <span className="text-xl font-mono text-slate-100">
+                  <span className="text-xl font-mono text-foreground">
                     {expApogee.maxApogee.toFixed(1)}{" "}
-                    <span className="text-sm text-slate-500">m</span>
+                    <span className="text-sm text-muted-foreground">m</span>
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
                     Max Velocity
                   </span>
-                  <span className="text-xl font-mono text-slate-100">
+                  <span className="text-xl font-mono text-foreground">
                     {expApogee.maxVelocity.toFixed(1)}{" "}
-                    <span className="text-sm text-slate-500">m/s</span>
+                    <span className="text-sm text-muted-foreground">m/s</span>
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
                     Time to Apogee
                   </span>
-                  <span className="text-xl font-mono text-slate-100">
+                  <span className="text-xl font-mono text-foreground">
                     {expApogee.apogeeTime.toFixed(2)}{" "}
-                    <span className="text-sm text-slate-500">s</span>
+                    <span className="text-sm text-muted-foreground">s</span>
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
                     Max Acceleration
                   </span>
-                  <span className="text-xl font-mono text-slate-100">
+                  <span className="text-xl font-mono text-foreground">
                     {expApogee.maxAcceleration.toFixed(1)}{" "}
-                    <span className="text-sm text-slate-500">m/s²</span>
+                    <span className="text-sm text-muted-foreground">m/s²</span>
                   </span>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 {t.no_exp || "Upload experimental data to see comparison."}
               </p>
             )}
@@ -741,10 +889,10 @@ export function MissionControl({
               <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg border border-slate-700/50">
                 <div className="flex flex-col items-center gap-2">
                   <span className="relative flex h-8 w-8">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-8 w-8 bg-cyan-500"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-8 w-8 bg-purple-500"></span>
                   </span>
-                  <span className="text-sm text-cyan-400 font-mono tracking-widest text-shadow uppercase font-bold text-shadow-lg shadow-cyan-500/50">
+                  <span className="text-sm text-purple-400 font-mono tracking-widest text-shadow uppercase font-bold text-shadow-lg shadow-purple-500/50">
                     Processing...
                   </span>
                 </div>
@@ -752,8 +900,8 @@ export function MissionControl({
             )}
             {/* Altitude Chart */}
             <Card className="bg-card border-border shadow-sm min-h-[300px] flex flex-col">
-              <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50 flex flex-row items-center justify-between">
-                <CardTitle className="text-[12px] uppercase text-slate-300 font-bold">
+              <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
+                <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
                   {t.flight_profile || "Altitude Profile"}
                 </CardTitle>
                 <div className="flex gap-2">
@@ -795,8 +943,8 @@ export function MissionControl({
                       >
                         <CartesianGrid
                           strokeDasharray="3 3"
-                          stroke="#334155"
-                          opacity={0.5}
+                          stroke="rgba(148, 163, 184, 0.15)"
+                          opacity={0.7}
                         />
                         <XAxis
                           dataKey="time"
@@ -827,10 +975,12 @@ export function MissionControl({
                         />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: "#0f172a",
-                            borderColor: "#334155",
+                            backgroundColor: "var(--card)",
+                            borderColor: "var(--border)",
+                            color: "var(--foreground)",
                             fontSize: "11px",
                             fontFamily: "monospace",
+                            borderRadius: "6px",
                           }}
                           itemStyle={{ padding: 0 }}
                           labelFormatter={(v) => `t = ${Number(v).toFixed(3)} s`}
@@ -846,12 +996,13 @@ export function MissionControl({
                             right: 10,
                             fontSize: "10px",
                             fontFamily: "monospace",
-                            color: "#cbd5e1",
-                            backgroundColor: "rgba(15, 23, 42, 0.8)",
-                            padding: "4px",
-                            border: "1px solid #334155",
-                            borderRadius: "4px",
+                            color: "var(--foreground)",
+                            backgroundColor: "var(--card)",
+                            padding: "6px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
                             zIndex: 10,
+                            opacity: 0.95,
                           }}
                         />
                         {simApogee && (
@@ -886,8 +1037,8 @@ export function MissionControl({
                       >
                         <CartesianGrid
                           strokeDasharray="3 3"
-                          stroke="#334155"
-                          opacity={0.5}
+                          stroke="rgba(148, 163, 184, 0.15)"
+                          opacity={0.7}
                         />
                         <XAxis
                           dataKey="time"
@@ -918,10 +1069,12 @@ export function MissionControl({
                         />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: "#0f172a",
-                            borderColor: "#334155",
+                            backgroundColor: "var(--card)",
+                            borderColor: "var(--border)",
+                            color: "var(--foreground)",
                             fontSize: "11px",
                             fontFamily: "monospace",
+                            borderRadius: "6px",
                           }}
                           itemStyle={{ padding: 0 }}
                           labelFormatter={(v) => `t = ${Number(v).toFixed(3)} s`}
@@ -937,12 +1090,13 @@ export function MissionControl({
                             right: 10,
                             fontSize: "10px",
                             fontFamily: "monospace",
-                            color: "#cbd5e1",
-                            backgroundColor: "rgba(15, 23, 42, 0.8)",
-                            padding: "4px",
-                            border: "1px solid #334155",
-                            borderRadius: "4px",
+                            color: "var(--foreground)",
+                            backgroundColor: "var(--card)",
+                            padding: "6px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
                             zIndex: 10,
+                            opacity: 0.95,
                           }}
                         />
                         {simApogee && (
@@ -997,8 +1151,8 @@ export function MissionControl({
             </Card>
             {/* Velocity & Accel Chart */}
             <Card className="bg-card border-border shadow-sm min-h-[300px] flex flex-col">
-              <CardHeader className="py-2 px-3 bg-muted/50 border-b border-slate-700/50 flex flex-row items-center justify-between">
-                <CardTitle className="text-[12px] uppercase text-slate-300 font-bold">
+              <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
+                <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
                   {t.flight_dynamics || "Velocity & Acceleration"}
                 </CardTitle>
                 <div className="flex gap-2">
@@ -1040,8 +1194,8 @@ export function MissionControl({
                       >
                         <CartesianGrid
                           strokeDasharray="3 3"
-                          stroke="#334155"
-                          opacity={0.5}
+                          stroke="rgba(148, 163, 184, 0.15)"
+                          opacity={0.7}
                         />
                         <XAxis
                           dataKey="time"
@@ -1074,10 +1228,12 @@ export function MissionControl({
                         />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: "#0f172a",
-                            borderColor: "#334155",
+                            backgroundColor: "var(--card)",
+                            borderColor: "var(--border)",
+                            color: "var(--foreground)",
                             fontSize: "11px",
                             fontFamily: "monospace",
+                            borderRadius: "6px",
                           }}
                           itemStyle={{ padding: 0 }}
                           labelFormatter={(v) =>
@@ -1095,12 +1251,13 @@ export function MissionControl({
                             right: 10,
                             fontSize: "10px",
                             fontFamily: "monospace",
-                            color: "#cbd5e1",
-                            backgroundColor: "rgba(15, 23, 42, 0.8)",
-                            padding: "4px",
-                            border: "1px solid #334155",
-                            borderRadius: "4px",
+                            color: "var(--foreground)",
+                            backgroundColor: "var(--card)",
+                            padding: "6px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
                             zIndex: 10,
+                            opacity: 0.95,
                           }}
                         />
                         {simApogee && (
@@ -1135,8 +1292,8 @@ export function MissionControl({
                       >
                         <CartesianGrid
                           strokeDasharray="3 3"
-                          stroke="#334155"
-                          opacity={0.5}
+                          stroke="rgba(148, 163, 184, 0.15)"
+                          opacity={0.7}
                         />
                         <XAxis
                           dataKey="time"
@@ -1169,10 +1326,12 @@ export function MissionControl({
                         />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: "#0f172a",
-                            borderColor: "#334155",
+                            backgroundColor: "var(--card)",
+                            borderColor: "var(--border)",
+                            color: "var(--foreground)",
                             fontSize: "11px",
                             fontFamily: "monospace",
+                            borderRadius: "6px",
                           }}
                           itemStyle={{ padding: 0 }}
                           labelFormatter={(v) =>
@@ -1190,12 +1349,13 @@ export function MissionControl({
                             right: 10,
                             fontSize: "10px",
                             fontFamily: "monospace",
-                            color: "#cbd5e1",
-                            backgroundColor: "rgba(15, 23, 42, 0.8)",
-                            padding: "4px",
-                            border: "1px solid #334155",
-                            borderRadius: "4px",
+                            color: "var(--foreground)",
+                            backgroundColor: "var(--card)",
+                            padding: "6px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
                             zIndex: 10,
+                            opacity: 0.95,
                           }}
                         />
                         {simApogee && (

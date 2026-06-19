@@ -22,23 +22,33 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     // Initial geometry calculation
     let Vg = 0;
     let d0_mayor = g.shape === 2 ? g.d0mayor : 0;
-    let r_ext = g.D0 / 2;
     let tweb0 = 0;
     let Aduct = 0;
+
+    let pablo = 1;
+    let miguel = 1;
+    let alpha_deg = nozzle.alpha || 12;
 
     if (g.shape === 1) { // Cylinder
       Vg = (Math.PI / 4) * (Math.pow(g.D0, 2) - Math.pow(g.d0, 2)) * g.L0;
       tweb0 = (g.D0 - g.d0) / 2;
       Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * (Math.pow(g.D0, 2) - Math.pow(g.d0, 2));
     } else if (g.shape === 2) { // Star
-      const ae = (g.d0mayor / 2) * Math.cos(Math.PI / g.Np) - g.d0 / 2;
-      const b = (g.d0mayor / 2) * Math.cos(Math.PI / g.Np);
-      Vg = ( (Math.PI / 4) * Math.pow(g.D0, 2) - 
-           (g.Np * 0.5 * ae * g.d0 * Math.sin(Math.PI / g.Np) + 
-            g.Np * 0.5 * Math.pow(g.d0 / 2, 2) * Math.sin(2 * Math.PI / g.Np)) ) * g.L0;
-      tweb0 = (g.D0 - g.d0mayor) / 2;
-      Aduct = (Math.PI/4) * Math.pow(motor.Dc, 2) - 
-        ( (Math.PI/4)*Math.pow(g.D0, 2) - (g.Np*0.5*ae*g.d0*Math.sin(Math.PI/g.Np) + g.Np*0.5*Math.pow(g.d0/2, 2)*Math.sin(2*Math.PI/g.Np)) );
+      const Np = g.Np || 5;
+      const Mx = g.d0mayor / 2;
+      
+      const term_pablo_atan = Math.atan( (Mx - (g.d0/2) * Math.cos(Math.PI / Np)) / ((g.d0/2) * Math.sin(Math.PI / Np)) );
+      pablo = Math.cos(-Math.PI / Np + term_pablo_atan);
+      
+      const term_miguel_atan = Math.atan( ((g.d0/2) * Math.sin(Math.PI / Np)) / (Mx - (g.d0/2) * Math.cos(Math.PI / Np)) );
+      miguel = Math.cos(Math.PI/2 - term_miguel_atan);
+
+      const star_hole_area = Np * 0.5 * (g.d0mayor / 2 - g.d0 / 2 * Math.cos(Math.PI / Np)) * g.d0 * Math.sin(Math.PI / Np) + 
+                            Np * 0.5 * Math.pow(g.d0 / 2, 2) * Math.sin(2 * Math.PI / Np);
+      
+      Vg = ( (Math.PI / 4) * Math.pow(g.D0, 2) - star_hole_area ) * g.L0;
+      tweb0 = (g.D0 - g.d0) / 2; 
+      Aduct = (Math.PI/4) * Math.pow(motor.Dc, 2) - ( (Math.PI/4)*Math.pow(g.D0, 2) - star_hole_area );
     } else { // Solid
       Vg = (Math.PI / 4) * Math.pow(g.D0, 2) * g.L0;
       tweb0 = g.D0 / 2;
@@ -50,8 +60,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     let Vg0 = Vg * g.N;
     
     const prop = getPropellantData(g.propellantType);
-    const rhoreal = prop.rho * g.rhorat; // g/cm3 (same as kg/L?? no, 1 g/cm3 = 1000 kg/m3. Wait, in MATLAB: rhoreal .* Vg ./ 1000^2 -> rhoreal (g/cm3) * Vg (mm3) / 1e6
-    // If rhoreal is g/cm3 = mg/mm3. So rhoreal * Vg gives mg. mg / 1000000 = kg. Correct.
+    const rhoreal = prop.rho * g.rhorat; // g/cm3 
     const mg0 = rhoreal * Vg0 / 1e6; // kg
     
     return {
@@ -75,6 +84,10 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       xincp: 0,
       x: 0,
       betha: g.shape === 2 ? 2 * Math.PI / g.Np : 0,
+      pablo,
+      miguel,
+      alpha_deg,
+      At: (Math.PI / 4) * Math.pow(nozzle.Dt0, 2),
     };
   });
 
@@ -84,6 +97,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
 
   let current_t = 0;
   let mgra_total_val = state.reduce((sum, s) => sum + s.mg, 0);
+  const initialMassTotal = mgra_total_val;
   let P0 = Patm; // initial pressure MPa
 
   const Vc_m3 = (Math.PI / 4) * Math.pow(motor.Dc, 2) * motor.Lc / 1e9; 
@@ -93,6 +107,8 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
 
   let step = 0;
   const hist: any[] = [];
+  let k_sum_steps = 0;
+  let k_active_count = 0;
   
   // Push initial state at t=0
   hist.push({
@@ -137,73 +153,120 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
 
       let prev_mg = s.mg;
 
+      let prev_Ab = s.Ab;
+
       // GEOMETRY
       if (s.shape === 1) { // Cilindro
         s.d = s.d0 + s.ci * 2 * s.x;
         s.D = s.D0 - s.osi * 2 * s.x;
         s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
         
-        if (s.d >= s.D || s.L <= 0) { s.D = 0; s.d = 0; s.L = 0; s.tweb = 0; }
-        else s.tweb = (s.D - s.d) / 2;
+        s.tweb = (s.D - s.d) / 2;
 
-        if (s.D > 0) {
+        if (s.d >= s.D || s.L <= 0) { 
+          s.D = 0; s.d = 0; s.L = 0; s.tweb = 0; 
+          s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
+          s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
+          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e, 2);
+        } else {
           s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2));
           s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2));
           s.Abc = s.ci * Math.PI * s.d * s.L;
           s.Abs = s.osi * Math.PI * s.D * s.L;
-          s.Ab = s.Abe + s.Abc + s.Abs;
+          s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
           s.Vg = (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2)) * s.L;
-        } else {
-          s.Ab = s.Ab * 0.75;
-          s.Vg = 0;
+          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
         }
       } else if (s.shape === 3) {
         // Solid generic
         s.D = s.D0 - s.osi * 2 * s.x;
         s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
-        if (s.D <= 0 || s.L <= 0) { s.D = 0; s.L = 0; s.tweb = 0; }
-        else s.tweb = s.D / 2;
-        if (s.D > 0) {
+        
+        s.tweb = s.D / 2;
+
+        if (s.D <= 0 || s.L <= 0) {
+          s.D = 0; s.L = 0; s.tweb = 0;
+          s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
+          s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
+          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e, 2);
+        } else {
           s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * Math.pow(s.D, 2);
           s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * Math.pow(s.D, 2);
           s.Abs = s.osi * Math.PI * s.D * s.L;
           s.Abc = 0;
-          s.Ab = s.Abe + s.Abs;
+          s.Ab = Math.max(0, s.Abe + s.Abs);
           s.Vg = (Math.PI / 4) * Math.pow(s.D, 2) * s.L;
-        } else {
-          s.Ab = s.Ab * 0.75;
-          s.Vg = 0;
+          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
         }
       } else {
         // Estrella shape (2)
-        // Simplified burn logic keeping Aduct matching geometry
+        const Np = s.Np || 5;
         s.D = s.D0 - s.osi * 2 * s.x;
         s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
-        s.d = s.d0 + s.ci * 2 * s.x;
-        s.dmayor = (s.d0mayor || s.d0) + s.ci * 2 * s.x;
-
-        if (s.D <= 0 || s.L <= 0 || s.d >= s.D) { s.D = 0; s.d = 0; s.L = 0; s.tweb = 0; }
-        else s.tweb = (s.D - s.dmayor) / 2;
         
-        if (s.D > 0) {
-          const Np = s.Np || 5;
-          const r_tip = s.d / 2;
-          const r_val = s.dmayor / 2;
-          // Approximate burning area using a star perimeter equivalent
-          // For each point, roughly length is tip to valley
-          const arm_length = Math.sqrt(Math.pow(r_val * Math.cos(Math.PI/Np) - r_tip, 2) + Math.pow(r_val * Math.sin(Math.PI/Np), 2));
-          const peri = Np * 2 * arm_length;
-          const area_hole = (Math.PI/4) * Math.pow(s.d, 2); // very rough approx for Aduct
+        s.dmenor = s.d0 + s.ci * (2 * s.x / s.pablo);
+        s.dmayor = s.d0mayor + s.ci * (2 * s.x / s.miguel);
+        s.d = s.dmenor; // d is dmenor in star representation
+
+        let stopFlag = false;
+        if (s.D <= 0 || s.L <= 0 || s.dmenor >= s.D) stopFlag = true;
+
+        if (stopFlag) {
+          s.dmenor = 0; s.dmayor = 0; s.D = 0; s.L = 0; s.tweb = 0;
+          s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
+          s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
+          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e, 2);
+        } else if (s.dmayor < s.D) {
+          // Phase 1: Both dmenor and dmayor are inside the grain boundary D
+          s.tweb = (s.D - s.dmenor) / 2;
+          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
           
-          s.Aduct = Math.max(0, (Math.PI / 4) * Math.pow(motor.Dc, 2) - ((Math.PI/4)*Math.pow(s.D,2) - area_hole));
-          s.Abe = s.ei * 2 * s.N * ((Math.PI/4)*Math.pow(s.D,2) - area_hole);
-          s.Abc = s.ci * peri * s.L;
+          const area_hole = Np * 0.5 * (s.dmayor/2 - s.dmenor/2 * Math.cos(Math.PI/Np)) * s.dmenor * Math.sin(Math.PI/Np) + 
+                            Np * 0.5 * Math.pow(s.dmenor/2, 2) * Math.sin(2 * Math.PI/Np);
+          const arm_length = Math.sqrt(Math.pow(s.dmayor/2 - s.dmenor/2 * Math.cos(Math.PI/Np), 2) + Math.pow(s.dmenor/2 * Math.sin(Math.PI/Np), 2));
+          
+          s.Vg = ((Math.PI/4) * Math.pow(s.D, 2) - area_hole) * s.L;
+          s.Abe = s.ei * 2 * s.N * ((Math.PI/4) * Math.pow(s.D, 2) - area_hole);
+          s.Abc = s.ci * 2 * Np * s.N * arm_length * s.L;
           s.Abs = s.osi * Math.PI * s.D * s.L;
           s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
-          s.Vg = Math.max(0, ((Math.PI/4)*Math.pow(s.D,2) - area_hole) * s.L);
+          if (s.Ab <= 0) s.Ab = 1e-4;
+          
+          s.Aduct = Math.max(1e-6, (Math.PI / 4) * Math.pow(motor.Dc, 2) - ((Math.PI/4)*Math.pow(s.D,2) - area_hole));
         } else {
-          s.Ab = s.Ab * 0.75;
-          s.Vg = 0;
+          // Phase 2: Tips of the star reached boundary D, but dmenor is still inside.
+          s.tweb = (s.D - s.dmenor) / 2;
+          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
+          
+          const alpha_rad = s.alpha_deg * Math.PI / 180;
+          const target_fun = (beta: number) => {
+            return (s.D - s.dmenor)/2 - (s.D/2)*(1 - Math.cos(beta/2)) - (s.D/4)*Math.sqrt(Math.max(1e-12, 2*(1 - Math.cos(beta)))) / Math.tan(alpha_rad/2);
+          };
+          
+          let betha = s.betha || (2 * Math.PI / Np);
+          try {
+            betha = fzeroSearch(target_fun, [1e-6, 2 * Math.PI / Np], 50);
+            if (isNaN(betha) || betha <= 0) betha = s.betha || (2 * Math.PI / Np);
+          } catch (err) {
+            betha = s.betha || (2 * Math.PI / Np);
+          }
+          s.betha = betha;
+          
+          const clip_dmayor = s.D;
+          const ae_val = (s.D / 2) * Math.sin(betha / 2) / Math.tan(alpha_rad / 2);
+          const c_val = 2 * (clip_dmayor / 2) * Math.sin(betha / 2);
+          const lado_val = ae_val / Math.cos(alpha_rad / 2);
+          
+          const term_segment = (s.D*s.D/8) * (betha - Math.sin(betha)) + (c_val * ae_val / 2);
+          s.Vg = Np * term_segment * s.L;
+          
+          s.Abe = s.N * 2 * s.ei * Np * term_segment;
+          s.Abc = s.N * s.ci * Np * 2 * lado_val * s.L;
+          s.Abs = s.N * s.osi * Np * betha * (s.D / 2) * s.L;
+          s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
+          if (s.Ab <= 0) s.Ab = 1e-4;
+          
+          s.Aduct = Math.max(1e-6, (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Np * term_segment));
         }
       }
 
@@ -232,7 +295,16 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     R_total = M_total > 0 ? 8314 / M_total : 8314 / state[0].prop.M;
     const T0real_total = T0_total * motor.etac;
 
-    const mnoz_total = (P0 - Patm) * 1e6 * (At0 / 1e6) * Math.sqrt(k_total / (R_total * T0real_total)) * Math.pow(2 / (k_total + 1), (k_total + 1) / (2 * (k_total - 1)));
+    if (total_molesb > 0) {
+      k_sum_steps += k_total;
+      k_active_count++;
+    }
+
+    // Average dynamic throat area At across all grain blocks
+    const At_total_val = state.reduce((sum, s) => sum + (s.At || At0), 0) / Ntipos;
+    const current_exprat2 = Ae / At_total_val;
+
+    const mnoz_total = Math.max(0, P0 - Patm) * 1e6 * (At_total_val / 1e6) * Math.sqrt(k_total / (R_total * T0real_total)) * Math.pow(2 / (k_total + 1), (k_total + 1) / (2 * (k_total - 1)));
     
     const msto_total = total_mgen - mnoz_total;
     msto_total_acc += msto_total * dt;
@@ -246,7 +318,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
 
     // performance (Teoria de Toberas Ideales)
     let Gamma_total = k_total;
-    const funMs_scalar = (Ms: number) => (1/Math.max(1e-5, Ms)) * Math.pow((1 + (Gamma_total - 1)/2 * Math.pow(Ms, 2)) / ((Gamma_total + 1)/2), (Gamma_total + 1)/(2*(Gamma_total - 1))) - exprat2;
+    const funMs_scalar = (Ms: number) => (1/Math.max(1e-5, Ms)) * Math.pow((1 + (Gamma_total - 1)/2 * Math.pow(Ms, 2)) / ((Gamma_total + 1)/2), (Gamma_total + 1)/(2*(Gamma_total - 1))) - current_exprat2;
     let Ms1 = fzeroSearch(funMs_scalar, [0.01, 1], 100);
     let Ms2 = fzeroSearch(funMs_scalar, [1, 20], 100);
     if (isNaN(Ms1) || Ms1 < 0) Ms1 = 0.5;
@@ -273,9 +345,11 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
         vsOutput = Math.sqrt(Gamma_total * R_total * Ts_sub) * ms_sub;
     } else if (Pp < pis1 && Pp >= pich) { // OC Normal dentro
         PsOutput = Patm;
-        GastoOutput = P0 * 1e6 * (Math.PI * Math.pow(nozzle.Dt0 / 2000, 2)) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1)/(2*(Gamma_total - 1)));
-        let Ts_sub = T0real_total * Math.pow(PsOutput / P0, (Gamma_total - 1)/Gamma_total); // approx
-        vsOutput = Math.sqrt(Gamma_total * R_total * Ts_sub) * Ms1;
+        const funMs_OCN = (Ms: number) => current_exprat2 * (Patm / P0) * Math.pow(1 + (Gamma_total - 1)/2, (Gamma_total + 1)/(2*(Gamma_total - 1))) * Ms * Math.pow(1 + (Gamma_total - 1)/2 * Math.pow(Ms, 2), 0.5) - 1;
+        let ms_out = fzeroSearch(funMs_OCN, [0.01, 1], 100);
+        GastoOutput = P0 * 1e6 * (At_total_val / 1e6) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1)/(2*(Gamma_total - 1)));
+        let TsOutput = T0real_total / (1 + (Gamma_total - 1)/2 * Math.pow(ms_out, 2));
+        vsOutput = Math.sqrt(Gamma_total * R_total * TsOutput) * ms_out;
     } else if (Pp < pich && Pp > pis2) { // OC Oblicua a la salida
         PsOutput = P0 / Math.pow(1 + (Gamma_total - 1)/2 * Math.pow(Ms2, 2), Gamma_total/(Gamma_total - 1));
         let TsOut = T0real_total * Math.pow(P0 / PsOutput, (1 - Gamma_total)/Gamma_total);
@@ -285,13 +359,13 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
         let Mn_ext = Math.sqrt(Math.max(0, extCore));
         let Alfa_OCO = BetaOut - Math.atan(Mn_ext / Ms2 / Math.cos(BetaOut * Math.PI / 180)) * 180 / Math.PI;
         
-        GastoOutput = P0 * 1e6 * (Math.PI * Math.pow(nozzle.Dt0 / 2000, 2)) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1)/(2*(Gamma_total - 1)));
+        GastoOutput = P0 * 1e6 * (At_total_val / 1e6) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1)/(2*(Gamma_total - 1)));
         vsOutput = Math.sqrt(Gamma_total * R_total * TsOut) * Ms2;
         MachFactor = Math.cos(Alfa_OCO * Math.PI / 180);
     } else if (Pp === pis2) { // Tobera Adaptada
         PsOutput = Patm;
         let TsOut = T0real_total * Math.pow(P0 / PsOutput, (1 - Gamma_total)/Gamma_total);
-        GastoOutput = P0 * 1e6 * (Math.PI * Math.pow(nozzle.Dt0 / 2000, 2)) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1)/(2*(Gamma_total - 1)));
+        GastoOutput = P0 * 1e6 * (At_total_val / 1e6) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1)/(2*(Gamma_total - 1)));
         vsOutput = Math.sqrt(Gamma_total * R_total * TsOut) * Ms2;
     } else { // Onda Expansion Salida
         PsOutput = P0 / Math.pow(1 + (Gamma_total - 1)/2 * Math.pow(Ms2, 2), Gamma_total/(Gamma_total - 1));
@@ -304,8 +378,8 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
         let part2 = Math.sqrt((Gamma_total-1)/(Gamma_total+1)*Math.max(0, Math.pow(Ms2,2)-1));
         let Nu_Ms2 = Math.sqrt((Gamma_total+1)/(Gamma_total-1)) * Math.atan(part2) - Math.atan(Math.sqrt(Math.max(0, Math.pow(Ms2,2)-1)));
         let TetaOut = (Nu_Mext - Nu_Ms2) * 180 / Math.PI;
-
-        GastoOutput = P0 * 1e6 * (Math.PI * Math.pow(nozzle.Dt0 / 2000, 2)) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1)/(2*(Gamma_total - 1)));
+        
+        GastoOutput = P0 * 1e6 * (At_total_val / 1e6) * Math.sqrt(Gamma_total / (R_total * T0real_total)) * Math.pow(2 / (Gamma_total + 1), (Gamma_total + 1)/(2*(Gamma_total - 1)));
         vsOutput = Math.sqrt(Gamma_total * R_total * TsOut) * Ms2;
         MachFactor = Math.cos(TetaOut * Math.PI / 180);
     }
@@ -323,9 +397,9 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     let Pe_RN = P0 / Math.pow((1 + (Gamma_total - 1)/2 * Math.pow(Ms2, 2)), Gamma_total/(Gamma_total - 1));
     if (Pe_RN < Patm) Pe_RN = Patm; // Under-expanded correction (approx)
     let Pe_P0_ratio = Math.max(0, Math.min(1, Pe_RN / P0));
-    let CF_RN = nozzle.etanoz * Math.sqrt( (2*Math.pow(Gamma_total,2)/(Gamma_total-1)) * Math.pow(2/(Gamma_total+1), (Gamma_total+1)/(Gamma_total-1)) * (1 - Math.pow(Pe_P0_ratio, (Gamma_total-1)/Gamma_total)) ) + ((Pe_RN - Patm)/P0)*(Ae/At0);
+    let CF_RN = nozzle.etanoz * Math.sqrt( (2*Math.pow(Gamma_total,2)/(Gamma_total-1)) * Math.pow(2/(Gamma_total+1), (Gamma_total+1)/(Gamma_total-1)) * (1 - Math.pow(Pe_P0_ratio, (Gamma_total-1)/Gamma_total)) ) + ((Pe_RN - Patm)/P0)*current_exprat2;
     if (isNaN(CF_RN)) CF_RN = 0;
-    let F_RN_N = CF_RN * (At0 / 1e6) * (P0 * 1e6); // strictly N because P0 is MPa, so P0*1e6 is Pa, At0 is mm2 so At0/1e6 is m2
+    let F_RN_N = CF_RN * (At_total_val / 1e6) * (P0 * 1e6); // strictly N because P0 is MPa, so P0*1e6 is Pa, At_total_val is mm2 so At_total_val/1e6 is m2
     if (isNaN(F_RN_N) || F_RN_N < 0) F_RN_N = 0;
 
     hist.push({
@@ -347,8 +421,9 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   // Post combustion
   let tbout = current_t;
   let pbout = P0;
+  let gauge_bout = pbout - Patm;
   let k_enfriamiento = 0.02;
-  let Cstar_total = Math.sqrt(R_total * hist[hist.length-1]?.T0real_total || state[0].prop.T0 * motor.etac) / 1.1; // Approx
+  let Cstar_total = Math.sqrt(R_total * (hist[hist.length-1]?.T0real_total || state[0].prop.T0 * motor.etac)) / 1.1; // Approx
   
   // Actually, we can get T0real_total from last step
   let T02real_total = state[0].prop.T0 * motor.etac; 
@@ -359,9 +434,8 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     current_t += dt;
     T02real_total = T02real_total * Math.exp(-k_enfriamiento * dt);
     
-    // P02_MPa(j,:) = pbout*exp(-(sum(R,'all')/Ntipos)*sum(T0real,'all')/Ntipos*Astarf*(t2(j,:)-tbout)/Vc*1000000000/Cstar_total);
-    // Vc in MATLAB was in mm3, here Vfree_total is m3
-    P0 = pbout * Math.exp(- (R_total * T02real_total * (At0 / 1e6) * (current_t - tbout) / Vfree_total) / Cstar_total );
+    let gauge_current = gauge_bout * Math.exp(- (R_total * T02real_total * (At0 / 1e6) * (current_t - tbout) / Vfree_total) / Cstar_total );
+    P0 = gauge_current + Patm;
     
     hist.push({
       t: current_t,
@@ -415,7 +489,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       grains_Ab[g].push(step.grains_Ab?.[g] || 0);
     }
 
-    if (step.P0_gage > Pmax_MPa) Pmax_MPa = step.P0_gage;
+    if (step.P0_MPa > Pmax_MPa) Pmax_MPa = step.P0_MPa;
     if (step.E_N > Fmax_N) Fmax_N = step.E_N;
 
     if (step.mgra_total > 0) {
@@ -435,14 +509,9 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   const Pmed_MPa = active_burn_steps > 0 ? P_sum / active_burn_steps : 0;
   const Fmed_N = active_burn_steps > 0 ? It_total_N_s / t_quemado : 0;
   
-  const initialMassTotal = grains.reduce((sum, g) => {
-    const Vg = g.shape === 1 ? (Math.PI/4)*(Math.pow(g.D0,2)-Math.pow(g.d0,2))*g.L0 : g.shape === 3 ? (Math.PI/4)*Math.pow(g.D0,2)*g.L0 : 0; // rough approx for this summary metric if star
-    const rhoreal = getPropellantData(g.propellantType).rho * g.rhorat;
-    return sum + (rhoreal * (Vg*g.N) / 1e6);
-  }, 0);
-
   const Isp_total_s = initialMassTotal > 0 ? It_total_N_s / (9.806 * initialMassTotal) : 0;
   const motorClass = classifyMotor(It_total_N_s);
+  const k_avg = k_active_count > 0 ? k_sum_steps / k_active_count : (state[0]?.prop.k || 1.13);
 
   // Find dominant propellant type
   const propTypes = grains.map(g => g.propellantType);
@@ -455,6 +524,6 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     grains, grains_x, 
     grains_Abc, grains_Abe, grains_Abs, grains_Ab,
     propellantType: dominantPropellantType,
-    summary: { Pmax_MPa, Pmed_MPa, t_quemado, t_fin, Fmax_N, Fmed_N, It_total_N_s, Isp_total_s, motorClass }
+    summary: { Pmax_MPa, Pmed_MPa, t_quemado, t_fin, Fmax_N, Fmed_N, It_total_N_s, Isp_total_s, motorClass, k_avg }
   };
 }

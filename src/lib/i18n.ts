@@ -150,6 +150,7 @@ export const translations = {
       "Calculates thrust using experimental pressure and nozzle inputs (Dt0), then calculates altitude. Plotted alongside simulation if available.",
     import_desc_force:
       "Uses experimental thrust to calculate altitude. Plotted alongside simulation data if available.",
+    dept_prop: "PROPULSION DEPARTMENT, COHETEROS 2026",
   },
   es: {
     run: "Ejecutar Simulación ▶",
@@ -301,6 +302,7 @@ export const translations = {
       "Calcula empuje usando la presión experimental y datos de tobera (Dt0), y usa ese empuje para calcular la altitud. Se muestra junto a la simulación si existe.",
     import_desc_force:
       "Muestra la curva de empuje importada y calcula la altitud con ese empuje. Se muestra junto a la simulación si hay.",
+    dept_prop: "DEPARTAMENTO DE PROPULSIÓN, COHETEROS 2026",
   },
   fr: {
     run: "Lancer Simulaion ▶",
@@ -450,6 +452,7 @@ export const translations = {
       "Calcule la poussée en utilisant la pression expérimentale et les données de la tuyère (Dt0), puis calcule l'altitude.",
     import_desc_force:
       "Utilise la poussée expérimentale pour calculer l'altitude.",
+    dept_prop: "DÉPARTEMENT PROPULSION, COHETEROS 2026",
   },
   it: {
     run: "Esegui Simulazione ▶",
@@ -598,5 +601,6 @@ export const translations = {
     import_desc_pressure:
       "Calcola la spinta utilizzando la pressione e l'ugello (Dt0), quindi calcola l'altitudine.",
     import_desc_force: "Usa la spinta sperimentale per calcolare l'altitudine.",
+    dept_prop: "DIPARTIMENTO DI PROPULSIONE, COHETEROS 2026",
   },
 };

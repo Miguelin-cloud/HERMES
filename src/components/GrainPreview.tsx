@@ -64,9 +64,9 @@ export function GrainPreview({
           {t?.cross_section || "Cross-Section"}
         </span>
       )}
-      <svg width="100%" height="100%" viewBox={`0 0 ${drawSize} ${drawSize}`} className="bg-neutral-50/50" style={{ maxWidth: '100%', maxHeight: '100%' }}>
-        <line x1={drawSize/2} y1="0" x2={drawSize/2} y2={drawSize} stroke="#e2e8f0" strokeDasharray="3 3" strokeWidth="0.5" />
-        <line x1="0" y1={drawSize/2} x2={drawSize} y2={drawSize/2} stroke="#e2e8f0" strokeDasharray="3 3" strokeWidth="0.5" />
+      <svg width="100%" height="100%" viewBox={`0 0 ${drawSize} ${drawSize}`} className="bg-transparent" style={{ maxWidth: '100%', maxHeight: '105%' }}>
+        <line x1={drawSize/2} y1="0" x2={drawSize/2} y2={drawSize} stroke="var(--border)" strokeDasharray="3 3" strokeWidth="0.5" opacity="0.6" />
+        <line x1="0" y1={drawSize/2} x2={drawSize} y2={drawSize/2} stroke="var(--border)" strokeDasharray="3 3" strokeWidth="0.5" opacity="0.6" />
         
         {pathStr && (
           <path 
@@ -81,7 +81,7 @@ export function GrainPreview({
         {grain.shape === 2 && corePathStr && (
           <polygon 
             points={corePathStr.replace(/M |L |Z/g, "")} 
-            fill="#ffffff" 
+            fill="var(--card)" 
             stroke={grain.ci === 1 ? "#ef4444" : "#d97706"} 
             strokeWidth={grain.ci === 1 ? "2" : "1.5"} 
           />
@@ -90,7 +90,7 @@ export function GrainPreview({
         {grain.shape === 1 && corePathStr && (
           <path 
             d={corePathStr} 
-            fill="#ffffff" 
+            fill="var(--card)" 
             stroke={grain.ci === 1 ? "#ef4444" : "#d97706"} 
             strokeWidth={grain.ci === 1 ? "2" : "1.5"} 
           />
@@ -100,7 +100,7 @@ export function GrainPreview({
   );
 
   const longitudinal = (
-    <div className="flex flex-col items-center justify-center relative w-full h-full bg-white">
+    <div className="flex flex-col items-center justify-center relative w-full h-full bg-transparent">
       {!disableLabel && (
         <span className="absolute top-1 left-2 text-[8px] font-bold text-slate-400 uppercase bg-white/50 px-1 rounded z-10 transition-colors">
           {t?.side_view || "Side View"}
@@ -120,7 +120,7 @@ export function GrainPreview({
                 return (
                   <g>
                     {/* Horizontal center line */}
-                    <line x1="0" y1={yCenter} x2="160" y2={yCenter} stroke="#cbd5e1" strokeDasharray="4 4" strokeWidth="0.5" />
+                    <line x1="0" y1={yCenter} x2="160" y2={yCenter} stroke="var(--border)" strokeDasharray="4 4" strokeWidth="0.5" />
                     
                     <g transform={`translate(${(160 - scaledL) / 2}, 0)`}>
                       {/* Body and Outer boundary */}
@@ -167,7 +167,7 @@ export function GrainPreview({
                             y={yCenter - innerY_half} 
                             width={scaledL} 
                             height={innerY_half * 2} 
-                            fill="#ffffff" 
+                            fill="var(--card)" 
                             stroke="none"
                           />
                           {/* Top core line */}

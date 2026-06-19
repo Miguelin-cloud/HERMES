@@ -83,7 +83,7 @@ export function PlaybackWrapper({ results, t_parent }: { results: SimulationResu
       
       {/* Global Controls */}
       <div className="flex-none flex items-center gap-4 p-3 rounded-lg border border-border shadow-sm shrink-0 bg-card">
-         <Button onClick={handlePlayToggle} className="w-24 h-8 bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_10px_rgba(8,145,178,0.4)] transition-all font-mono">
+         <Button onClick={handlePlayToggle} className="w-24 h-8 bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)] transition-all font-mono">
             {isPlaying ? t.pause : timeIndex === results.t.length - 1 ? t.restart : t.play}
          </Button>
          <div className="flex-1 px-2">
@@ -93,7 +93,7 @@ export function PlaybackWrapper({ results, t_parent }: { results: SimulationResu
              max={results.t.length - 1} 
              value={timeIndex} 
              onChange={handleSeek} 
-             className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500" 
+             className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-purple-500" 
            />
            <div className="flex justify-between text-[11px] text-slate-500 mt-2 font-mono">
              <span>0.000s</span>
@@ -105,10 +105,10 @@ export function PlaybackWrapper({ results, t_parent }: { results: SimulationResu
          <div className="flex items-center gap-2 w-[120px]">
            <Label className="text-[10px] text-slate-400 font-mono uppercase">{t.speed}</Label>
            <Select value={String(speed)} onValueChange={v => setSpeed(Number(v))}>
-              <SelectTrigger className="h-7 text-[10px] border-border bg-card text-cyan-100 font-mono focus:ring-cyan-500">
+              <SelectTrigger className="h-7 text-[10px] border-border bg-card text-purple-200 font-mono focus:ring-purple-500">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-card text-cyan-100 font-mono text-[10px] border-border">
+              <SelectContent className="bg-card text-purple-200 font-mono text-[10px] border-border">
                 <SelectItem value="0.25">0.25x</SelectItem>
                 <SelectItem value="0.5">0.5x</SelectItem>
                 <SelectItem value="1">1.0x ({t.real_time})</SelectItem>

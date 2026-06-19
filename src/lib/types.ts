@@ -64,6 +64,7 @@ export interface SimulationResults {
     It_total_N_s: number;
     Isp_total_s: number;
     motorClass: string;
+    k_avg: number;
   };
 }
 
@@ -84,14 +85,14 @@ export function getPropellantData(type: number) {
 export function getBurnRate(P: number, type: number): { a: number; n: number } {
   let a = 0, n = 0;
   if (type === 1) { // KNDX
-    if (P >= 0.1 && P < 0.779) { a = 8.875; n = 0.619; }
+    if (P < 0.779) { a = 8.875; n = 0.619; }
     else if (P >= 0.779 && P < 2.572) { a = 7.553; n = -0.009; }
     else if (P >= 2.572 && P < 5.930) { a = 3.841; n = 0.688; }
     else if (P >= 5.930 && P < 8.502) { a = 17.20; n = -0.148; }
     else if (P >= 8.502 && P < 11.20) { a = 4.775; n = 0.442; }
     else { a = 4.775; n = 0.442; }
   } else if (type === 2) { // KNSO
-    if (P >= 0.101 && P < 0.807) { a = 10.708; n = 0.625; }
+    if (P < 0.807) { a = 10.708; n = 0.625; }
     else if (P >= 0.807 && P < 1.503) { a = 8.763; n = -0.314; }
     else if (P >= 1.503 && P < 3.792) { a = 7.852; n = -0.013; }
     else if (P >= 3.792 && P < 7.033) { a = 3.907; n = 0.535; }

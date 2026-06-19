@@ -28,6 +28,63 @@ function interp1(x: number[], y: number[], xi: number): number {
     return y[y.length - 1];
 }
 
+/**
+ * Calculates the exact supersonic exit Mach number from area expansion ratio
+ */
+export function getExitMach(epsilon: number, k: number): number {
+  if (epsilon <= 1) return 1.0;
+  let low = 1.0;
+  let high = 10.0;
+  const f = (M: number) => {
+    const term = (2 / (k + 1)) * (1 + ((k - 1) / 2) * M * M);
+    return (1 / M) * Math.pow(term, (k + 1) / (2 * (k - 1)));
+  };
+  
+  if (f(high) < epsilon) {
+    high = 20.0; // expand search if needed
+  }
+  
+  for (let iter = 0; iter < 40; iter++) {
+    const mid = (low + high) / 2;
+    const val = f(mid);
+    if (Math.abs(val - epsilon) < 1e-6) return mid;
+    if (val > epsilon) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+  return (low + high) / 2;
+}
+
+/**
+ * Calculates the exact TTI thrust coefficient CF
+ */
+export function getTTIThrustCoefficient(
+  P_Pa: number,
+  Pa_atm: number,
+  k: number,
+  epsilon: number,
+  alpha_deg: number,
+  etanoz: number
+): number {
+  if (P_Pa <= Pa_atm) return 0;
+  
+  const Me = getExitMach(epsilon, k);
+  const Pe = P_Pa / Math.pow(1 + ((k - 1) / 2) * Me * Me, k / (k - 1));
+  
+  const alpha_rad = (alpha_deg * Math.PI) / 180;
+  const lambda = (1 + Math.cos(alpha_rad)) / 2;
+  
+  const t1 = (2 * k * k) / (k - 1);
+  const t2 = Math.pow(2 / (k + 1), (k + 1) / (k - 1));
+  const t3 = 1 - Math.pow(Pe / P_Pa, (k - 1) / k);
+  const ideal_CF = Math.sqrt(t1 * t2 * t3);
+  
+  const CF = lambda * etanoz * (ideal_CF + ((Pe - Pa_atm) / P_Pa) * epsilon);
+  return Math.max(0, CF);
+}
+
 export function calculateApogee(
    tt: number[],
    vec_thrust_N: number[],
@@ -44,13 +101,15 @@ export function calculateApogee(
    const R_earth = 6371000;
    const R_air = 287;
    const gamma = 1.4;
-   const rho_sea_level = 1.225;
+   
    const T_launch_K = 273.15 + T_celcius;
+   const P_launch = 101325 * Math.pow(1 - 2.25577e-5 * h_launch, 5.25588);
+   const rho_launch = P_launch / (R_air * T_launch_K);
    const area_ref = Math.PI * Math.pow(d_rocket, 2) / 4;
 
    let t = 0;
-   let h = 0;
-   let v = 0;
+   let h = 0; // relative elevation above launch pad (m)
+   let v = 0; // vertical velocity (m/s)
    const default_dt = (tt.length > 1) ? (tt[1] - tt[0]) : 0.001;
    
    const hist_t: number[] = [];
@@ -81,14 +140,16 @@ export function calculateApogee(
 
        const h_abs = h_launch + h;
        const g_local = g0 * Math.pow(R_earth / (R_earth + h_abs), 2);
-       const T_local = T_launch_K - 0.0065 * h_abs;
-       const rho = rho_sea_level * Math.pow(T_local / T_launch_K, (g0 / (0.0065 * R_air)) - 1);
+       const T_local = T_launch_K - 0.0065 * h;
+       
+       // Calculate density dynamically relative to launch site conditions
+       const rho = rho_launch * Math.pow(T_local / T_launch_K, (g0 / (0.0065 * R_air)) - 1);
        const v_sound = Math.sqrt(gamma * R_air * T_local);
 
        const mach = Math.abs(v) / v_sound;
        const current_cd = interp1(mach_ref, cd_ref, mach);
 
-       const drag = 0.5 * Math.max(0, rho) * v * v * current_cd * area_ref; // Prevent extreme temperatures from causing issues
+       const drag = 0.5 * Math.max(0, rho) * v * v * current_cd * area_ref; 
        const weight = mass * g_local;
 
        const F_net_real = thrust - weight - Math.sign(v) * drag;
