@@ -242,8 +242,13 @@ export function MissionControl({
       const exp_f_N = calcExpParams.expDataRaw.map((d) => {
         let f_N = 0;
         if (calcExpParams.expDataType === "pressure") {
-          const P_MPa = convertPresToMPa(d.p, calcExpParams.presUnit);
-          const P_Pa = P_MPa * 1e6;
+          const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
+          const P_Pa_gauge = P_MPa_gauge * 1e6;
+          
+          const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
+          // Absolute chamber pressure: gauge pressure + atmospheric pressure (never below Pa)
+          const P_Pa_abs = Math.max(Pa, P_Pa_gauge + Pa);
+          
           const Dt = nozzleParams?.Dt0 || 18.8; // mm
           const Ds = nozzleParams?.Ds || 37.6; // mm
           const alpha_deg = nozzleParams?.alpha || 12; // deg
@@ -252,10 +257,9 @@ export function MissionControl({
           const epsilon = Math.pow(Ds / Dt, 2);
           
           const k = results?.summary.k_avg || 1.13;
-          const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
           
-          const CF = getTTIThrustCoefficient(P_Pa, Pa, k, epsilon, alpha_deg, etanoz);
-          f_N = P_Pa * At_m2 * CF;
+          const CF = getTTIThrustCoefficient(P_Pa_abs, Pa, k, epsilon, alpha_deg, etanoz);
+          f_N = P_Pa_abs * At_m2 * CF;
         } else {
           f_N = convertForceToN(Math.max(0, d.f), calcExpParams.forceUnit);
         }
@@ -477,8 +481,13 @@ export function MissionControl({
         calcExpParams.expDataType === "pressure" ||
         calcExpParams.expDataType === "both"
       ) {
-        const P_MPa = convertPresToMPa(d.p, calcExpParams.presUnit);
-        const P_Pa = P_MPa * 1e6;
+        const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
+        const P_Pa_gauge = P_MPa_gauge * 1e6;
+        
+        const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
+        // Absolute chamber pressure: gauge pressure + atmospheric pressure (never below Pa)
+        const P_Pa_abs = Math.max(Pa, P_Pa_gauge + Pa);
+        
         const Dt = nozzleParams?.Dt0 || 18.8; // mm
         const Ds = nozzleParams?.Ds || 37.6; // mm
         const alpha_deg = nozzleParams?.alpha || 12; // deg
@@ -487,10 +496,9 @@ export function MissionControl({
         const epsilon = Math.pow(Ds / Dt, 2);
 
         const k = results?.summary.k_avg || 1.13;
-        const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
 
-        const CF = getTTIThrustCoefficient(P_Pa, Pa, k, epsilon, alpha_deg, etanoz);
-        exp_P_F = Math.max(0, P_Pa * At_m2 * CF);
+        const CF = getTTIThrustCoefficient(P_Pa_abs, Pa, k, epsilon, alpha_deg, etanoz);
+        exp_P_F = Math.max(0, P_Pa_abs * At_m2 * CF);
       }
       return { exp_F, exp_P_F };
     };

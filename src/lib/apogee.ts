@@ -79,9 +79,14 @@ export function getTTIThrustCoefficient(
   const t1 = (2 * k * k) / (k - 1);
   const t2 = Math.pow(2 / (k + 1), (k + 1) / (k - 1));
   const t3 = 1 - Math.pow(Pe / P_Pa, (k - 1) / k);
-  const ideal_CF = Math.sqrt(t1 * t2 * t3);
+  const momentum_CF = Math.sqrt(t1 * t2 * t3);
   
-  const CF = lambda * etanoz * (ideal_CF + ((Pe - Pa_atm) / P_Pa) * epsilon);
+  const pressure_CF = ((Pe - Pa_atm) / P_Pa) * epsilon;
+  
+  // Divergence factor (lambda) only applies to the momentum component.
+  // Nozzle efficiency (etanoz) is typically applied to the whole CF in Nakka/Ideal 1D analysis.
+  let CF = etanoz * (lambda * momentum_CF + pressure_CF);
+  
   return Math.max(0, CF);
 }
 

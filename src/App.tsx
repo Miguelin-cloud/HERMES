@@ -734,7 +734,7 @@ export default function App() {
                                 color: '#0f172a'
                               }} 
                             />
-                            <Line type="monotone" dataKey="P0_gage" stroke="#f97316" dot={false} strokeWidth={2.5} name="Chamber Pressure (MPa)" style={{ filter: 'drop-shadow(0px 0px 5px rgba(249,115,22,0.5))' }} />
+                            <Line type="monotone" dataKey="P0_gage" stroke="#f97316" dot={false} strokeWidth={2.5} name="Chamber Gauge Pressure (MPa)" style={{ filter: 'drop-shadow(0px 0px 5px rgba(249,115,22,0.5))' }} />
                           </LineChart>
                         </ResponsiveContainer>
                       </CardContent>
