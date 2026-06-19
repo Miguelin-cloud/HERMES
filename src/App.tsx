@@ -21,6 +21,7 @@ import { PlaybackWrapper } from './components/PlaybackWrapper';
 import { MissionControl } from './components/MissionControl';
 import { SplashScreen } from './components/SplashScreen';
 import { Language, translations } from './lib/i18n';
+import { Logo } from './components/Logo';
 
 function NumberInput({ 
   value, 
@@ -318,10 +319,10 @@ export default function App() {
     <div className="h-screen max-h-screen bg-background text-foreground flex flex-col font-sans overflow-hidden">
       {showSplash && <SplashScreen lang={lang} onComplete={() => setShowSplash(false)} />}
 
-      <header className="bg-card border-border shadow-md text-slate-800 dark:text-slate-200 py-2 px-4 md:px-6 flex justify-between items-center border-b-4 border-b-purple-500 shrink-0 relative z-10 transition-all">
+      <header className="bg-card border-border shadow-md text-slate-800 dark:text-slate-200 py-3 px-4 md:px-6 flex justify-between items-center border-b-4 border-b-purple-500 shrink-0 relative z-10 transition-all">
         <div className="flex items-center gap-4">
-          <div className="bg-purple-500/20 border border-purple-500/55 p-2 rounded-lg shadow-[0_0_12px_rgba(168,85,247,0.3)]">
-             <Rocket className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+          <div className="bg-[#040814] p-1 rounded-2xl border border-slate-800 shadow-[0_0_15px_rgba(56,189,248,0.2)] self-center flex items-center justify-center">
+             <Logo size={46} className="text-slate-100" theme="dark" />
           </div>
           <div>
             <h1 className="text-xl md:text-2xl font-black tracking-widest flex items-center gap-2">

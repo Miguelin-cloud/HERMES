@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Rocket } from 'lucide-react';
+import { AppIcon } from './Logo';
 import { translations, Language } from '../lib/i18n';
 
 const QUOTES = [
@@ -45,9 +45,9 @@ export function SplashScreen({ lang, onComplete }: { lang: Language, onComplete:
       />
       
       <div className="relative z-10 flex flex-col items-center max-w-lg w-full px-6 text-center">
-        <div className="p-4 bg-primary/20 border border-primary/50 shadow-[0_0_40px_rgba(56,189,248,0.4)] rounded-2xl mb-8 relative">
-           <div className="absolute inset-0 rounded-2xl bg-primary/20 blur-xl animate-pulse" />
-           <Rocket size={48} className="text-primary relative z-10" />
+        <div className="mb-8 relative hover:scale-105 transition-transform duration-300">
+           <div className="absolute inset-x-0 bottom-0 top-6 rounded-[28px] bg-sky-500/25 blur-2xl animate-pulse" />
+           <AppIcon size={128} className="relative z-10" />
         </div>
         
         <h1 className="text-3xl md:text-5xl font-black tracking-widest text-slate-100 mb-2 drop-shadow-lg">
