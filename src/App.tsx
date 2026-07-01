@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PROPELLANTS, SimulationInputs, SimulationResults } from './lib/types';
 import { runSimulation } from './lib/simulator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Label as ChartLabel } from 'recharts';
-import { Download, Monitor, Sun, Moon, User } from 'lucide-react';
+import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen } from 'lucide-react';
 
 import { GrainViewer } from './components/GrainViewer';
 import { EngineViewer } from './components/EngineViewer';
@@ -166,10 +166,51 @@ function InteractiveGrain3D({ grain }: { grain: any }) {
 import { ApogeeResult } from './lib/apogee';
 import { FlightViewer } from './components/FlightViewer';
 
+const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
+  en: [
+    { title: "1. Inputs", content: ["Configure combustion chamber and nozzle geometry.", "Define single or multiple propellant grains (Cylindrical, Star, Solid).", "Adjust engine parameters and select propellant types."] },
+    { title: "2. Results", content: ["Press the red 'SIMULATE' button to run the engine.", "Analyze Chamber Pressure and Thrust graphs in real-time.", "Export detailed data to CSV for further analysis in Excel."] },
+    { title: "3. Analysis", content: ["Review total impulse, specific impulse, and C*.", "Check the motor classification class (e.g., H, I, J).", "Analyze individual burn times for each propellant block."] },
+    { title: "4. Mission Control", content: ["Simulate a 1D vertical flight using your engine's thrust curve.", "Configure rocket dry mass, diameter, and drag coefficient (Cd).", "Predict apogee (max altitude) and max velocity/acceleration.", "Import your own thrust test data (CSV) to calculate apogee."] },
+    { title: "5. CFD Animation", content: ["Visualize the burning process inside the chamber over time.", "Observe how the propellant geometry evolves during combustion.", "Use the playback controls to play, pause, or slide through time."] }
+  ],
+  es: [
+    { title: "1. Inputs (Entradas)", content: ["Configura la geometría de la cámara de combustión y la tobera.", "Define uno o múltiples granos de propulsante (Cilíndrico, Estrella, Macizo).", "Ajusta los parámetros del motor y los tipos de propelente."] },
+    { title: "2. Results (Resultados)", content: ["Pulsa el botón rojo 'SIMULAR' para calcular el rendimiento.", "Analiza las gráficas de Presión y Empuje.", "Exporta los datos a CSV para visualizarlos en Excel."] },
+    { title: "3. Analysis (Análisis)", content: ["Revisa el impulso total, impulso específico y velocidad característica (C*).", "Comprueba la clasificación del motor (ej. H, I, J).", "Analiza el tiempo de quemado individual de cada grano."] },
+    { title: "4. Mission Control", content: ["Simula un vuelo vertical 1D usando la curva de empuje de tu motor.", "Configura la masa seca del cohete, diámetro y coeficiente aerodinámico (Cd).", "Predice el apogeo (altura máxima) y la velocidad/aceleración máxima.", "Importa tus propios datos de ensayos en banco de pruebas (CSV) para calcular el apogeo."] },
+    { title: "5. CFD Animation (Animación CFD)", content: ["Visualiza el proceso de quemado dentro de la cámara a lo largo del tiempo.", "Observa cómo evoluciona la geometría del propulsante durante la combustión.", "Utiliza los controles para reproducir, pausar o desplazarte por el tiempo."] }
+  ],
+  fr: [
+    { title: "1. Inputs (Entrées)", content: ["Configurez la géométrie de la chambre de combustion et de la tuyère.", "Définissez un ou plusieurs blocs de propergol (Cylindrique, Étoile, Solide).", "Ajustez les paramètres du moteur et les types de propergol."] },
+    { title: "2. Results (Résultats)", content: ["Appuyez sur le bouton rouge 'SIMULER' pour lancer le moteur.", "Analysez les graphiques de pression et de poussée.", "Exportez les données vers un fichier CSV pour Excel."] },
+    { title: "3. Analysis (Analyse)", content: ["Vérifiez l'impulsion totale, l'impulsion spécifique et le C*.", "Consultez la classification du moteur (ex. H, I, J).", "Analysez les temps de combustion individuels de chaque bloc."] },
+    { title: "4. Mission Control", content: ["Simulez un vol vertical 1D avec la courbe de poussée de votre moteur.", "Configurez la masse à vide de la fusée, son diamètre et le coefficient de traînée (Cd).", "Prévoyez l'apogée et la vitesse/accélération maximale.", "Importez vos propres données de test (CSV) pour calculer l'apogée."] },
+    { title: "5. CFD Animation (Animation CFD)", content: ["Visualisez le processus de combustion à l'intérieur de la chambre.", "Observez l'évolution de la géométrie du propergol.", "Utilisez les contrôles pour lire, mettre en pause ou avancer dans le temps."] }
+  ],
+  it: [
+    { title: "1. Inputs (Ingressi)", content: ["Configura la geometria della camera di combustione e dell'ugello.", "Definisci uno o più grani di propellente (Cilindrico, Stella, Solido).", "Regola i parametri del motore e i tipi di propellente."] },
+    { title: "2. Results (Risultati)", content: ["Premi il pulsante rosso 'SIMULA' per avviare il motore.", "Analizza i grafici della pressione e della spinta in tempo reale.", "Esporta i dati in CSV per Excel."] },
+    { title: "3. Analysis (Analisi)", content: ["Esamina l'impulso totale, l'impulso specifico e la velocità caratteristica (C*).", "Controlla la classificazione del motore (es. H, I, J).", "Analizza i tempi di combustione individuali di ogni blocco."] },
+    { title: "4. Mission Control", content: ["Simula un volo verticale 1D usando la curva di spinta del tuo motore.", "Configura la massa a vuoto del razzo, il diametro e il coefficiente di resistenza (Cd).", "Prevedi l'apogeo e la velocità/accelerazione massima.", "Importa i tuoi dati di test (CSV) per calcolare l'apogeo."] },
+    { title: "5. CFD Animation (Animazione CFD)", content: ["Visualizza il processo di combustione all'interno della camera nel tempo.", "Osserva come si evolve la geometria del propellente.", "Usa i controlli per riprodurre, mettere in pausa o scorrere il tempo."] }
+  ]
+};
+
+const TUTORIAL_BTN_TEXTS: Record<string, Record<string, string>> = {
+  en: { skip: "Skip", next: "Next", prev: "Back", done: "Ready" },
+  es: { skip: "Saltar", next: "Siguiente", prev: "Atrás", done: "¡Hecho!" },
+  fr: { skip: "Passer", next: "Suivant", prev: "Retour", done: "Terminé" },
+  it: { skip: "Salta", next: "Avanti", prev: "Indietro", done: "Fatto" }
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('inputs');
   const [lang, setLang] = useState<Language>('en');
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('hermes_theme');
+    return (saved === 'dark' || saved === 'light') ? saved : 'light';
+  });
   const [showSplash, setShowSplash] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
@@ -180,8 +221,23 @@ export default function App() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFilename, setExportFilename] = useState('');
   const [csvBlob, setCsvBlob] = useState<Blob | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  
+  const [showTutorial, setShowTutorial] = useState(() => {
+    const hasSeenTutorial = localStorage.getItem('hermes_tutorial_seen');
+    return !hasSeenTutorial;
+  });
+  const [tutorialStep, setTutorialStep] = useState(0);
+
+  const closeTutorial = () => {
+    localStorage.setItem('hermes_tutorial_seen', 'true');
+    setShowTutorial(false);
+    setTutorialStep(0);
+  };
 
   React.useEffect(() => {
+    localStorage.setItem('hermes_theme', theme);
     if (theme === 'light') {
       document.documentElement.classList.add('light');
       document.documentElement.classList.remove('dark');
@@ -213,9 +269,25 @@ export default function App() {
   
   const [motor, setMotor] = useState({ Dc: 60.5, Lc: 483, Gstar: 2, kv: 0, etac: 0.85, paso_de_tiempo: 0.0005, Pamb: 0.101325 });
   const [nozzle, setNozzle] = useState({ Dt0: 18.8, Ds: 41.1, e: 0, alpha: 12, etanoz: 0.75 });
-  const [grains, setGrains] = useState([
+  const defaultGrains = [
     { id: '1', shape: 1 as 1 | 2 | 3, propellantType: 1 as 1 | 2 | 3 | 4 | 5 | 6 | 7, D0: 56, d0: 25, d0mayor: 0, L0: 60, N: 5, Np: 0, osi: 1, ci: 1, ei: 1, rhorat: 0.94 }
-  ]);
+  ];
+
+  const [grains, setGrains] = useState(() => {
+    const saved = localStorage.getItem('hermes_grains');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return defaultGrains;
+      }
+    }
+    return defaultGrains;
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('hermes_grains', JSON.stringify(grains));
+  }, [grains]);
   const [results, setResults] = useState<SimulationResults | null>(null);
 
   const addGrain = () => {
@@ -335,12 +407,20 @@ export default function App() {
         </div>
         <div className="text-right flex items-center gap-6">
           <div className="hidden lg:flex flex-col items-end">
-            <div className="text-[10px] md:text-xs font-mono bg-indigo-900/40 px-2 py-1 rounded text-purple-400 border border-purple-900/50 flex items-center gap-2 shadow-[0_0_8px_rgba(168,85,247,0.15)]">
-              <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_5px_rgba(168,85,247,0.8)]"></div>
+            <div className={`text-[10px] md:text-xs font-mono px-2 py-1 rounded flex items-center gap-2 ${
+              theme === 'light' 
+                ? 'bg-purple-100 text-purple-700 border border-purple-300 shadow-sm' 
+                : 'bg-indigo-900/40 text-purple-400 border border-purple-900/50 shadow-[0_0_8px_rgba(168,85,247,0.15)]'
+            }`}>
+              <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                theme === 'light'
+                  ? 'bg-purple-600 shadow-[0_0_5px_rgba(147,51,234,0.8)]'
+                  : 'bg-purple-400 shadow-[0_0_5px_rgba(168,85,247,0.8)]'
+              }`}></div>
               {t.system_op}
             </div>
             <div className="text-[10px] text-slate-400 mt-1.5 font-medium uppercase tracking-wider hidden sm:block">
-              V 2.0.0 • {new Date().toISOString().split('T')[0]}
+              V 1.2 D / V 1.0 U • {new Date().toISOString().split('T')[0]}
             </div>
           </div>
 
@@ -371,13 +451,13 @@ export default function App() {
                 ? 'bg-white text-slate-800 border-slate-200' 
                 : 'bg-slate-900 text-slate-100 border-slate-700'
             }`}>
-              <SelectItem value="dark" className={`text-xs ${theme === 'light' ? 'focus:bg-slate-100' : 'focus:bg-slate-800'}`}>
+              <SelectItem value="dark" className="text-xs cursor-pointer">
                 <span className="flex items-center gap-2">
                   <Moon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                   {lang === 'es' ? 'Oscuro' : (lang === 'fr' ? 'Sombre' : (lang === 'it' ? 'Scuro' : 'Dark'))}
                 </span>
               </SelectItem>
-              <SelectItem value="light" className={`text-xs ${theme === 'light' ? 'focus:bg-slate-100' : 'focus:bg-slate-800'}`}>
+              <SelectItem value="light" className="text-xs cursor-pointer">
                 <span className="flex items-center gap-2">
                   <Sun className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   {lang === 'es' ? 'Claro' : (lang === 'fr' ? 'Clair' : (lang === 'it' ? 'Chiaro' : 'Light'))}
@@ -400,10 +480,10 @@ export default function App() {
                 ? 'bg-white text-slate-800 border-slate-200' 
                 : 'bg-slate-900 text-slate-100 border-slate-700'
             }`}>
-              <SelectItem value="en" className={`text-xs ${theme === 'light' ? 'focus:bg-slate-100' : 'focus:bg-slate-800'}`}>ENG</SelectItem>
-              <SelectItem value="es" className={`text-xs ${theme === 'light' ? 'focus:bg-slate-100' : 'focus:bg-slate-800'}`}>ESP</SelectItem>
-              <SelectItem value="fr" className={`text-xs ${theme === 'light' ? 'focus:bg-slate-100' : 'focus:bg-slate-800'}`}>FRA</SelectItem>
-              <SelectItem value="it" className={`text-xs ${theme === 'light' ? 'focus:bg-slate-100' : 'focus:bg-slate-800'}`}>ITA</SelectItem>
+              <SelectItem value="en" className="text-xs cursor-pointer">ENG</SelectItem>
+              <SelectItem value="es" className="text-xs cursor-pointer">ESP</SelectItem>
+              <SelectItem value="fr" className="text-xs cursor-pointer">FRA</SelectItem>
+              <SelectItem value="it" className="text-xs cursor-pointer">ITA</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -486,7 +566,7 @@ export default function App() {
                                   <Select value={String(g.propellantType)} onValueChange={v => setGrains(grains.map(x => x.id === g.id ? {...x, propellantType: +v as any} : x))}>
                                     <SelectTrigger className="bg-background border-input h-8 text-[11px] px-2 py-0 min-h-0 text-foreground cursor-pointer flex items-center justify-between"><SelectValue/></SelectTrigger>
                                     <SelectContent className="bg-card text-foreground border-border">
-                                      {PROPELLANTS.map(p => <SelectItem key={p.id} value={String(p.id)} className="text-[11px] font-medium focus:bg-muted cursor-pointer">{p.name}</SelectItem>)}
+                                      {PROPELLANTS.map(p => <SelectItem key={p.id} value={String(p.id)} className="text-[11px] font-medium cursor-pointer">{p.name}</SelectItem>)}
                                     </SelectContent>
                                   </Select>
                                 </div>
@@ -507,30 +587,30 @@ export default function App() {
                                       </div>
                                     </SelectTrigger>
                                     <SelectContent className="bg-card text-foreground border-border min-w-[200px]">
-                                      <SelectItem value="1" className="text-[11px] focus:bg-muted py-1.5 cursor-pointer">
+                                      <SelectItem value="1" className="text-[11px] py-1.5 cursor-pointer">
                                         <div className="flex items-center gap-2">
                                           <GrainShapeIcon shape={1} grainId={`${g.id}-opt1`} />
                                           <div className="text-left">
                                             <p className="font-bold text-xs">{lang === 'es' ? 'Cilíndrico' : 'Cylindrical'}</p>
-                                            <p className="text-[9px] text-muted-foreground leading-none">{lang === 'es' ? 'Perforación tubular central' : 'Central tubular core'}</p>
+                                            <p className="text-[9px] opacity-80 leading-none">{lang === 'es' ? 'Perforación tubular central' : 'Central tubular core'}</p>
                                           </div>
                                         </div>
                                       </SelectItem>
-                                      <SelectItem value="2" className="text-[11px] focus:bg-muted py-1.5 cursor-pointer">
+                                      <SelectItem value="2" className="text-[11px] py-1.5 cursor-pointer">
                                         <div className="flex items-center gap-2">
                                           <GrainShapeIcon shape={2} grainId={`${g.id}-opt2`} />
                                           <div className="text-left">
                                             <p className="font-bold text-xs">{lang === 'es' ? 'Estrella' : 'Star'}</p>
-                                            <p className="text-[9px] text-muted-foreground leading-none">{lang === 'es' ? 'Perforación estelar progresiva' : 'Star core configuration'}</p>
+                                            <p className="text-[9px] opacity-80 leading-none">{lang === 'es' ? 'Perforación estelar progresiva' : 'Star core configuration'}</p>
                                           </div>
                                         </div>
                                       </SelectItem>
-                                      <SelectItem value="3" className="text-[11px] focus:bg-muted py-1.5 cursor-pointer">
+                                      <SelectItem value="3" className="text-[11px] py-1.5 cursor-pointer">
                                         <div className="flex items-center gap-2">
                                           <GrainShapeIcon shape={3} grainId={`${g.id}-opt3`} />
                                           <div className="text-left">
                                             <p className="font-bold text-xs">{lang === 'es' ? 'Macizo' : 'Solid'}</p>
-                                            <p className="text-[9px] text-muted-foreground leading-none">{lang === 'es' ? 'Sin núcleo, quemado exterior' : 'No core, external burn only'}</p>
+                                            <p className="text-[9px] opacity-80 leading-none">{lang === 'es' ? 'Sin núcleo, quemado exterior' : 'No core, external burn only'}</p>
                                           </div>
                                         </div>
                                       </SelectItem>
@@ -918,9 +998,36 @@ export default function App() {
               </span>
            </div>
            
-           <div className="relative">
-              <button 
-                onClick={() => setShowCredits(!showCredits)}
+           <div className="flex items-center gap-2">
+               <button 
+                 onClick={() => {
+                   setTutorialStep(0);
+                   setShowTutorial(true);
+                 }}
+                 className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-all font-semibold uppercase cursor-pointer ${
+                   theme === 'light'
+                     ? 'bg-white hover:bg-stone-50 border-[#e4dfd5] text-stone-700 hover:text-stone-950 shadow-xs'
+                     : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-slate-100'
+                 }`}
+               >
+                 <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                 <span className="text-[10px] tracking-wide">{lang === 'es' ? 'Guía' : 'Guide'}</span>
+               </button>
+               <button 
+                 onClick={() => setShowFeedbackModal(true)}
+                 className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-all font-semibold uppercase cursor-pointer ${
+                   theme === 'light'
+                     ? 'bg-white hover:bg-stone-50 border-[#e4dfd5] text-stone-700 hover:text-stone-950 shadow-xs'
+                     : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-slate-100'
+                 }`}
+               >
+                 <HelpCircle className="w-3.5 h-3.5 text-orange-400" />
+                 <span className="text-[10px] tracking-wide">{lang === 'es' ? 'Ayuda' : 'Feedback'}</span>
+               </button>
+               
+               <div className="relative">
+                 <button 
+                   onClick={() => setShowCredits(!showCredits)}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-all font-semibold uppercase cursor-pointer ${
                   theme === 'light'
                     ? 'bg-white hover:bg-stone-50 border-[#e4dfd5] text-stone-700 hover:text-stone-950 shadow-xs'
@@ -954,6 +1061,7 @@ export default function App() {
                 </>
               )}
            </div>
+           </div>
         </div>
         {showExportModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -978,6 +1086,104 @@ export default function App() {
                     URL.revokeObjectURL(url);
                   }
                 }}>{lang === 'es' ? 'Descargar' : 'Download'}</Button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showFeedbackModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-card w-full max-w-sm rounded-lg p-6 shadow-xl border border-border">
+              <h2 className="text-lg font-bold mb-4">{lang === 'es' ? 'Enviar Sugerencias' : 'Send Feedback'}</h2>
+              <p className="text-xs text-muted-foreground mb-4">
+                {lang === 'es' ? '¿Has encontrado algún error o tienes una sugerencia? Déjanos un mensaje y te contactaremos a la brevedad.' : 'Found a bug or have a suggestion? Leave us a message and we will get back to you shortly.'}
+              </p>
+              <textarea 
+                value={feedbackMessage} 
+                onChange={(e) => setFeedbackMessage(e.target.value)} 
+                className="w-full h-32 p-2 text-sm border rounded bg-input text-foreground mb-4 resize-none"
+                placeholder={lang === 'es' ? 'Escribe aquí tu mensaje...' : 'Write your message here...'}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowFeedbackModal(false)}>{lang === 'es' ? 'Cancelar' : 'Cancel'}</Button>
+                <Button onClick={() => {
+                  window.location.href = `mailto:miguel.tejera@coheteros.com?subject=Hermes%20App%20Feedback&body=${encodeURIComponent(feedbackMessage)}`;
+                  setShowFeedbackModal(false);
+                  setFeedbackMessage('');
+                }}>{lang === 'es' ? 'Enviar' : 'Send'}</Button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showTutorial && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-card w-full max-w-lg rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col">
+              <div className="bg-muted px-6 py-4 border-b border-border flex justify-between items-center">
+                <h2 className="text-xl font-bold text-foreground">
+                  {(TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en'])[tutorialStep].title}
+                </h2>
+                
+                <div className="flex items-center gap-3">
+                  <Select value={lang} onValueChange={(v: any) => setLang(v)}>
+                    <SelectTrigger className={`w-[70px] h-7 text-[10px] font-bold border-2 ${
+                      theme === 'light' 
+                        ? 'bg-white text-slate-800 border-slate-200' 
+                        : 'bg-slate-900 text-slate-100 border-slate-700'
+                    }`}>
+                      <SelectValue placeholder="Lang" />
+                    </SelectTrigger>
+                    <SelectContent className={`min-w-[70px] ${
+                      theme === 'light' 
+                        ? 'bg-white text-slate-800 border-slate-200' 
+                        : 'bg-slate-900 text-slate-100 border-slate-700'
+                    }`}>
+                      <SelectItem value="en" className="text-xs cursor-pointer">ENG</SelectItem>
+                      <SelectItem value="es" className="text-xs cursor-pointer">ESP</SelectItem>
+                      <SelectItem value="fr" className="text-xs cursor-pointer">FRA</SelectItem>
+                      <SelectItem value="it" className="text-xs cursor-pointer">ITA</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <span className="text-xs font-mono font-semibold text-muted-foreground bg-background px-2 py-1 rounded border border-border">
+                    {tutorialStep + 1} / {(TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en']).length}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                <ul className="space-y-3">
+                  {(TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en'])[tutorialStep].content.map((bullet, idx) => (
+                    <li key={idx} className="flex items-start gap-3">
+                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 shrink-0"></div>
+                      <p className="text-sm text-foreground leading-relaxed">{bullet}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="bg-muted/50 px-6 py-4 border-t border-border flex items-center justify-between">
+                <Button variant="ghost" onClick={closeTutorial} className="text-muted-foreground hover:text-foreground">
+                  {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).skip}
+                </Button>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setTutorialStep(Math.max(0, tutorialStep - 1))}
+                    disabled={tutorialStep === 0}
+                  >
+                    {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).prev}
+                  </Button>
+                  
+                  {tutorialStep < (TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en']).length - 1 ? (
+                    <Button onClick={() => setTutorialStep(tutorialStep + 1)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                      {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).next}
+                    </Button>
+                  ) : (
+                    <Button onClick={closeTutorial} className="bg-green-600 hover:bg-green-700 text-white">
+                      {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).done}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
