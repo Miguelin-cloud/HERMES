@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PROPELLANTS, SimulationInputs, SimulationResults } from './lib/types';
 import { runSimulation } from './lib/simulator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Label as ChartLabel } from 'recharts';
-import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen } from 'lucide-react';
+import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen, FolderOpen, Trash2, Folder } from 'lucide-react';
 
 import { GrainViewer } from './components/GrainViewer';
 import { EngineViewer } from './components/EngineViewer';
@@ -238,7 +238,10 @@ export default function App() {
   });
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState('');
+  const [saveFolder, setSaveFolder] = useState('General');
   const [loadedSimId, setLoadedSimId] = useState<string>('');
+  const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [simToDelete, setSimToDelete] = useState<string | null>(null);
 
   React.useEffect(() => {
     localStorage.setItem('hermes_saved_sims', JSON.stringify(savedSimulations));
@@ -510,34 +513,18 @@ export default function App() {
             </Button>
             
             {savedSimulations.length > 0 && (
-              <Select value={loadedSimId} onValueChange={(id) => {
-                setLoadedSimId(id);
-                const sim = savedSimulations.find(s => String(s.id) === id);
-                if (sim) {
-                  setMotor(sim.motor);
-                  setNozzle(sim.nozzle);
-                  setGrains(sim.grains);
-                }
-              }}>
-                <SelectTrigger className={`w-32 md:w-40 h-8 text-xs font-semibold px-2 transition-colors cursor-pointer rounded border focus:outline-none focus:ring-0 ${
-                  theme === 'light' 
-                    ? 'bg-white border-slate-300 text-slate-700' 
-                    : 'bg-slate-900/80 border-slate-700/50 text-slate-200'
-                }`}>
-                  <SelectValue placeholder={lang === 'es' ? 'Cargar...' : 'Load...'} />
-                </SelectTrigger>
-                <SelectContent className={`border ${
-                  theme === 'light' 
-                    ? 'bg-white text-slate-800 border-slate-200' 
-                    : 'bg-slate-900 text-slate-100 border-slate-700'
-                }`}>
-                  {savedSimulations.map(sim => (
-                    <SelectItem key={sim.id} value={String(sim.id)} className="text-xs cursor-pointer">
-                      {sim.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Button 
+                variant="outline"
+                onClick={() => setShowLibraryModal(true)}
+                className={`h-8 text-[10px] uppercase font-bold px-3 transition-colors ${
+                  theme === 'light'
+                    ? 'bg-white border-[#e4dfd5] text-stone-700 hover:text-stone-900 hover:bg-stone-50'
+                    : 'bg-slate-800/80 border-slate-700/50 text-slate-300 hover:text-slate-100'
+                }`}
+              >
+                <FolderOpen size={14} className="mr-1.5" />
+                {lang === 'es' ? 'Biblioteca' : 'Library'}
+              </Button>
             )}
           </div>
 
@@ -1242,13 +1229,26 @@ export default function App() {
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-card w-full max-w-sm rounded-lg p-6 shadow-xl border border-border">
               <h2 className="text-lg font-bold mb-4">{lang === 'es' ? 'Guardar Simulación' : 'Save Simulation'}</h2>
-              <UiLabel>{lang === 'es' ? 'Nombre de la simulación' : 'Simulation Name'}</UiLabel>
-              <Input 
-                value={saveName} 
-                onChange={(e) => setSaveName(e.target.value)} 
-                className="mt-1 mb-4"
-                placeholder={lang === 'es' ? 'Ej. Motor de prueba A' : 'E.g. Test Motor A'}
-              />
+              <div className="space-y-4 mb-4">
+                <div>
+                  <UiLabel>{lang === 'es' ? 'Nombre de la simulación' : 'Simulation Name'}</UiLabel>
+                  <Input 
+                    value={saveName} 
+                    onChange={(e) => setSaveName(e.target.value)} 
+                    className="mt-1"
+                    placeholder={lang === 'es' ? 'Ej. Motor de prueba A' : 'E.g. Test Motor A'}
+                  />
+                </div>
+                <div>
+                  <UiLabel>{lang === 'es' ? 'Carpeta / Grupo' : 'Folder / Group'}</UiLabel>
+                  <Input 
+                    value={saveFolder} 
+                    onChange={(e) => setSaveFolder(e.target.value)} 
+                    className="mt-1"
+                    placeholder={lang === 'es' ? 'Ej. General' : 'E.g. General'}
+                  />
+                </div>
+              </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowSaveModal(false)}>{lang === 'es' ? 'Cancelar' : 'Cancel'}</Button>
                 <Button onClick={() => {
@@ -1256,6 +1256,7 @@ export default function App() {
                   const newSim = {
                     id: Date.now().toString(),
                     name: saveName.trim(),
+                    folder: saveFolder.trim() || 'General',
                     timestamp: Date.now(),
                     motor,
                     nozzle,
@@ -1265,6 +1266,100 @@ export default function App() {
                   setSaveName('');
                   setShowSaveModal(false);
                 }}>{lang === 'es' ? 'Guardar' : 'Save'}</Button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showLibraryModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-card w-full max-w-2xl rounded-lg p-0 shadow-xl border border-border overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="px-6 py-4 border-b border-border bg-muted flex justify-between items-center shrink-0">
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  <FolderOpen size={20} />
+                  {lang === 'es' ? 'Biblioteca de Simulaciones' : 'Simulations Library'}
+                </h2>
+                <Button variant="ghost" size="sm" onClick={() => setShowLibraryModal(false)} className="h-8 w-8 p-0">
+                  ✕
+                </Button>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1 bg-background">
+                {savedSimulations.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    {lang === 'es' ? 'No hay simulaciones guardadas.' : 'No saved simulations.'}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {Array.from(new Set(savedSimulations.map(s => s.folder || 'General'))).sort().map(folder => {
+                      const simsInFolder = savedSimulations.filter(s => (s.folder || 'General') === folder);
+                      return (
+                        <div key={folder} className="space-y-2">
+                          <h3 className="font-bold text-sm text-foreground flex items-center gap-2 border-b border-border pb-1">
+                            <Folder size={14} className="text-muted-foreground" />
+                            {folder}
+                            <span className="text-xs font-normal text-muted-foreground ml-auto">{simsInFolder.length}</span>
+                          </h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {simsInFolder.map(sim => (
+                              <div key={sim.id} className="group flex items-center justify-between p-3 rounded-md border border-border bg-card hover:border-purple-500/50 transition-colors">
+                                <div 
+                                  className="flex-1 cursor-pointer overflow-hidden"
+                                  onClick={() => {
+                                    setLoadedSimId(sim.id);
+                                    setMotor(sim.motor);
+                                    setNozzle(sim.nozzle);
+                                    setGrains(sim.grains);
+                                    setShowLibraryModal(false);
+                                  }}
+                                >
+                                  <div className="font-semibold text-sm truncate">{sim.name}</div>
+                                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                                    {new Date(sim.timestamp).toLocaleString()}
+                                  </div>
+                                </div>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSimToDelete(sim.id);
+                                  }}
+                                  title={lang === 'es' ? 'Eliminar simulación' : 'Delete simulation'}
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {simToDelete && (
+          <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+            <div className="bg-card w-full max-w-sm rounded-lg p-6 shadow-xl border border-border">
+              <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-destructive">
+                <Trash2 size={20} />
+                {lang === 'es' ? 'Confirmar eliminación' : 'Confirm deletion'}
+              </h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                {lang === 'es' ? '¿Estás seguro de que deseas eliminar esta simulación? Esta acción no se puede deshacer.' : 'Are you sure you want to delete this simulation? This action cannot be undone.'}
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setSimToDelete(null)}>
+                  {lang === 'es' ? 'Cancelar' : 'Cancel'}
+                </Button>
+                <Button variant="destructive" onClick={() => {
+                  setSavedSimulations(savedSimulations.filter(s => s.id !== simToDelete));
+                  setSimToDelete(null);
+                }}>
+                  {lang === 'es' ? 'Eliminar' : 'Delete'}
+                </Button>
               </div>
             </div>
           </div>
