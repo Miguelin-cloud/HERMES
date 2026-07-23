@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { Rocket } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -220,9 +221,28 @@ export default function App() {
   const [showCredits, setShowCredits] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFilename, setExportFilename] = useState('');
-  const [csvBlob, setCsvBlob] = useState<Blob | null>(null);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx'>('csv');
+  const [exportData, setExportData] = useState<any[] | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState('');
+  
+  const [savedSimulations, setSavedSimulations] = useState<any[]>(() => {
+    const saved = localStorage.getItem('hermes_saved_sims');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed.map(s => ({ ...s, id: String(s.id) })) : [];
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [loadedSimId, setLoadedSimId] = useState<string>('');
+
+  React.useEffect(() => {
+    localStorage.setItem('hermes_saved_sims', JSON.stringify(savedSimulations));
+  }, [savedSimulations]);
   
   const [showTutorial, setShowTutorial] = useState(() => {
     const hasSeenTutorial = localStorage.getItem('hermes_tutorial_seen');
@@ -267,8 +287,34 @@ export default function App() {
     }
   };
   
-  const [motor, setMotor] = useState({ Dc: 60.5, Lc: 483, Gstar: 2, kv: 0, etac: 0.85, paso_de_tiempo: 0.0005, Pamb: 0.101325 });
-  const [nozzle, setNozzle] = useState({ Dt0: 18.8, Ds: 41.1, e: 0, alpha: 12, etanoz: 0.75 });
+  const [motor, setMotor] = useState(() => {
+    const saved = localStorage.getItem('hermes_motor');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return { Dc: 60.5, Lc: 483, Gstar: 2, kv: 0, etac: 0.85, paso_de_tiempo: 0.0005, Pamb: 0.101325 };
+  });
+
+  const [nozzle, setNozzle] = useState(() => {
+    const saved = localStorage.getItem('hermes_nozzle');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return { Dt0: 18.8, Ds: 41.1, e: 0, alpha: 12, etanoz: 0.75 };
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('hermes_motor', JSON.stringify(motor));
+  }, [motor]);
+
+  React.useEffect(() => {
+    localStorage.setItem('hermes_nozzle', JSON.stringify(nozzle));
+  }, [nozzle]);
+
   const defaultGrains = [
     { id: '1', shape: 1 as 1 | 2 | 3, propellantType: 1 as 1 | 2 | 3 | 4 | 5 | 6 | 7, D0: 56, d0: 25, d0mayor: 0, L0: 60, N: 5, Np: 0, osi: 1, ci: 1, ei: 1, rhorat: 0.94 }
   ];
@@ -309,8 +355,8 @@ export default function App() {
     }
   };
 
-  const exportToCsv = (res: SimulationResults) => {
-    let csv = "Time (s);Pressure (MPa);Pressure (bar);Pressure (atm);Thrust RN (N);Thrust RN (kg);Thrust TTI (N);Thrust TTI (kg);;Summary Metric;Value;Unit\n";
+  const prepareExport = (res: SimulationResults) => {
+    const data: any[] = [];
     
     const summaryRows = [
       ["Motor Class", res.summary.motorClass, ""],
@@ -327,35 +373,50 @@ export default function App() {
     const maxRows = Math.max(res.t.length, summaryRows.length);
 
     for (let i = 0; i < maxRows; i++) {
-      const formatNumber = (num: number) => num.toFixed(4).replace('.', ',');
+      const row: any = {};
       
-      let row = "";
       if (i < res.t.length) {
-        const t = res.t[i] || 0;
+        row["Time (s)"] = Number((res.t[i] || 0).toFixed(4));
         const p_mpa = Math.max(0, res.P0_gage[i] || 0);
-        const p_bar = p_mpa * 10;
-        const p_atm = p_mpa * 9.86923;
+        row["Pressure (MPa)"] = Number(p_mpa.toFixed(4));
+        row["Pressure (bar)"] = Number((p_mpa * 10).toFixed(4));
+        row["Pressure (atm)"] = Number((p_mpa * 9.86923).toFixed(4));
         const f_rn = Math.max(0, res.F_N[i] || 0);
-        const f_rn_kg = f_rn / 9.81;
+        row["Thrust RN (N)"] = Number(f_rn.toFixed(2));
+        row["Thrust RN (kg)"] = Number((f_rn / 9.81).toFixed(2));
         const f_tti = Math.max(0, res.E_N[i] || 0);
-        const f_tti_kg = f_tti / 9.81;
-        
-        row += `${formatNumber(t)};${formatNumber(p_mpa)};${formatNumber(p_bar)};${formatNumber(p_atm)};${formatNumber(f_rn)};${formatNumber(f_rn_kg)};${formatNumber(f_tti)};${formatNumber(f_tti_kg)};;`;
+        row["Thrust TTI (N)"] = Number(f_tti.toFixed(2));
+        row["Thrust TTI (kg)"] = Number((f_tti / 9.81).toFixed(2));
+        row["Mass Flow (kg/s)"] = Number((res.mgra_total[i] || 0).toFixed(4));
       } else {
-        row += ";;;;;;;;;";
-      }
-
-      if (i < summaryRows.length) {
-        row += `${summaryRows[i][0]};${summaryRows[i][1]};${summaryRows[i][2]}\n`;
-      } else {
-        row += ";;\n";
+        row["Time (s)"] = "";
+        row["Pressure (MPa)"] = "";
+        row["Pressure (bar)"] = "";
+        row["Pressure (atm)"] = "";
+        row["Thrust RN (N)"] = "";
+        row["Thrust RN (kg)"] = "";
+        row["Thrust TTI (N)"] = "";
+        row["Thrust TTI (kg)"] = "";
+        row["Mass Flow (kg/s)"] = "";
       }
       
-      csv += row;
+      row[""] = "";
+      
+      if (i < summaryRows.length) {
+        row["Summary Metric"] = summaryRows[i][0];
+        row["Value"] = summaryRows[i][1];
+        row["Unit"] = summaryRows[i][2];
+      } else {
+        row["Summary Metric"] = "";
+        row["Value"] = "";
+        row["Unit"] = "";
+      }
+      
+      data.push(row);
     }
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    setCsvBlob(blob);
-    setExportFilename(`HERMES_Results_${motor.Dc}mm.csv`);
+    
+    setExportData(data);
+    setExportFilename(`HERMES_Results_${motor.Dc}mm`);
     setShowExportModal(true);
   };
 
@@ -433,6 +494,52 @@ export default function App() {
               {lang === 'es' ? 'INSTALAR APP' : (lang === 'fr' ? 'INSTALLER' : 'INSTALL APP')}
             </Button>
           )}
+
+          {/* Saved Simulations */}
+          <div className="hidden md:flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowSaveModal(true)}
+              className={`h-8 text-[10px] uppercase font-bold px-3 transition-colors ${
+                theme === 'light'
+                  ? 'bg-white border-[#e4dfd5] text-stone-700 hover:text-stone-900 hover:bg-stone-50'
+                  : 'bg-slate-800/80 border-slate-700/50 text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              {lang === 'es' ? 'Guardar' : 'Save'}
+            </Button>
+            
+            {savedSimulations.length > 0 && (
+              <Select value={loadedSimId} onValueChange={(id) => {
+                setLoadedSimId(id);
+                const sim = savedSimulations.find(s => String(s.id) === id);
+                if (sim) {
+                  setMotor(sim.motor);
+                  setNozzle(sim.nozzle);
+                  setGrains(sim.grains);
+                }
+              }}>
+                <SelectTrigger className={`w-32 md:w-40 h-8 text-xs font-semibold px-2 transition-colors cursor-pointer rounded border focus:outline-none focus:ring-0 ${
+                  theme === 'light' 
+                    ? 'bg-white border-slate-300 text-slate-700' 
+                    : 'bg-slate-900/80 border-slate-700/50 text-slate-200'
+                }`}>
+                  <SelectValue placeholder={lang === 'es' ? 'Cargar...' : 'Load...'} />
+                </SelectTrigger>
+                <SelectContent className={`border ${
+                  theme === 'light' 
+                    ? 'bg-white text-slate-800 border-slate-200' 
+                    : 'bg-slate-900 text-slate-100 border-slate-700'
+                }`}>
+                  {savedSimulations.map(sim => (
+                    <SelectItem key={sim.id} value={String(sim.id)} className="text-xs cursor-pointer">
+                      {sim.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
 
           {/* Theme Dropdown */}
           <Select value={theme} onValueChange={(v) => setTheme(v as 'dark' | 'light')}>
@@ -681,7 +788,7 @@ export default function App() {
               return (
                 <div className="flex flex-col gap-6 pb-20">
                   <div className="flex justify-end">
-                    <Button onClick={() => exportToCsv(results)} variant="outline" size="sm" className="bg-card h-9 shadow-sm border-border text-primary">{t.export_csv}</Button>
+                    <Button onClick={() => prepareExport(results)} variant="outline" size="sm" className="bg-card h-9 shadow-sm border-border text-primary">{t.export_csv}</Button>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10 gap-3">
                     <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-purple-500">
@@ -1067,23 +1174,40 @@ export default function App() {
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-card w-full max-w-sm rounded-lg p-6 shadow-xl border border-border">
               <h2 className="text-lg font-bold mb-4">{lang === 'es' ? 'Exportar Resultados' : 'Export Results'}</h2>
-              <UiLabel>{lang === 'es' ? 'Nombre del archivo' : 'Filename'}</UiLabel>
-              <Input 
-                value={exportFilename} 
-                onChange={(e) => setExportFilename(e.target.value)} 
-                className="mb-4"
-              />
+              <div className="mb-4">
+                <UiLabel>{lang === 'es' ? 'Nombre del archivo' : 'Filename'}</UiLabel>
+                <Input 
+                  value={exportFilename} 
+                  onChange={(e) => setExportFilename(e.target.value)} 
+                  className="mt-1"
+                />
+              </div>
+              <div className="mb-6">
+                <UiLabel>{lang === 'es' ? 'Formato' : 'Format'}</UiLabel>
+                <Select value={exportFormat} onValueChange={(v: any) => setExportFormat(v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="csv">.csv (Valores separados por comas)</SelectItem>
+                    <SelectItem value="xlsx">.xlsx (Microsoft Excel)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowExportModal(false)}>{lang === 'es' ? 'Cancelar' : 'Cancel'}</Button>
                 <Button onClick={() => {
-                  if (csvBlob) {
-                    const url = URL.createObjectURL(csvBlob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = exportFilename;
-                    a.click();
+                  if (exportData) {
+                    const ws = XLSX.utils.json_to_sheet(exportData);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Results");
+                    
+                    if (exportFormat === 'csv') {
+                      XLSX.writeFile(wb, `${exportFilename}.csv`, { bookType: 'csv' });
+                    } else {
+                      XLSX.writeFile(wb, `${exportFilename}.xlsx`, { bookType: 'xlsx' });
+                    }
                     setShowExportModal(false);
-                    URL.revokeObjectURL(url);
                   }
                 }}>{lang === 'es' ? 'Descargar' : 'Download'}</Button>
               </div>
@@ -1110,6 +1234,37 @@ export default function App() {
                   setShowFeedbackModal(false);
                   setFeedbackMessage('');
                 }}>{lang === 'es' ? 'Enviar' : 'Send'}</Button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showSaveModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-card w-full max-w-sm rounded-lg p-6 shadow-xl border border-border">
+              <h2 className="text-lg font-bold mb-4">{lang === 'es' ? 'Guardar Simulación' : 'Save Simulation'}</h2>
+              <UiLabel>{lang === 'es' ? 'Nombre de la simulación' : 'Simulation Name'}</UiLabel>
+              <Input 
+                value={saveName} 
+                onChange={(e) => setSaveName(e.target.value)} 
+                className="mt-1 mb-4"
+                placeholder={lang === 'es' ? 'Ej. Motor de prueba A' : 'E.g. Test Motor A'}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowSaveModal(false)}>{lang === 'es' ? 'Cancelar' : 'Cancel'}</Button>
+                <Button onClick={() => {
+                  if (!saveName.trim()) return;
+                  const newSim = {
+                    id: Date.now().toString(),
+                    name: saveName.trim(),
+                    timestamp: Date.now(),
+                    motor,
+                    nozzle,
+                    grains
+                  };
+                  setSavedSimulations([...savedSimulations, newSim]);
+                  setSaveName('');
+                  setShowSaveModal(false);
+                }}>{lang === 'es' ? 'Guardar' : 'Save'}</Button>
               </div>
             </div>
           </div>

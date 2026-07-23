@@ -55,7 +55,7 @@ const NumberInputMC = ({
       title={tooltip}
     >
       <div className="absolute bottom-[-1px] left-0 right-0 h-[1.5px] bg-gradient-to-r from-purple-500 via-purple-300 to-blue-500 opacity-0 group-focus-within:opacity-100 transition-all duration-300 shadow-[0_0_10px_rgba(168,85,247,0.8)]"></div>
-      <UiLabel className="text-[10px] text-muted-foreground font-mono whitespace-nowrap group-focus-within:text-foreground transition-colors z-10">
+      <UiLabel className="text-[10px] text-muted-foreground font-mono leading-tight group-focus-within:text-foreground transition-colors z-10 flex-1">
         {label}
       </UiLabel>
       <input
@@ -86,7 +86,7 @@ const NumberInputMC = ({
           }
         }}
         onFocus={(e) => e.target.select()}
-        className="w-[65px] h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background border-transparent text-primary font-mono ring-offset-background outline-none rounded-sm transition-all z-10 focus:ring-0 focus:outline-none"
+        className="w-[65px] shrink-0 h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background border-transparent text-primary font-mono ring-offset-background outline-none rounded-sm transition-all z-10 focus:ring-0 focus:outline-none"
       />
     </div>
   );
