@@ -171,32 +171,132 @@ import { FlightViewer } from './components/FlightViewer';
 
 const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
   en: [
-    { title: "1. Inputs", content: ["Configure combustion chamber and nozzle geometry.", "Define single or multiple propellant grains (Cylindrical, Star, Solid).", "Adjust engine parameters and select propellant types."] },
-    { title: "2. Results", content: ["Press the red 'SIMULATE' button to run the engine.", "Analyze Chamber Pressure and Thrust graphs in real-time.", "Export detailed data to CSV for further analysis in Excel."] },
-    { title: "3. Analysis", content: ["Review total impulse, specific impulse, and C*.", "Check the motor classification class (e.g., H, I, J).", "Analyze individual burn times for each propellant block."] },
-    { title: "4. Mission Control", content: ["Simulate a 1D vertical flight using your engine's thrust curve.", "Configure rocket dry mass, diameter, and drag coefficient (Cd).", "Predict apogee (max altitude) and max velocity/acceleration.", "Import your own thrust test data (CSV) to calculate apogee."] },
-    { title: "5. CFD Animation", content: ["Visualize the burning process inside the chamber over time.", "Observe how the propellant geometry evolves during combustion.", "Use the playback controls to play, pause, or slide through time."] }
+    { title: "1. Inputs", content: [
+      "In this tab, you configure the physical properties of your rocket motor step by step.",
+      "Motor & Nozzle: Specify the internal chamber diameter, and the nozzle throat and exit diameters.",
+      "Propellant: Choose a standard fuel type (KNSU, KNDX, etc.), or define a custom propellant by adjusting its density, pressure exponent (n), and coefficient (a).",
+      "Grain Geometry: Add and configure the solid fuel blocks (grains). You can use Cylindrical (BATES), Star core, or Solid shapes, and define their dimensions and which faces are inhibited."
+    ]},
+    { title: "2. Results", content: [
+      "Once everything is configured, press the 'SIMULATE' button to run the internal ballistics calculations.",
+      "Here you will see the main performance graphs: Chamber Pressure vs Time and Thrust vs Time.",
+      "The top card gives you an instant summary of the motor: its classification class (e.g., G, H, I), Total Impulse, Maximum Thrust, and Burn Time.",
+      "Advanced Use: You can save the simulation to your local library, or export all numerical data to Excel or CSV using the 'Export' button."
+    ]},
+    { title: "3. Detailed Analysis", content: [
+      "This section allows you to dive deep into the technical details of the simulation through four sub-tabs.",
+      "Burn Surface: Watch how the fire-exposed area of each grain (internal, external, and ends) evolves as it is consumed.",
+      "Kn Regime: Visualize the ratio between the burn area and the nozzle throat area. This helps predict potential pressure instabilities.",
+      "Burn Rate: Examine how the propellant consumption rate (r) varies with time and pressure, according to Saint-Robert's Law.",
+      "Mass Flow: Analyze the rate at which gases are generated and expelled, and monitor the propellant consumption percentage."
+    ]},
+    { title: "4. Mission Control", content: [
+      "Here you can simulate a 1D vertical launch using the thrust curve you just generated or by importing real test data (CSV/Excel).",
+      "Enter your rocket's data: Dry mass (without motor), outer diameter, and aerodynamic drag coefficient (Cd).",
+      "The simulation will instantly calculate the Apogee (maximum altitude), maximum velocity, and maximum acceleration.",
+      "You can view full flight profile graphs (Altitude and Thrust) up to the apogee moment."
+    ]},
+    { title: "5. CFD Animation", content: [
+      "Watch an interactive 2D animation of your engine's combustion process over time.",
+      "This tool visualizes how the fire consumes the solid propellant from the core outward.",
+      "You can play the animation automatically, pause it, or use the slider to inspect the engine at a precise second of the simulation."
+    ]}
   ],
   es: [
-    { title: "1. Inputs (Entradas)", content: ["Configura la geometría de la cámara de combustión y la tobera.", "Define uno o múltiples granos de propulsante (Cilíndrico, Estrella, Macizo).", "Ajusta los parámetros del motor y los tipos de propelente."] },
-    { title: "2. Results (Resultados)", content: ["Pulsa el botón rojo 'SIMULAR' para calcular el rendimiento.", "Analiza las gráficas de Presión y Empuje.", "Exporta los datos a CSV para visualizarlos en Excel."] },
-    { title: "3. Analysis (Análisis)", content: ["Revisa el impulso total, impulso específico y velocidad característica (C*).", "Comprueba la clasificación del motor (ej. H, I, J).", "Analiza el tiempo de quemado individual de cada grano."] },
-    { title: "4. Mission Control", content: ["Simula un vuelo vertical 1D usando la curva de empuje de tu motor.", "Configura la masa seca del cohete, diámetro y coeficiente aerodinámico (Cd).", "Predice el apogeo (altura máxima) y la velocidad/aceleración máxima.", "Importa tus propios datos de ensayos en banco de pruebas (CSV) para calcular el apogeo."] },
-    { title: "5. CFD Animation (Animación CFD)", content: ["Visualiza el proceso de quemado dentro de la cámara a lo largo del tiempo.", "Observa cómo evoluciona la geometría del propulsante durante la combustión.", "Utiliza los controles para reproducir, pausar o desplazarte por el tiempo."] }
+    { title: "1. Inputs (Entradas)", content: [
+      "En esta pestaña configuras las propiedades físicas de tu motor cohete paso a paso.",
+      "Motor y Tobera: Especifica el diámetro interno de la cámara, y los diámetros de garganta y salida de la tobera.",
+      "Propelente: Elige el tipo de combustible (KNSU, KNDX, etc.), o define un propelente personalizado ajustando su densidad, exponente de presión (n) y coeficiente (a).",
+      "Geometría de Granos: Añade y configura los bloques de combustible (granos). Puedes usar formas cilíndricas (BATES), de estrella o macizas, definiendo sus dimensiones y qué caras están inhibidas (protegidas del fuego)."
+    ]},
+    { title: "2. Results (Resultados)", content: [
+      "Una vez configurado todo, pulsa el botón 'SIMULAR' para ejecutar los cálculos de balística interior.",
+      "En esta pestaña verás las gráficas principales: Presión de Cámara vs Tiempo y Empuje vs Tiempo.",
+      "La tarjeta superior te da un resumen instantáneo del motor: su clasificación (ej. Clase G, H, I), Impulso Total, Empuje Máximo y Tiempo de Quemado.",
+      "Uso Avanzado: Puedes guardar la simulación en tu biblioteca local, o exportar todos los datos numéricos a Excel o CSV usando el botón 'Exportar'."
+    ]},
+    { title: "3. Detailed Analysis (Análisis Detallado)", content: [
+      "Esta sección te permite profundizar en los detalles técnicos de la simulación mediante cuatro sub-pestañas.",
+      "Superficie de Quemado: Observa cómo evoluciona el área expuesta al fuego de cada grano (interno, externo y extremos) a medida que se consume.",
+      "Régimen Kn: Visualiza la relación entre el área de quemado y el área de la garganta de la tobera. Te ayuda a predecir si habrá inestabilidades.",
+      "Velocidad de Quemado: Examina cómo la velocidad a la que se consume el propelente (r) varía con el tiempo y con la presión, según la Ley de Saint-Robert.",
+      "Flujo Másico: Analiza la velocidad a la que se generan y expulsan los gases, y monitoriza el consumo porcentual del propelente."
+    ]},
+    { title: "4. Mission Control", content: [
+      "Aquí puedes simular un lanzamiento vertical (1D) usando la curva de empuje que has generado o importando un archivo de banco de pruebas (CSV/Excel).",
+      "Introduce los datos de tu cohete: Masa en vacío (sin motor), diámetro exterior y coeficiente aerodinámico (Cd).",
+      "La simulación calculará instantáneamente el Apogeo (altitud máxima), la velocidad máxima y la aceleración máxima.",
+      "Podrás ver gráficas del perfil de vuelo (Altitud y Empuje) hasta el momento del apogeo."
+    ]},
+    { title: "5. CFD Animation (Animación CFD)", content: [
+      "Observa una animación interactiva 2D del proceso de combustión de tu motor a lo largo del tiempo.",
+      "Esta herramienta visualiza cómo el fuego consume el propelente desde el núcleo hacia el exterior.",
+      "Puedes reproducir la animación automáticamente, pausarla, o mover la barra deslizante para inspeccionar el motor en un segundo exacto de la simulación."
+    ]}
   ],
   fr: [
-    { title: "1. Inputs (Entrées)", content: ["Configurez la géométrie de la chambre de combustion et de la tuyère.", "Définissez un ou plusieurs blocs de propergol (Cylindrique, Étoile, Solide).", "Ajustez les paramètres du moteur et les types de propergol."] },
-    { title: "2. Results (Résultats)", content: ["Appuyez sur le bouton rouge 'SIMULER' pour lancer le moteur.", "Analysez les graphiques de pression et de poussée.", "Exportez les données vers un fichier CSV pour Excel."] },
-    { title: "3. Analysis (Analyse)", content: ["Vérifiez l'impulsion totale, l'impulsion spécifique et le C*.", "Consultez la classification du moteur (ex. H, I, J).", "Analysez les temps de combustion individuels de chaque bloc."] },
-    { title: "4. Mission Control", content: ["Simulez un vol vertical 1D avec la courbe de poussée de votre moteur.", "Configurez la masse à vide de la fusée, son diamètre et le coefficient de traînée (Cd).", "Prévoyez l'apogée et la vitesse/accélération maximale.", "Importez vos propres données de test (CSV) pour calculer l'apogée."] },
-    { title: "5. CFD Animation (Animation CFD)", content: ["Visualisez le processus de combustion à l'intérieur de la chambre.", "Observez l'évolution de la géométrie du propergol.", "Utilisez les contrôles pour lire, mettre en pause ou avancer dans le temps."] }
+    { title: "1. Inputs (Entrées)", content: [
+      "Dans cet onglet, vous configurez les propriétés physiques de votre moteur-fusée étape par étape.",
+      "Moteur et Tuyère : Spécifiez le diamètre interne de la chambre, ainsi que les diamètres au col et à la sortie de la tuyère.",
+      "Propergol : Choisissez le type de carburant ou définissez un propergol personnalisé en ajustant sa densité, son exposant de pression (n) et son coefficient (a).",
+      "Géométrie des Blocs : Ajoutez et configurez les blocs de propergol. Vous pouvez utiliser des formes Cylindriques (BATES), en Étoile ou Pleines, en définissant leurs dimensions et les faces inhibées."
+    ]},
+    { title: "2. Results (Résultats)", content: [
+      "Une fois configuré, appuyez sur le bouton 'SIMULER' pour lancer les calculs de balistique interne.",
+      "Ici, vous verrez les graphiques principaux : Pression de la Chambre et Poussée au fil du temps.",
+      "Le résumé affiche la classification du moteur (ex: G, H, I), l'Impulsion Totale, la Poussée Maximale et le Temps de Combustion.",
+      "Utilisation Avancée : Sauvegardez la simulation ou exportez toutes les données numériques vers Excel ou CSV via le bouton 'Exporter'."
+    ]},
+    { title: "3. Detailed Analysis (Analyse Détaillée)", content: [
+      "Cette section permet d'approfondir les détails techniques de la simulation via quatre sous-onglets.",
+      "Surface de Combustion : Observez l'évolution de la zone exposée au feu de chaque bloc (interne, externe et extrémités).",
+      "Régime Kn : Visualisez le rapport entre la surface de combustion et la surface du col de la tuyère pour prévoir les instabilités.",
+      "Vitesse de Combustion : Examinez comment la vitesse de consommation (r) varie selon la loi de Saint-Robert.",
+      "Débit Massique : Analysez la vitesse de génération et d'expulsion des gaz, et suivez la consommation du propergol."
+    ]},
+    { title: "4. Mission Control", content: [
+      "Simulez un lancement vertical (1D) en utilisant la courbe de poussée générée ou en important des données de test réelles (CSV/Excel).",
+      "Entrez les données de votre fusée : Masse à vide, diamètre extérieur et coefficient de traînée (Cd).",
+      "La simulation calcule instantanément l'Apogée (altitude maximale), la vitesse max et l'accélération max.",
+      "Consultez les graphiques du profil de vol complet (Altitude et Poussée) jusqu'à l'apogée."
+    ]},
+    { title: "5. CFD Animation (Animation CFD)", content: [
+      "Regardez une animation 2D interactive du processus de combustion de votre moteur.",
+      "Cet outil montre comment le feu consomme le propergol solide depuis le centre vers l'extérieur.",
+      "Lisez l'animation automatiquement, mettez-la en pause ou utilisez le curseur pour inspecter le moteur à une seconde précise."
+    ]}
   ],
   it: [
-    { title: "1. Inputs (Ingressi)", content: ["Configura la geometria della camera di combustione e dell'ugello.", "Definisci uno o più grani di propellente (Cilindrico, Stella, Solido).", "Regola i parametri del motore e i tipi di propellente."] },
-    { title: "2. Results (Risultati)", content: ["Premi il pulsante rosso 'SIMULA' per avviare il motore.", "Analizza i grafici della pressione e della spinta in tempo reale.", "Esporta i dati in CSV per Excel."] },
-    { title: "3. Analysis (Analisi)", content: ["Esamina l'impulso totale, l'impulso specifico e la velocidad caratteristica (C*).", "Controlla la classificazione del motore (es. H, I, J).", "Analizza i tempi di combustione individuali di ogni blocco."] },
-    { title: "4. Mission Control", content: ["Simula un volo verticale 1D usando la curva di spinta del tuo motore.", "Configura la massa a vuoto del razzo, il diametro e il coefficiente di resistenza (Cd).", "Prevedi l'apogeo e la velocità/accelerazione massima.", "Importa i tuoi dati di test (CSV) per calcolare l'apogeo."] },
-    { title: "5. CFD Animation (Animazione CFD)", content: ["Visualizza il processo di combustione all'interno della camera nel tempo.", "Osserva come si evolve la geometria del propellente.", "Usa i controlli per riprodurre, mettere in pausa o scorrere il tempo."] }
+    { title: "1. Inputs (Ingressi)", content: [
+      "In questa scheda configuri le proprietà fisiche del tuo motore a razzo passo dopo passo.",
+      "Motore e Ugello: Specifica il diametro interno della camera, e i diametri di gola e di uscita dell'ugello.",
+      "Propellente: Scegli il tipo di carburante o definisci un propellente personalizzato regolando densità, esponente di pressione (n) e coefficiente (a).",
+      "Geometria dei Grani: Aggiungi e configura i blocchi di propellente solido. Puoi usare forme Cilindriche (BATES), a Stella o Piene, definendone le dimensioni e le facce inibite."
+    ]},
+    { title: "2. Results (Risultati)", content: [
+      "Una volta configurato, premi il pulsante 'SIMULA' per avviare i calcoli di balistica interna.",
+      "Qui vedrai i grafici principali: Pressione in Camera e Spinta nel tempo.",
+      "Il riepilogo mostra la classe del motore (es. G, H, I), l'Impulso Totale, la Spinta Massima e il Tempo di Combustione.",
+      "Uso Avanzato: Salva la simulazione nella tua libreria o esporta i dati numerici in Excel o CSV usando il pulsante 'Esporta'."
+    ]},
+    { title: "3. Detailed Analysis (Analisi Dettagliata)", content: [
+      "Questa sezione permette di approfondire i dettagli tecnici attraverso quattro sotto-schede.",
+      "Superficie di Combustione: Osserva come evolve l'area esposta al fuoco di ogni grano (interna, esterna e alle estremità).",
+      "Regime Kn: Visualizza il rapporto tra l'area di combustione e l'area della gola dell'ugello per prevedere eventuali instabilità.",
+      "Velocità di Combustione: Esamina come varia la velocità di consumo (r) secondo la Legge di Saint-Robert.",
+      "Flusso di Massa: Analizza la velocità di generazione ed espulsione dei gas e monitora il consumo percentuale del propellente."
+    ]},
+    { title: "4. Mission Control", content: [
+      "Simula un lancio verticale (1D) usando la curva di spinta generata o importando dati di test reali (CSV/Excel).",
+      "Inserisci i dati del tuo razzo: Massa a vuoto, diametro esterno e coefficiente di resistenza aerodinamica (Cd).",
+      "La simulazione calcola istantaneamente l'Apogeo (altitudine massima), la velocità massima e l'accelerazione massima.",
+      "Visualizza i grafici del profilo di volo (Altitudine e Spinta) fino all'apogeo."
+    ]},
+    { title: "5. CFD Animation (Animazione CFD)", content: [
+      "Guarda un'animazione 2D interattiva del processo di combustione del tuo motore.",
+      "Questo strumento mostra come il fuoco consuma il propellente solido dal nucleo verso l'esterno.",
+      "Riproduci l'animazione, mettila in pausa o usa la barra per ispezionare il motore in un secondo preciso della simulazione."
+    ]}
   ]
 };
 
@@ -1502,20 +1602,6 @@ export default function App() {
            </div>
            
            <div className="flex items-center gap-2">
-               <button 
-                 onClick={() => {
-                   setTutorialStep(0);
-                   setShowTutorial(true);
-                 }}
-                 className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-all font-semibold uppercase cursor-pointer ${
-                   theme === 'light'
-                     ? 'bg-white hover:bg-stone-50 border-[#e4dfd5] text-stone-700 hover:text-stone-950 shadow-xs'
-                     : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-slate-100'
-                 }`}
-               >
-                 <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-                 <span className="text-[10px] tracking-wide">{lang === 'es' ? 'Guía' : 'Guide'}</span>
-               </button>
                <button 
                  onClick={() => setShowFeedbackModal(true)}
                  className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-all font-semibold uppercase cursor-pointer ${
