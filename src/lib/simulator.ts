@@ -1,6 +1,69 @@
 import { GrainInput, MotorInput, NozzleInput, SimulationInputs, SimulationResults, getPropellantData, getBurnRate, classifyMotor } from './types';
 import { fzeroSearch } from './math';
 
+/**
+ * Calcula la variación del diámetro y área de garganta debido a erosión (e > 0)
+ * o acumulación de escoria / slag (e < 0) según el modelo de progresión seleccionado.
+ * 
+ * Modelos disponibles (iero):
+ * 1: Lineal: y = x
+ * 2: Exponencial normalizada: y = (exp(x) - 1) / (exp(1) - 1)
+ * 3: Cuadrática: y = x^2
+ * 4: Raíz cuadrada: y = sqrt(x)
+ * 5: Parábola cóncava (máx en x=1): y = -x^2 + 2x
+ * 6: Senoidal: y = sin((pi/2)*x)
+ */
+export function calculateThroatErosion(
+  Dt0: number,
+  ero: number = 0,
+  xdero: number = 0,
+  iero: number = 1
+): { Dt: number; At: number; ydero: number } {
+  if (!ero || ero === 0) {
+    const At = (Math.PI / 4) * Math.pow(Dt0, 2);
+    return { Dt: Dt0, At, ydero: 0 };
+  }
+
+  // xdero representa la fracción de alma quemada x / eweb (0 a 1)
+  const x = Math.min(1, Math.max(0, xdero));
+  let ydero = x;
+
+  switch (iero) {
+    case 1: // lineal
+      ydero = x;
+      break;
+    case 2: // Exponencial normalizada
+      ydero = (Math.exp(x) - 1) / (Math.E - 1);
+      break;
+    case 3: // Cuadrática
+      ydero = Math.pow(x, 2);
+      break;
+    case 4: // Raíz cuadrada
+      ydero = Math.sqrt(x);
+      break;
+    case 5: // Parábola con máximo en x=1
+      ydero = -Math.pow(x, 2) + 2 * x;
+      break;
+    case 6: // Senoidal
+      ydero = Math.sin((Math.PI / 2) * x);
+      break;
+    default:
+      ydero = x;
+      break;
+  }
+
+  // Asegurar rango [0, 1]
+  ydero = Math.min(1, Math.max(0, ydero));
+
+  // Limitación física estricta: el diámetro de garganta nunca puede ser 0 o menor que 0
+  // Establecemos un límite físico mínimo (al menos 0.5 mm o 5% de Dt0)
+  const minPhysicalDt = Math.max(0.5, Dt0 * 0.05);
+  const Dt = Math.max(minPhysicalDt, Dt0 + ero * ydero);
+  const At = (Math.PI / 4) * Math.pow(Dt, 2);
+
+  return { Dt, At, ydero };
+}
+
 export function runSimulation({ motor, grains, nozzle }: SimulationInputs): SimulationResults {
   const t: number[] = [];
   const P0_MPa: number[] = [];
@@ -90,6 +153,30 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     };
   });
 
+  // Cálculo preciso de áreas iniciales t=0 para cada grano
+  for (let s of state) {
+    if (s.shape === 1) {
+      s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * (Math.pow(s.D0, 2) - Math.pow(s.d0, 2));
+      s.Abc = s.ci * Math.PI * s.d0 * s.L;
+      s.Abs = s.osi * Math.PI * s.D0 * s.L;
+      s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
+    } else if (s.shape === 2) {
+      const Np = s.Np || 5;
+      const star_hole_area = Np * 0.5 * (s.d0mayor / 2 - s.d0 / 2 * Math.cos(Math.PI / Np)) * s.d0 * Math.sin(Math.PI / Np) + 
+                            Np * 0.5 * Math.pow(s.d0 / 2, 2) * Math.sin(2 * Math.PI / Np);
+      const arm_length = Math.sqrt(Math.pow(s.d0mayor / 2 - s.d0 / 2 * Math.cos(Math.PI / Np), 2) + Math.pow(s.d0 / 2 * Math.sin(Math.PI / Np), 2));
+      s.Abe = s.ei * 2 * s.N * ((Math.PI / 4) * Math.pow(s.D0, 2) - star_hole_area);
+      s.Abc = s.ci * 2 * Np * s.N * arm_length * s.L;
+      s.Abs = s.osi * Math.PI * s.D0 * s.L;
+      s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
+    } else {
+      s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * Math.pow(s.D0, 2);
+      s.Abc = 0;
+      s.Abs = s.osi * Math.PI * s.D0 * s.L;
+      s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
+    }
+  }
+
   const At0 = (Math.PI / 4) * Math.pow(nozzle.Dt0, 2); // mm2
   const Ae = (Math.PI / 4) * Math.pow(nozzle.Ds, 2); // mm2
   const exprat2 = Ae / At0;
@@ -112,6 +199,10 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   let k_sum_steps = 0;
   let k_active_count = 0;
   
+  const initial_total_Ab = state.reduce((sum, s) => sum + s.Ab, 0);
+  const { a: a0, n: n0 } = getBurnRate(Patm, state[0]?.propellantType || 1);
+  const initial_r = a0 * Math.pow(Patm, n0);
+
   // Guardar estado inicial en t=0
   hist.push({
     t: 0,
@@ -122,6 +213,11 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     R_total: R_total,
     k_total: state[0]?.prop.k || 1.13,
     At_total_val: At0,
+    mgen_kgs: 0,
+    mnoz_kgs: 0,
+    r_burn: initial_r,
+    Kn: At0 > 0 ? initial_total_Ab / At0 : 0,
+    Ab_total: initial_total_Ab,
     grains_x: state.map(s => 0),
     grains_Abc: state.map(s => s.Abc || 0),
     grains_Abe: state.map(s => s.Abe || 0),
@@ -167,7 +263,8 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           s.D = 0; s.d = 0; s.L = 0; s.tweb = 0; 
           s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
           s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
-          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e, 2);
+          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, 1, nozzle.ero_model || 1);
+          s.At = At;
         } else {
           s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2));
           s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2));
@@ -175,7 +272,9 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           s.Abs = s.osi * Math.PI * s.D * s.L;
           s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
           s.Vg = (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2)) * s.L;
-          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
+          const xdero = s.tweb0 > 0 ? (s.tweb0 - s.tweb) / s.tweb0 : 0;
+          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
+          s.At = At;
         }
       } else if (s.shape === 3) { // Grano Macizo (Solid)
         s.D = s.D0 - s.osi * 2 * s.x;
@@ -187,7 +286,8 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           s.D = 0; s.L = 0; s.tweb = 0;
           s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
           s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
-          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e, 2);
+          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, 1, nozzle.ero_model || 1);
+          s.At = At;
         } else {
           s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * Math.pow(s.D, 2);
           s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * Math.pow(s.D, 2);
@@ -195,7 +295,9 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           s.Abc = 0;
           s.Ab = Math.max(0, s.Abe + s.Abs);
           s.Vg = (Math.PI / 4) * Math.pow(s.D, 2) * s.L;
-          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
+          const xdero = s.tweb0 > 0 ? (s.tweb0 - s.tweb) / s.tweb0 : 0;
+          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
+          s.At = At;
         }
       } else { // Grano en Estrella (2)
         const Np = s.Np || 5;
@@ -213,11 +315,14 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
           s.dmenor = 0; s.dmayor = 0; s.D = 0; s.L = 0; s.tweb = 0;
           s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
           s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
-          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e, 2);
+          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, 1, nozzle.ero_model || 1);
+          s.At = At;
         } else if (s.dmayor < s.D) {
           // Fase 1: Ambas puntas están dentro del límite exterior D
           s.tweb = (s.D - s.dmenor) / 2;
-          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
+          const xdero = s.tweb0 > 0 ? (s.tweb0 - s.tweb) / s.tweb0 : 0;
+          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
+          s.At = At;
           
           const area_hole = Np * 0.5 * (s.dmayor/2 - s.dmenor/2 * Math.cos(Math.PI/Np)) * s.dmenor * Math.sin(Math.PI/Np) + 
                             Np * 0.5 * Math.pow(s.dmenor/2, 2) * Math.sin(2 * Math.PI/Np);
@@ -234,7 +339,9 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
         } else {
           // Fase 2: Las puntas de la estrella alcanzan el límite D, pero dmenor sigue quemando por dentro
           s.tweb = (s.D - s.dmenor) / 2;
-          s.At = (Math.PI / 4) * Math.pow(nozzle.Dt0 + nozzle.e * (s.tweb0 - s.tweb)/s.tweb0, 2);
+          const xdero = s.tweb0 > 0 ? (s.tweb0 - s.tweb) / s.tweb0 : 0;
+          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
+          s.At = At;
           
           const alpha_rad = s.alpha_deg * Math.PI / 180;
           const target_fun = (beta: number) => {
@@ -316,6 +423,10 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     P0_prod_Pa = rhoprod * R_total * T0real_total;
     P0 = P0_prod_Pa / 1e6 + Patm; 
 
+    const step_total_Ab = state.reduce((sum, s) => sum + s.Ab, 0);
+    const step_dominant_r = state.reduce((sum, s) => sum + (s.xincp / dt), 0) / Math.max(1, state.length);
+    const step_Kn = At_total_val > 0 ? step_total_Ab / At_total_val : 0;
+
     hist.push({
       t: current_t,
       P0_MPa: P0,
@@ -325,6 +436,11 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       R_total: R_total,
       k_total: k_total,
       At_total_val: At_total_val,
+      mgen_kgs: total_mgen,
+      mnoz_kgs: mnoz_total,
+      r_burn: step_dominant_r,
+      Kn: step_Kn,
+      Ab_total: step_total_Ab,
       grains_x: state.map(s => s.x),
       grains_Abc: state.map(s => s.Abc),
       grains_Abe: state.map(s => s.Abe),
@@ -352,6 +468,8 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     let gauge_current = gauge_bout * Math.exp(- (R_total * T02real_total * (final_At_total_val / 1e6) * (current_t - tbout) / Vfree_total) / Cstar_total );
     P0 = gauge_current + Patm;
     
+    const post_mnoz = Math.max(0, (P0 - Patm) * 1e6 * (final_At_total_val / 1e6) / Math.max(1, Cstar_total));
+
     hist.push({
       t: current_t,
       P0_MPa: P0,
@@ -361,6 +479,11 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       R_total: R_total,
       k_total: k_total,
       At_total_val: final_At_total_val,
+      mgen_kgs: 0,
+      mnoz_kgs: post_mnoz,
+      r_burn: 0,
+      Kn: 0,
+      Ab_total: 0,
       grains_x: hist[hist.length-1]?.grains_x || grains.map(() => 0),
       grains_Abc: hist[hist.length-1]?.grains_Abc || grains.map(() => 0),
       grains_Abe: hist[hist.length-1]?.grains_Abe || grains.map(() => 0),
@@ -379,6 +502,21 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   let t_quemado = 0;
   let t_fin = 0;
  
+  let Kn_max = 0;
+  let Kn_sum = 0;
+  let Kn_final = 0;
+  let r_max = 0;
+  let r_sum = 0;
+  let mdot_max = 0;
+  let mdot_sum = 0;
+
+  const Kn_arr: number[] = [];
+  const At_mm2_arr: number[] = [];
+  const r_burn_arr: number[] = [];
+  const mdot_gen_arr: number[] = [];
+  const mdot_noz_arr: number[] = [];
+  const Ab_total_arr: number[] = [];
+
   const grains_x: number[][] = grains.map(() => []);
   const grains_Abc: number[][] = grains.map(() => []);
   const grains_Abe: number[][] = grains.map(() => []);
@@ -406,6 +544,14 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       F_kg.push(0);
       E_N.push(0);
       E_kg.push(0);
+
+      Kn_arr.push(step.Kn ?? 0);
+      At_mm2_arr.push(step.At_total_val ?? At0);
+      r_burn_arr.push(step.r_burn ?? 0);
+      mdot_gen_arr.push(step.mgen_kgs ?? 0);
+      mdot_noz_arr.push(step.mnoz_kgs ?? 0);
+      Ab_total_arr.push(step.Ab_total ?? 0);
+
       for (let g = 0; g < grains.length; g++) {
         grains_x[g].push(step.grains_x?.[g] ?? 0);
         grains_Abc[g].push(step.grains_Abc?.[g] ?? 0);
@@ -585,6 +731,13 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     F_kg.push(F_RN_N / 9.81);
     E_N.push(TTI_Thrust_N);
     E_kg.push(TTI_Thrust_N / 9.81);
+
+    Kn_arr.push(step.Kn ?? 0);
+    At_mm2_arr.push(step.At_total_val ?? At0);
+    r_burn_arr.push(step.r_burn ?? 0);
+    mdot_gen_arr.push(step.mgen_kgs ?? 0);
+    mdot_noz_arr.push(step.mnoz_kgs ?? 0);
+    Ab_total_arr.push(step.Ab_total ?? 0);
  
     for (let g = 0; g < grains.length; g++) {
       grains_x[g].push(step.grains_x?.[g] ?? 0);
@@ -602,6 +755,13 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
       P_sum += step.P0_gage;
       active_burn_steps++;
       t_quemado = step.t;
+      if (step.Kn > Kn_max) Kn_max = step.Kn;
+      if (step.r_burn > r_max) r_max = step.r_burn;
+      if (step.mgen_kgs > mdot_max) mdot_max = step.mgen_kgs;
+      Kn_sum += step.Kn;
+      r_sum += step.r_burn;
+      mdot_sum += step.mgen_kgs;
+      Kn_final = step.Kn;
     }
     if (TTI_Thrust_N > 1) t_fin = step.t;
  
@@ -615,6 +775,10 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   const Pmed_MPa = active_burn_steps > 0 ? P_sum / active_burn_steps : 0;
   const Fmed_N = active_burn_steps > 0 ? It_total_N_s / t_quemado : 0;
   
+  const Kn_avg = active_burn_steps > 0 ? Kn_sum / active_burn_steps : (Kn_arr[0] || 0);
+  const r_avg = active_burn_steps > 0 ? r_sum / active_burn_steps : (r_burn_arr[0] || 0);
+  const mdot_avg = active_burn_steps > 0 ? mdot_sum / active_burn_steps : 0;
+
   const Isp_total_s = initialMassTotal > 0 ? It_total_N_s / (9.806 * initialMassTotal) : 0;
   const motorClass = classifyMotor(It_total_N_s);
   const k_avg = k_active_count > 0 ? k_sum_steps / k_active_count : (state[0]?.prop.k || 1.13);
@@ -630,6 +794,33 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     grains, grains_x, 
     grains_Abc, grains_Abe, grains_Abs, grains_Ab,
     propellantType: dominantPropellantType,
-    summary: { Pmax_MPa, Pmed_MPa, t_quemado, t_fin, Fmax_N, Fmed_N, It_total_N_s, Isp_total_s, motorClass, k_avg }
+    Kn: Kn_arr,
+    At_mm2: At_mm2_arr,
+    r_burn: r_burn_arr,
+    mdot_gen: mdot_gen_arr,
+    mdot_noz: mdot_noz_arr,
+    Ab_total: Ab_total_arr,
+    summary: { 
+      Pmax_MPa, 
+      Pmed_MPa, 
+      t_quemado, 
+      t_fin, 
+      Fmax_N, 
+      Fmed_N, 
+      It_total_N_s, 
+      Isp_total_s, 
+      motorClass, 
+      k_avg,
+      Kn_max,
+      Kn_avg,
+      Kn_initial: Kn_arr[0] || 0,
+      Kn_final,
+      r_max,
+      r_avg,
+      r_initial: r_burn_arr[0] || 0,
+      mdot_max,
+      mdot_avg,
+      initial_mass_g: initialMassTotal * 1000
+    }
   };
 }

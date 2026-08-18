@@ -25,9 +25,10 @@ export interface MotorInput {
 }
 
 export interface NozzleInput {
-  Dt0: number; // mm
-  Ds: number; // mm
-  e: number; // mm
+  Dt0: number; // mm (Initial throat diameter)
+  Ds: number; // mm (Exit diameter)
+  e: number; // mm (Throat diameter variation: >0 erosion, <0 slag deposition / constriction)
+  ero_model?: 1 | 2 | 3 | 4 | 5 | 6; // 1: Lineal, 2: Exponencial, 3: Cuadrática, 4: Raíz, 5: Parábola, 6: Senoidal
   alpha: number; // deg (divergence)
   etanoz: number;
 }
@@ -54,6 +55,15 @@ export interface SimulationResults {
   grains_Abs: number[][]; // [grainIndex][timeStep] array of external burn area
   grains_Ab: number[][];  // [grainIndex][timeStep] array of total burn area
   propellantType: number; // Dominant propellant type for visual rendering
+  
+  // Advanced Telemetry & Detailed Analysis Arrays
+  Kn?: number[];
+  At_mm2?: number[];
+  r_burn?: number[]; // mm/s
+  mdot_gen?: number[]; // kg/s
+  mdot_noz?: number[]; // kg/s
+  Ab_total?: number[]; // mm²
+
   summary: {
     Pmax_MPa: number;
     Pmed_MPa: number;
@@ -65,6 +75,16 @@ export interface SimulationResults {
     Isp_total_s: number;
     motorClass: string;
     k_avg: number;
+    Kn_max?: number;
+    Kn_avg?: number;
+    Kn_initial?: number;
+    Kn_final?: number;
+    r_max?: number;
+    r_avg?: number;
+    r_initial?: number;
+    mdot_max?: number;
+    mdot_avg?: number;
+    initial_mass_g?: number;
   };
 }
 
@@ -80,6 +100,140 @@ export const PROPELLANTS = [
 
 export function getPropellantData(type: number) {
   return PROPELLANTS.find(p => p.id === type) || PROPELLANTS[0];
+}
+
+export interface PropellantVisualProfile {
+  id: number;
+  name: string;
+  category: 'candy' | 'rnx' | 'apcp';
+  displayName: string;
+  hasFlame: boolean;
+  hasDiamonds: boolean;
+  isSmoky: boolean;
+  smokeColorHex: string;
+  smokeColorThree: number;
+  grainColorThree: number;
+  grainColor2D: string;
+  flameColorThree: number;
+  description: string;
+}
+
+export function getPropellantVisualProfile(type: number, lang: string = 'es'): PropellantVisualProfile {
+  switch (type) {
+    case 1:
+      return {
+        id: 1,
+        name: "KNDX-65/35",
+        category: 'candy',
+        displayName: lang === 'es' ? "Candy Dextrosa (KNDX)" : "Candy Dextrose (KNDX)",
+        hasFlame: false,
+        hasDiamonds: false,
+        isSmoky: true,
+        smokeColorHex: "#e2e8f0",
+        smokeColorThree: 0xf1f5f9,
+        grainColorThree: 0xd97706,
+        grainColor2D: "#d97706",
+        flameColorThree: 0xf59e0b,
+        description: lang === 'es' ? "Candy Dextrosa: Emisión de humo blanco denso sin llama visible" : "Candy Dextrose: Dense white smoke emission without visible flame"
+      };
+    case 2:
+      return {
+        id: 2,
+        name: "KNSO-65/35",
+        category: 'candy',
+        displayName: lang === 'es' ? "Candy Sorbitol (KNSO)" : "Candy Sorbitol (KNSO)",
+        hasFlame: false,
+        hasDiamonds: false,
+        isSmoky: true,
+        smokeColorHex: "#e2e8f0",
+        smokeColorThree: 0xf1f5f9,
+        grainColorThree: 0xd97706,
+        grainColor2D: "#d97706",
+        flameColorThree: 0xf59e0b,
+        description: lang === 'es' ? "Candy Sorbitol: Emisión de humo blanco denso sin llama visible" : "Candy Sorbitol: Dense white smoke emission without visible flame"
+      };
+    case 3:
+      return {
+        id: 3,
+        name: "KNSU-65/35",
+        category: 'candy',
+        displayName: lang === 'es' ? "Candy Sacarosa (KNSU)" : "Candy Sucrose (KNSU)",
+        hasFlame: false,
+        hasDiamonds: false,
+        isSmoky: true,
+        smokeColorHex: "#e2e8f0",
+        smokeColorThree: 0xf1f5f9,
+        grainColorThree: 0xd97706,
+        grainColor2D: "#d97706",
+        flameColorThree: 0xf59e0b,
+        description: lang === 'es' ? "Candy Sacarosa: Emisión de humo blanco denso sin llama visible" : "Candy Sucrose: Dense white smoke emission without visible flame"
+      };
+    case 4:
+      return {
+        id: 4,
+        name: "RNX-71V",
+        category: 'rnx',
+        displayName: lang === 'es' ? "Resina Epoxi (RNX-71V)" : "Epoxy Resin (RNX-71V)",
+        hasFlame: false,
+        hasDiamonds: false,
+        isSmoky: true,
+        smokeColorHex: "#111827",
+        smokeColorThree: 0x111827,
+        grainColorThree: 0x1e293b,
+        grainColor2D: "#1e293b",
+        flameColorThree: 0xea580c,
+        description: lang === 'es' ? "Resina Epoxi RNX-71V: Emisión de humo negro denso por combustión de resina" : "Epoxy Resin RNX-71V: Dense black smoke emission from resin combustion"
+      };
+    case 5:
+      return {
+        id: 5,
+        name: "RNX-57",
+        category: 'rnx',
+        displayName: lang === 'es' ? "Resina Epoxi (RNX-57)" : "Epoxy Resin (RNX-57)",
+        hasFlame: false,
+        hasDiamonds: false,
+        isSmoky: true,
+        smokeColorHex: "#111827",
+        smokeColorThree: 0x111827,
+        grainColorThree: 0x1e293b,
+        grainColor2D: "#1e293b",
+        flameColorThree: 0xea580c,
+        description: lang === 'es' ? "Resina Epoxi RNX-57: Emisión de humo negro denso por combustión de resina" : "Epoxy Resin RNX-57: Dense black smoke emission from resin combustion"
+      };
+    case 6:
+      return {
+        id: 6,
+        name: "AP+HTPB (Reliant Robin)",
+        category: 'apcp',
+        displayName: lang === 'es' ? "Perclorato Amónico (APCP Robin)" : "Ammonium Perchlorate (APCP Robin)",
+        hasFlame: true,
+        hasDiamonds: true,
+        isSmoky: false,
+        smokeColorHex: "#94a3b8",
+        smokeColorThree: 0x64748b,
+        grainColorThree: 0x94a3b8,
+        grainColor2D: "#94a3b8",
+        flameColorThree: 0x38bdf8,
+        description: lang === 'es' ? "Perclorato Amónico: Llama supersónica de alta energía con diamantes de choque" : "Ammonium Perchlorate: High-energy supersonic flame with shock diamonds"
+      };
+    case 7:
+    default:
+      return {
+        id: 7,
+        name: "AP+HTPB (Risky Batman)",
+        category: 'apcp',
+        displayName: lang === 'es' ? "Perclorato Amónico (APCP Batman)" : "Ammonium Perchlorate (APCP Batman)",
+        hasFlame: true,
+        hasDiamonds: true,
+        isSmoky: false,
+        smokeColorHex: "#94a3b8",
+        smokeColorThree: 0x94a3b8,
+        grainColorThree: 0x94a3b8,
+        grainColor2D: "#94a3b8",
+        flameColorThree: 0x38bdf8,
+        description: lang === 'es' ? "Perclorato Amónico: Llama supersónica de alta energía con diamantes de choque" : "Ammonium Perchlorate: High-energy supersonic flame with shock diamonds"
+      };
+  }
 }
 
 export function getBurnRate(P: number, type: number): { a: number; n: number } {

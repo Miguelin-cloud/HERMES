@@ -72,7 +72,7 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props & { keep
     <TabsPrimitive.Panel
       data-slot="tabs-content"
       keepMounted={props.keepMounted !== undefined ? props.keepMounted : true}
-      className={cn("flex-1 text-sm outline-none data-[state=inactive]:hidden", className)}
+      className={cn("flex-1 text-sm outline-none [&[hidden]]:!hidden data-hidden:!hidden data-[state=inactive]:!hidden", className)}
       {...props}
     />
   )

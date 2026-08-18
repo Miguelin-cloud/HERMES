@@ -1,26 +1,41 @@
 import React from 'react';
-import { SimulationResults } from '../lib/types';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { SimulationResults, getPropellantVisualProfile } from '../lib/types';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Layers } from 'lucide-react';
 
 export function GrainViewer({ results, timeIndex, t }: { results: SimulationResults, timeIndex: number, t?: any }) {
   if (!results || !results.grains || !results.t || results.t.length === 0) return null;
 
+  const profile = getPropellantVisualProfile(results.propellantType);
+  const grainFill = profile.grainColor2D || '#94a3b8';
+
   return (
     <Card className="h-full flex flex-col bg-card border-border shadow-sm text-card-foreground">
-      <CardHeader className="border-b border-border pb-3 bg-muted/50 flex-none text-cyan-400 font-mono tracking-tight text-[11px] uppercase">
+      <CardHeader className="border-b border-border py-2.5 px-4 bg-muted/60 flex-none text-foreground font-mono tracking-tight text-[11px] uppercase">
         <div className="flex justify-between items-center">
-            <span className="font-bold tracking-widest">{t?.geometric_analysis || 'Geometric Regression Analysis'}</span>
-            <div className="text-[10px] text-slate-400">{t?.propellant_geometry || 'PROPELLANT GEOMETRY'}</div>
+            <div className="flex items-center gap-2">
+              <Layers size={14} className="text-cyan-500" />
+              <span className="font-bold tracking-wider text-xs uppercase text-foreground">
+                {t?.geometric_analysis || 'Geometric Regression Analysis'}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border font-semibold">
+              {profile.displayName}
+            </span>
         </div>
       </CardHeader>
+      
       <CardContent className="flex-1 min-h-0 flex flex-col p-4 overflow-y-auto no-scrollbar">
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5">
           {/* Longitudinal View */}
           <div>
-             <h3 className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-widest flex items-center gap-2"><div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>{t?.side_profile || 'Longitudinal View'}</h3>
-             <div className="w-full flex justify-center bg-muted/50 rounded-xl p-4 overflow-hidden border border-border shadow-inner">
-                <svg width="100%" height="80" viewBox="0 0 400 80" preserveAspectRatio="xMidYMid meet" style={{ maxWidth: '400px' }}>
-                  <line x1="0" y1="40" x2="400" y2="40" stroke="#334155" strokeDasharray="4 4" />
+             <h3 className="text-xs font-bold text-foreground mb-2 uppercase tracking-wider flex items-center gap-2">
+               <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>
+               {t?.side_profile || 'Longitudinal View'}
+             </h3>
+             <div className="w-full flex justify-center bg-muted/40 rounded-xl p-3.5 overflow-hidden border border-border shadow-inner">
+                <svg width="100%" height="85" viewBox="0 0 400 85" preserveAspectRatio="xMidYMid meet" style={{ maxWidth: '420px' }}>
+                  <line x1="0" y1="42.5" x2="400" y2="42.5" stroke="#64748b" strokeDasharray="4 4" strokeWidth="1" />
                   {results.grains.map((g, i) => {
                      const xInfo = results.grains_x && results.grains_x[i] ? results.grains_x[i][timeIndex] : 0;
                      const x = xInfo || 0;
@@ -36,34 +51,34 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
                      const currentL = Math.max(0, g.L0 - g.ei * x * 2);
                      const currentDOuter = Math.max(0, g.D0 - g.osi * x * 2);
                      
-                     let coreTop = 40;
+                     let coreTop = 42.5;
                      let coreHeight = 0;
                      
                      if (g.shape === 1) { // Tubular
                        const currentDInner = g.d0 + g.ci * x * 2;
-                       coreTop = 40 - (currentDInner/2) * scaleY;
+                       coreTop = 42.5 - (currentDInner/2) * scaleY;
                        coreHeight = currentDInner * scaleY;
                      } else if (g.shape === 2) { // Star
                        const currentDInner = g.d0mayor + g.ci * x * 2;
-                       coreTop = 40 - (currentDInner/2) * scaleY;
+                       coreTop = 42.5 - (currentDInner/2) * scaleY;
                        coreHeight = currentDInner * scaleY;
-                     } // shape 3 solid has zero core
+                     }
 
                      return (
                        <g key={`long-${i}`}>
                          {Array.from({length: g.N}).map((_, j) => {
                            const segmentX = startX + j * g.L0 * scaleX + (g.ei * x * scaleX);
                            const segmentW = Math.max(0, currentL * scaleX);
-                           const gTop = 40 - (currentDOuter/2) * scaleY;
+                           const gTop = 42.5 - (currentDOuter/2) * scaleY;
                            const gHeight = Math.max(0, currentDOuter * scaleY);
                            
                            return (
                              <g key={`seg-${j}`}>
                                {segmentW > 0 && gHeight > 0 && (
-                                 <rect x={segmentX} y={gTop} width={segmentW} height={gHeight} fill="#94a3b8" />
+                                 <rect x={segmentX} y={gTop} width={segmentW} height={gHeight} fill={grainFill} stroke="#475569" strokeWidth="0.5" rx="1" />
                                )}
                                {g.shape !== 3 && segmentW > 0 && coreHeight > 0 && (
-                                 <rect x={segmentX} y={coreTop} width={segmentW} height={coreHeight} fill="#0f172a" />
+                                 <rect x={segmentX} y={coreTop} width={segmentW} height={coreHeight} fill="#0f172a" rx="0.5" />
                                )}
                              </g>
                            )
@@ -77,12 +92,15 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
 
           {/* Cross Section View */}
           <div>
-            <h3 className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-widest flex items-center gap-2"><div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>{t?.cross_section || 'Cross-Sectional View'}</h3>
-            <div className="flex justify-center gap-4 flex-wrap overflow-y-auto no-scrollbar pb-6 min-h-0">
+            <h3 className="text-xs font-bold text-foreground mb-2 uppercase tracking-wider flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>
+              {t?.cross_section || 'Cross-Sectional View'}
+            </h3>
+            <div className="flex justify-center gap-3.5 flex-wrap overflow-y-auto no-scrollbar pb-3 min-h-0">
               {results.grains.map((g, i) => {
                 const xInfo = results.grains_x && results.grains_x[i] ? results.grains_x[i][timeIndex] : 0;
                 const x = xInfo || 0;
-                const drawSize = 140; 
+                const drawSize = 130; 
                 const maxD = g.D0 || 100;
                 const scale = (drawSize - 20) / maxD;
                 
@@ -127,15 +145,20 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
                   }
                 }
 
+                const shapeLabel = g.shape === 1 ? 'Tubular' : g.shape === 2 ? 'Estrella' : 'Macizo';
+
                 return (
-                  <div key={g.id} className="flex flex-col items-center p-2 border border-border rounded-lg bg-card shadow-md bg-card border-border shadow-sm text-card-foreground">
-                    <span className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">{t?.grains || 'Grain'} {i+1}</span>
-                    <svg width={drawSize} height={drawSize} viewBox={`0 0 ${drawSize} ${drawSize}`} className="bg-card rounded border border-border">
-                      <line x1={drawSize/2} y1="0" x2={drawSize/2} y2={drawSize} stroke="#334155" strokeDasharray="2 2" />
-                      <line x1="0" y1={drawSize/2} x2={drawSize} y2={drawSize/2} stroke="#334155" strokeDasharray="2 2" />
+                  <div key={g.id || i} className="flex flex-col items-center p-2.5 border border-border rounded-lg bg-card shadow-sm text-card-foreground">
+                    <div className="flex items-center justify-between w-full mb-1.5 px-1 font-mono text-[10px]">
+                      <span className="font-bold text-foreground uppercase">{t?.grains || 'Grano'} {i+1}</span>
+                      <span className="text-muted-foreground text-[9px] font-semibold">({shapeLabel})</span>
+                    </div>
+                    <svg width={drawSize} height={drawSize} viewBox={`0 0 ${drawSize} ${drawSize}`} className="bg-muted/30 rounded border border-border">
+                      <line x1={drawSize/2} y1="0" x2={drawSize/2} y2={drawSize} stroke="#64748b" strokeDasharray="2 2" strokeWidth="0.8" />
+                      <line x1="0" y1={drawSize/2} x2={drawSize} y2={drawSize/2} stroke="#64748b" strokeDasharray="2 2" strokeWidth="0.8" />
                       
                       {pathStr && (
-                        <path d={pathStr} fill="#94a3b8" fillRule="evenodd" />
+                        <path d={pathStr} fill={grainFill} stroke="#475569" strokeWidth="0.5" fillRule="evenodd" />
                       )}
                       
                       {g.shape === 2 && corePathStr && (
@@ -156,3 +179,4 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
     </Card>
   );
 }
+

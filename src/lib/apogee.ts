@@ -15,12 +15,15 @@ const DEFAULT_MACH_REF = [0, 0.2, 0.4, 0.6, 0.8, 0.9, 1.0, 1.1, 1.2, 1.4, 1.6, 1
 const DEFAULT_CD_REF = [0.45, 0.45, 0.44, 0.44, 0.46, 0.52, 0.61, 0.65, 0.66, 0.61, 0.55, 0.51, 0.48, 0.42, 0.38, 0.35, 0.33]; // Sample empirical Cd curve for typical rockets
 
 function interp1(x: number[], y: number[], xi: number): number {
+    if (!x || x.length === 0 || !y || y.length === 0) return 0.45;
+    if (x.length === 1) return y[0];
     if (xi <= x[0]) return y[0];
     if (xi >= x[x.length - 1]) return y[y.length - 1];
     
     for (let i = 0; i < x.length - 1; i++) {
         if (xi >= x[i] && xi <= x[i + 1]) {
             const dx = x[i + 1] - x[i];
+            if (dx === 0) return y[i];
             const dy = y[i + 1] - y[i];
             return y[i] + dy * (xi - x[i]) / dx;
         }
@@ -98,9 +101,27 @@ export function calculateApogee(
    d_rocket: number = 0.08,
    h_launch: number = 169,
    T_celcius: number = 28,
-   mach_ref: number[] = DEFAULT_MACH_REF,
-   cd_ref: number[] = DEFAULT_CD_REF
+   mach_ref_raw: number[] = DEFAULT_MACH_REF,
+   cd_ref_raw: number[] = DEFAULT_CD_REF
 ): ApogeeResult {
+   // Sanitize and sort Mach-Cd pairs
+   let mach_ref = DEFAULT_MACH_REF;
+   let cd_ref = DEFAULT_CD_REF;
+   if (mach_ref_raw && cd_ref_raw && mach_ref_raw.length > 0 && cd_ref_raw.length > 0) {
+     const pairs: { m: number; cd: number }[] = [];
+     const len = Math.min(mach_ref_raw.length, cd_ref_raw.length);
+     for (let i = 0; i < len; i++) {
+       if (!isNaN(mach_ref_raw[i]) && !isNaN(cd_ref_raw[i])) {
+         pairs.push({ m: Math.max(0, mach_ref_raw[i]), cd: Math.max(0.01, cd_ref_raw[i]) });
+       }
+     }
+     if (pairs.length > 0) {
+       pairs.sort((a, b) => a.m - b.m);
+       mach_ref = pairs.map(p => p.m);
+       cd_ref = pairs.map(p => p.cd);
+     }
+   }
+
    const N = tt.length;
    const g0 = 9.80665;
    const R_earth = 6371000;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label as UiLabel } from "@/components/ui/label";
 import {
   Select,
@@ -22,7 +23,7 @@ import {
 import { SimulationResults } from "../lib/types";
 import { calculateApogee, ApogeeResult, getExitMach, getTTIThrustCoefficient } from "../lib/apogee";
 import { Language, translations } from "../lib/i18n";
-import { Download, FileSpreadsheet, Sparkles, CheckCircle2 } from "lucide-react";
+import { Download, FileSpreadsheet, Sparkles, CheckCircle2, Layers } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const NumberInputMC = ({
@@ -110,6 +111,143 @@ export function MissionControl({
   const [rocketDiameter, setRocketDiameter] = useState(80); // mm
   const [launchAltitude, setLaunchAltitude] = useState(169); // m
   const [launchTemp, setLaunchTemp] = useState(28); // ºC
+  
+  // Aerodynamic Data
+  const [useAeroData, setUseAeroData] = useState(false);
+  const [aeroDataRaw, setAeroDataRaw] = useState("");
+  const [aeroParsed, setAeroParsed] = useState<{ mach: number[], cd: number[] } | null>(null);
+  const [aeroInputTab, setAeroInputTab] = useState<"upload" | "manual">("upload");
+  const [aeroFileName, setAeroFileName] = useState<string>("");
+
+  const downloadAeroTemplate = () => {
+    const headers = "Mach,Cd\n";
+    const sample = "0.00,0.45\n0.20,0.45\n0.40,0.44\n0.60,0.44\n0.80,0.46\n0.90,0.52\n1.00,0.61\n1.10,0.65\n1.20,0.66\n1.40,0.61\n1.60,0.55\n1.80,0.51\n2.00,0.48\n2.50,0.42\n3.00,0.38\n3.50,0.35\n4.00,0.33\n";
+    const blob = new Blob([headers + sample], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "mach_cd_aerodynamics_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleAeroFileUpload = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLDivElement>) => {
+    let file: File | null = null;
+    if ("files" in e.target && e.target.files) {
+      file = e.target.files[0];
+    } else if ("dataTransfer" in e && e.dataTransfer.files) {
+      file = e.dataTransfer.files[0];
+    }
+    if (!file) return;
+
+    setAeroFileName(file.name);
+    const reader = new FileReader();
+    const isXlsx = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+
+    reader.onload = (evt) => {
+      try {
+        let data: any[][] = [];
+        if (isXlsx) {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: "binary" });
+          const wsName = wb.SheetNames[0];
+          const ws = wb.Sheets[wsName];
+          data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        } else {
+          const text = evt.target?.result as string;
+          data = text
+            .split(/\r?\n/)
+            .map((row) => row.split(/[\t,;]+/))
+            .filter((row) => row.length > 0 && row.some((c) => c.trim() !== ""));
+        }
+
+        if (data.length === 0) return;
+
+        let machIdx = 0;
+        let cdIdx = 1;
+
+        // Auto-detect header columns
+        for (let r = 0; r < Math.min(5, data.length); r++) {
+          const row = data[r];
+          if (!row) continue;
+          let foundM = -1;
+          let foundCd = -1;
+          for (let c = 0; c < row.length; c++) {
+            const s = String(row[c] || "").toLowerCase().trim();
+            if (s.includes("mach") || s === "m" || s.startsWith("mach_") || s.includes("velocidad")) {
+              foundM = c;
+            } else if (s.includes("cd") || s.includes("drag") || s.includes("coef") || s.includes("cx") || s.includes("resistencia") || s.includes("arrastre")) {
+              foundCd = c;
+            }
+          }
+          if (foundM !== -1 && foundCd !== -1) {
+            machIdx = foundM;
+            cdIdx = foundCd;
+            break;
+          }
+        }
+
+        const linesOut: string[] = [];
+        const mArr: number[] = [];
+        const cArr: number[] = [];
+
+        for (let i = 0; i < data.length; i++) {
+          const row = data[i];
+          if (!row || row.length === 0) continue;
+          if (machIdx >= row.length || cdIdx >= row.length) continue;
+
+          const mRaw = parseFloat(String(row[machIdx]).replace(",", "."));
+          const cRaw = parseFloat(String(row[cdIdx]).replace(",", "."));
+
+          if (!isNaN(mRaw) && !isNaN(cRaw)) {
+            mArr.push(mRaw);
+            cArr.push(cRaw);
+            linesOut.push(`${mRaw.toFixed(2)}\t${cRaw.toFixed(4)}`);
+          }
+        }
+
+        if (mArr.length > 0) {
+          setAeroDataRaw(linesOut.join("\n"));
+          setUseAeroData(true);
+        }
+      } catch (err) {
+        console.error("Error parsing aerodynamic file:", err);
+      }
+    };
+
+    if (isXlsx) {
+      reader.readAsBinaryString(file);
+    } else {
+      reader.readAsText(file);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!useAeroData || aeroDataRaw.trim() === "") {
+        setAeroParsed(null);
+        return;
+    }
+    const lines = aeroDataRaw.split(/\r?\n/);
+    const m: number[] = [];
+    const c: number[] = [];
+    for (const line of lines) {
+        const parts = line.split(/[\t,;]+/);
+        if (parts.length >= 2) {
+            const valM = parseFloat(parts[0].replace(",", "."));
+            const valC = parseFloat(parts[1].replace(",", "."));
+            if (!isNaN(valM) && !isNaN(valC)) {
+                m.push(valM);
+                c.push(valC);
+            }
+        }
+    }
+    if (m.length > 0) {
+        setAeroParsed({ mach: m, cd: c });
+    } else {
+        setAeroParsed(null);
+    }
+  }, [useAeroData, aeroDataRaw]);
 
   // Applied States for Calculation
   const [calcParams, setCalcParams] = useState({
@@ -117,16 +255,20 @@ export function MissionControl({
     rocketDiameter: 80,
     launchAltitude: 169,
     launchTemp: 28,
+    useAeroData: false,
+    aeroParsed: null as { mach: number[], cd: number[] } | null,
   });
 
   const hasChanges =
     dryMass !== calcParams.dryMass ||
     rocketDiameter !== calcParams.rocketDiameter ||
     launchAltitude !== calcParams.launchAltitude ||
-    launchTemp !== calcParams.launchTemp;
+    launchTemp !== calcParams.launchTemp ||
+    useAeroData !== calcParams.useAeroData ||
+    aeroParsed !== calcParams.aeroParsed;
 
   const handleUpdate = () => {
-    setCalcParams({ dryMass, rocketDiameter, launchAltitude, launchTemp });
+    setCalcParams({ dryMass, rocketDiameter, launchAltitude, launchTemp, useAeroData, aeroParsed });
   };
 
   // Simulated Apogee Result
@@ -138,15 +280,15 @@ export function MissionControl({
   >([]);
   const [presUnit, setPresUnit] = useState("MPa");
   const [forceUnit, setForceUnit] = useState("N");
-  const [expDataType, setExpDataType] = useState<"both" | "pressure" | "force">(
-    "both",
+  const [expDataType, setExpDataType] = useState<"time_thrust" | "time_pressure" | "time_both" | "time_p_time_f">(
+    "time_thrust",
   );
 
   const [calcExpParams, setCalcExpParams] = useState({
     expDataRaw: [] as { t: number; p: number; f: number }[],
     presUnit: "MPa",
     forceUnit: "N",
-    expDataType: "both" as "both" | "pressure" | "force",
+    expDataType: "time_thrust" as "time_thrust" | "time_pressure" | "time_both" | "time_p_time_f",
   });
 
   const hasExpChanges =
@@ -221,6 +363,8 @@ export function MissionControl({
         calcParams.rocketDiameter / 1000,
         calcParams.launchAltitude,
         calcParams.launchTemp,
+        calcParams.aeroParsed ? calcParams.aeroParsed.mach : undefined,
+        calcParams.aeroParsed ? calcParams.aeroParsed.cd : undefined
       );
       setSimApogee(simResult);
       setIsUpdating(false);
@@ -241,7 +385,7 @@ export function MissionControl({
 
       const exp_f_N = calcExpParams.expDataRaw.map((d) => {
         let f_N = 0;
-        if (calcExpParams.expDataType === "pressure") {
+        if (calcExpParams.expDataType === "time_pressure") {
           const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
           const P_Pa_gauge = P_MPa_gauge * 1e6;
           
@@ -260,6 +404,27 @@ export function MissionControl({
           
           const CF = getTTIThrustCoefficient(P_Pa_abs, Pa, k, epsilon, alpha_deg, etanoz);
           f_N = P_Pa_abs * At_m2 * CF;
+        } else if (calcExpParams.expDataType === "time_both" || calcExpParams.expDataType === "time_p_time_f") {
+          // If direct load cell force is available, prioritize it; otherwise calculate from pressure
+          if (d.f > 0) {
+            f_N = convertForceToN(d.f, calcExpParams.forceUnit);
+          } else if (d.p > 0) {
+            const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
+            const P_Pa_gauge = P_MPa_gauge * 1e6;
+            const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
+            const P_Pa_abs = Math.max(Pa, P_Pa_gauge + Pa);
+            const Dt = nozzleParams?.Dt0 || 18.8;
+            const Ds = nozzleParams?.Ds || 37.6;
+            const alpha_deg = nozzleParams?.alpha || 12;
+            const etanoz = nozzleParams?.etanoz || 0.95;
+            const At_m2 = Math.PI * Math.pow(Dt / 2000, 2);
+            const epsilon = Math.pow(Ds / Dt, 2);
+            const k = results?.summary.k_avg || 1.13;
+            const CF = getTTIThrustCoefficient(P_Pa_abs, Pa, k, epsilon, alpha_deg, etanoz);
+            f_N = P_Pa_abs * At_m2 * CF;
+          } else {
+            f_N = 0;
+          }
         } else {
           f_N = convertForceToN(Math.max(0, d.f), calcExpParams.forceUnit);
         }
@@ -285,22 +450,27 @@ export function MissionControl({
         calcParams.rocketDiameter / 1000,
         calcParams.launchAltitude,
         calcParams.launchTemp,
+        calcParams.aeroParsed ? calcParams.aeroParsed.mach : undefined,
+        calcParams.aeroParsed ? calcParams.aeroParsed.cd : undefined
       );
 
       setExpApogee(res);
       setIsUpdating(false);
     }, 50);
-  }, [calcExpParams, calcParams, results]);
+  }, [calcExpParams, calcParams, results, nozzleParams]);
 
   const downloadTemplate = () => {
     let headers = "";
     let sample = "";
-    if (expDataType === "both") {
-      headers = "Time,Pressure,Force\n";
-      sample = "0.00,0.10,0.0\n0.05,1.25,120.5\n0.10,2.85,340.2\n0.15,4.10,510.9\n0.20,3.95,490.4\n0.25,1.80,180.1\n0.30,0.10,0.0\n";
-    } else if (expDataType === "pressure") {
+    if (expDataType === "time_pressure") {
       headers = "Time,Pressure\n";
       sample = "0.00,0.10\n0.05,1.25\n0.10,2.85\n0.15,4.10\n0.20,3.95\n0.25,1.80\n0.30,0.10\n";
+    } else if (expDataType === "time_both") {
+      headers = "Time,Pressure,Force\n";
+      sample = "0.00,0.10,0.0\n0.05,1.25,120.5\n0.10,2.85,340.2\n0.15,4.10,510.9\n0.20,3.95,490.4\n0.25,1.80,180.1\n0.30,0.10,0.0\n";
+    } else if (expDataType === "time_p_time_f") {
+      headers = "Time_Pressure,Pressure,Time_Force,Force\n";
+      sample = "0.00,0.10,0.00,0.0\n0.05,1.25,0.04,120.5\n0.10,2.85,0.09,340.2\n0.15,4.10,0.14,510.9\n0.20,3.95,0.19,490.4\n0.25,1.80,0.24,180.1\n0.30,0.10,0.29,0.0\n";
     } else {
       headers = "Time,Force\n";
       sample = "0.00,0.0\n0.05,120.5\n0.10,340.2\n0.15,510.9\n0.20,490.4\n0.25,180.1\n0.30,0.0\n";
@@ -330,102 +500,170 @@ export function MissionControl({
 
       if (data.length === 0) return;
 
-      // Robust Column Header Detection
-      let timeIdx = 0;
-      let pressIdx = -1;
-      let forceIdx = -1;
-      let hasHeader = false;
+      const parsed: { t: number; p: number; f: number }[] = [];
 
-      // Scan first 5 rows for potential header words to support any language or order
-      for (let r = 0; r < Math.min(5, data.length); r++) {
-        const row = data[r] as any[];
-        if (!row) continue;
-        
+      // Independent Times Case (Time_P, Pressure, Time_F, Force)
+      if (expDataType === "time_p_time_f") {
+        let timePIdx = 0;
+        let pressIdx = 1;
+        let timeFIdx = 2;
+        let forceIdx = 3;
+
+        // Try to auto-detect columns from header row
+        for (let r = 0; r < Math.min(5, data.length); r++) {
+          const row = data[r] as any[];
+          if (!row) continue;
+          let foundTP = -1, foundP = -1, foundTF = -1, foundF = -1;
+
+          for (let c = 0; c < row.length; c++) {
+            const s = String(row[c] || "").toLowerCase().trim();
+            if (!s) continue;
+            if ((s.includes("time") || s.includes("tiempo") || s.startsWith("t")) && (s.includes("p") || s.includes("pres"))) {
+              foundTP = c;
+            } else if ((s.includes("time") || s.includes("tiempo") || s.startsWith("t")) && (s.includes("f") || s.includes("empuje") || s.includes("thrust") || s.includes("force"))) {
+              foundTF = c;
+            } else if (s.includes("press") || s.includes("pres") || s === "p" || s.includes("mpa") || s.includes("bar") || s.includes("psi")) {
+              foundP = c;
+            } else if (s.includes("force") || s.includes("thrust") || s.includes("empuje") || s.includes("fuerza") || s === "f" || s === "n" || s.includes("load")) {
+              foundF = c;
+            }
+          }
+
+          if (foundTP !== -1 || foundP !== -1 || foundTF !== -1 || foundF !== -1) {
+            if (foundTP !== -1) timePIdx = foundTP;
+            if (foundP !== -1) pressIdx = foundP;
+            if (foundTF !== -1) timeFIdx = foundTF;
+            if (foundF !== -1) forceIdx = foundF;
+            break;
+          }
+        }
+
+        const pPoints: { t: number; p: number }[] = [];
+        const fPoints: { t: number; f: number }[] = [];
+
+        for (let i = 0; i < data.length; i++) {
+          const row = data[i] as any[];
+          if (!row || row.length === 0) continue;
+
+          // Parse Pressure channel
+          if (timePIdx < row.length && pressIdx < row.length) {
+            const tpRaw = parseFloat(String(row[timePIdx]).replace(",", "."));
+            const pRaw = parseFloat(String(row[pressIdx]).replace(",", "."));
+            if (!isNaN(tpRaw) && !isNaN(pRaw)) {
+              pPoints.push({ t: tpRaw, p: pRaw });
+            }
+          }
+
+          // Parse Force channel
+          if (timeFIdx < row.length && forceIdx < row.length) {
+            const tfRaw = parseFloat(String(row[timeFIdx]).replace(",", "."));
+            const fRaw = parseFloat(String(row[forceIdx]).replace(",", "."));
+            if (!isNaN(tfRaw) && !isNaN(fRaw)) {
+              fPoints.push({ t: tfRaw, f: fRaw });
+            }
+          }
+        }
+
+        pPoints.sort((a, b) => a.t - b.t);
+        fPoints.sort((a, b) => a.t - b.t);
+
+        // Linear interpolation helper
+        const interp = (pts: { t: number; val: number }[], targetT: number): number => {
+          if (pts.length === 0) return 0;
+          if (targetT <= pts[0].t) return pts[0].val;
+          if (targetT >= pts[pts.length - 1].t) return pts[pts.length - 1].val;
+          let idx = 0;
+          while (idx < pts.length - 1 && pts[idx + 1].t <= targetT) idx++;
+          const p0 = pts[idx];
+          const p1 = pts[idx + 1];
+          if (p1.t === p0.t) return p0.val;
+          return p0.val + ((targetT - p0.t) / (p1.t - p0.t)) * (p1.val - p0.val);
+        };
+
+        const pAdapter = pPoints.map(pt => ({ t: pt.t, val: pt.p }));
+        const fAdapter = fPoints.map(pt => ({ t: pt.t, val: pt.f }));
+
+        const allTimeSet = new Set<number>();
+        pPoints.forEach(pt => allTimeSet.add(Number(pt.t.toFixed(6))));
+        fPoints.forEach(pt => allTimeSet.add(Number(pt.t.toFixed(6))));
+        const allTimes = Array.from(allTimeSet).sort((a, b) => a - b);
+
+        for (const t of allTimes) {
+          const p = interp(pAdapter, t);
+          const f = interp(fAdapter, t);
+          parsed.push({ t, p, f });
+        }
+      } else {
+        // Robust Column Header Detection for Standard, Pressure, or Shared-Time modes
+        let timeIdx = 0;
+        let pressIdx = -1;
+        let forceIdx = -1;
         let foundTime = -1;
         let foundPress = -1;
         let foundForce = -1;
+        let hasHeader = false;
 
-        for (let c = 0; c < row.length; c++) {
-          const valStr = String(row[c] || "").toLowerCase().trim();
-          if (!valStr) continue;
+        for (let r = 0; r < Math.min(5, data.length); r++) {
+          const row = data[r] as any[];
+          if (!row) continue;
           
-          if (valStr.includes("time") || valStr.includes("tiempo") || valStr === "t" || valStr === "s" || valStr.includes("seconds") || valStr.includes("seg")) {
-            foundTime = c;
-          } else if (valStr.includes("press") || valStr.includes("pres") || valStr === "p" || valStr.includes("mpa") || valStr.includes("bar") || valStr.includes("psi") || valStr.includes("chamber") || valStr.includes("cámara")) {
-            foundPress = c;
-          } else if (valStr.includes("force") || valStr.includes("thrust") || valStr.includes("empuje") || valStr.includes("fuerza") || valStr === "f" || valStr === "n" || valStr.includes("load")) {
-            foundForce = c;
+          foundTime = -1;
+          foundPress = -1;
+          foundForce = -1;
+
+          for (let c = 0; c < row.length; c++) {
+            const valStr = String(row[c] || "").toLowerCase().trim();
+            if (!valStr) continue;
+            
+            if (valStr.includes("time") || valStr.includes("tiempo") || valStr === "t" || valStr === "s" || valStr.includes("seconds") || valStr.includes("seg")) {
+              foundTime = c;
+            } else if (valStr.includes("press") || valStr.includes("pres") || valStr === "p" || valStr.includes("mpa") || valStr.includes("bar") || valStr.includes("psi") || valStr.includes("chamber") || valStr.includes("cámara")) {
+              foundPress = c;
+            } else if (valStr.includes("force") || valStr.includes("thrust") || valStr.includes("empuje") || valStr.includes("fuerza") || valStr === "f" || valStr === "n" || valStr.includes("load")) {
+              foundForce = c;
+            }
+          }
+
+          if (foundTime !== -1 && (foundPress !== -1 || foundForce !== -1)) {
+            timeIdx = foundTime;
+            if (foundPress !== -1) pressIdx = foundPress;
+            if (foundForce !== -1) forceIdx = foundForce;
+            hasHeader = true;
+            break;
           }
         }
 
-        // We found a matching time plus at least one of the inputs
-        if (foundTime !== -1 && (foundPress !== -1 || foundForce !== -1)) {
-          timeIdx = foundTime;
-          if (foundPress !== -1) pressIdx = foundPress;
-          if (foundForce !== -1) forceIdx = foundForce;
-          hasHeader = true;
-          break;
+        // Default fallbacks by expDataType if no header found
+        if (!hasHeader) {
+          if (expDataType === "time_thrust") {
+            timeIdx = 0;
+            forceIdx = 1;
+            pressIdx = -1;
+          } else if (expDataType === "time_pressure") {
+            timeIdx = 0;
+            pressIdx = 1;
+            forceIdx = -1;
+          } else if (expDataType === "time_both") {
+            timeIdx = 0;
+            pressIdx = 1;
+            forceIdx = 2;
+          }
         }
-      }
 
-      // Default fallback if we did not auto-detect a header
-      if (!hasHeader) {
-        timeIdx = 0;
-        if (expDataType === "force") {
-          forceIdx = 1;
-          pressIdx = -1;
-        } else if (expDataType === "pressure") {
-          pressIdx = 1;
-          forceIdx = -1;
-        } else {
-          pressIdx = 1;
-          forceIdx = 2;
-        }
-      }
-
-      // Parse data
-      const parsed: { t: number; p: number; f: number }[] = [];
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i] as any[];
-        if (!row || row.length === 0) continue;
-
-        // Try extracting numeric values
-        const t_raw = parseFloat(String(row[timeIdx]).replace(",", "."));
-        const p_raw = pressIdx !== -1 && pressIdx < row.length ? parseFloat(String(row[pressIdx]).replace(",", ".")) : 0;
-        const f_raw = forceIdx !== -1 && forceIdx < row.length ? parseFloat(String(row[forceIdx]).replace(",", ".")) : 0;
-
-        // If time is completely non-numeric (e.g. the header itself), skip
-        if (isNaN(t_raw)) continue;
-
-        const t_val = t_raw;
-        const p_val = isNaN(p_raw) ? 0 : p_raw;
-        const f_val = isNaN(f_raw) ? 0 : f_raw;
-
-        parsed.push({ t: t_val, p: p_val, f: f_val });
-      }
-
-      // Fallback index-based parser if empty parsed array
-      if (parsed.length === 0) {
         for (let i = 0; i < data.length; i++) {
           const row = data[i] as any[];
-          if (!row || row.length < 2) continue;
-          
-          const t_val = parseFloat(String(row[0]).replace(",", "."));
-          let p_val = 0;
-          let f_val = 0;
-          
-          if (expDataType === "force") {
-            f_val = parseFloat(String(row[1]).replace(",", "."));
-          } else if (expDataType === "pressure") {
-            p_val = parseFloat(String(row[1]).replace(",", "."));
-          } else if (expDataType === "both" && row.length >= 3) {
-            p_val = parseFloat(String(row[1]).replace(",", "."));
-            f_val = parseFloat(String(row[2]).replace(",", "."));
-          }
-          
-          if (!isNaN(t_val) && !isNaN(p_val) && !isNaN(f_val)) {
-            parsed.push({ t: t_val, p: p_val, f: f_val });
-          }
+          if (!row || row.length === 0) continue;
+
+          const t_raw = parseFloat(String(row[timeIdx]).replace(",", "."));
+          if (isNaN(t_raw)) continue;
+
+          const p_raw = pressIdx !== -1 && pressIdx < row.length ? parseFloat(String(row[pressIdx]).replace(",", ".")) : 0;
+          const f_raw = forceIdx !== -1 && forceIdx < row.length ? parseFloat(String(row[forceIdx]).replace(",", ".")) : 0;
+
+          const p_val = isNaN(p_raw) ? 0 : p_raw;
+          const f_val = isNaN(f_raw) ? 0 : f_raw;
+
+          parsed.push({ t: t_raw, p: p_val, f: f_val });
         }
       }
 
@@ -471,34 +709,32 @@ export function MissionControl({
       let exp_F: number | null = null;
       let exp_P_F: number | null = null;
 
-      if (
-        calcExpParams.expDataType === "force" ||
-        calcExpParams.expDataType === "both"
-      ) {
-        exp_F = Math.max(0, convertForceToN(d.f, calcExpParams.forceUnit));
+      if (calcExpParams.expDataType !== "time_pressure") {
+        if (d.f !== undefined && d.f !== null) {
+          exp_F = Math.max(0, convertForceToN(d.f, calcExpParams.forceUnit));
+        }
       }
-      if (
-        calcExpParams.expDataType === "pressure" ||
-        calcExpParams.expDataType === "both"
-      ) {
-        const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
-        const P_Pa_gauge = P_MPa_gauge * 1e6;
-        
-        const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
-        // Absolute chamber pressure: gauge pressure + atmospheric pressure (never below Pa)
-        const P_Pa_abs = Math.max(Pa, P_Pa_gauge + Pa);
-        
-        const Dt = nozzleParams?.Dt0 || 18.8; // mm
-        const Ds = nozzleParams?.Ds || 37.6; // mm
-        const alpha_deg = nozzleParams?.alpha || 12; // deg
-        const etanoz = nozzleParams?.etanoz || 0.95;
-        const At_m2 = Math.PI * Math.pow(Dt / 2000, 2);
-        const epsilon = Math.pow(Ds / Dt, 2);
+      if (calcExpParams.expDataType !== "time_thrust") {
+        if (d.p !== undefined && d.p !== null) {
+          const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
+          const P_Pa_gauge = P_MPa_gauge * 1e6;
+          
+          const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
+          // Absolute chamber pressure: gauge pressure + atmospheric pressure (never below Pa)
+          const P_Pa_abs = Math.max(Pa, P_Pa_gauge + Pa);
+          
+          const Dt = nozzleParams?.Dt0 || 18.8; // mm
+          const Ds = nozzleParams?.Ds || 37.6; // mm
+          const alpha_deg = nozzleParams?.alpha || 12; // deg
+          const etanoz = nozzleParams?.etanoz || 0.95;
+          const At_m2 = Math.PI * Math.pow(Dt / 2000, 2);
+          const epsilon = Math.pow(Ds / Dt, 2);
 
-        const k = results?.summary.k_avg || 1.13;
+          const k = results?.summary.k_avg || 1.13;
 
-        const CF = getTTIThrustCoefficient(P_Pa_abs, Pa, k, epsilon, alpha_deg, etanoz);
-        exp_P_F = Math.max(0, P_Pa_abs * At_m2 * CF);
+          const CF = getTTIThrustCoefficient(P_Pa_abs, Pa, k, epsilon, alpha_deg, etanoz);
+          exp_P_F = Math.max(0, P_Pa_abs * At_m2 * CF);
+        }
       }
       return { exp_F, exp_P_F };
     };
@@ -561,6 +797,7 @@ export function MissionControl({
     <div className="w-full flex flex-col gap-4">
       {/* Controls */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex flex-col gap-4">
         {/* Rocket Parameters */}
         <Card className="bg-card border-border shadow-sm">
           <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
@@ -604,6 +841,166 @@ export function MissionControl({
             />
           </CardContent>
         </Card>
+        
+        {/* Aerodynamic Data */}
+        <Card className="bg-card border-border shadow-sm flex-1">
+          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
+            <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
+              {lang === "es" ? "Datos Aerodinámicos (Mach vs Cd)" : "Aerodynamic Data (Mach vs Cd)"}
+            </CardTitle>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
+                <UiLabel htmlFor="use-aero" className="text-[10px] uppercase font-bold text-muted-foreground cursor-pointer">
+                  {lang === "es" ? "Usar Personalizado" : "Use Custom"}
+                </UiLabel>
+                <Checkbox id="use-aero" checked={useAeroData} onCheckedChange={(v) => setUseAeroData(!!v)} />
+              </div>
+              <Button
+                size="sm"
+                onClick={handleUpdate}
+                disabled={!hasChanges || isUpdating}
+                variant={hasChanges ? "default" : "secondary"}
+                className="h-6 text-[10px] px-2 py-0 shrink-0"
+              >
+                {isUpdating ? "..." : t.update_btn || "Actualizar"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-3 flex flex-col gap-2.5">
+             <p className="text-[10px] text-muted-foreground leading-snug">
+               {lang === "es" 
+                 ? "Opcional. Importa o pega la curva de coeficiente de resistencia (Mach, Cd) desde Excel o CSV. Si no se especifican datos, se aplicará el modelo aerodinámico supersónico estándar." 
+                 : "Optional. Import or paste drag coefficient data (Mach, Cd) from Excel or CSV. If unselected or empty, a standard supersonic aerodynamic profile is used."}
+             </p>
+             
+             {useAeroData && (
+                <div className="space-y-2.5">
+                  {/* Mode Selector Tabs */}
+                  <div className="flex items-center gap-1.5 p-0.5 bg-muted/60 rounded-md border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setAeroInputTab("upload")}
+                      className={`flex-1 py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1.5 ${
+                        aeroInputTab === "upload"
+                          ? "bg-background text-foreground shadow-xs border border-border/50"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <FileSpreadsheet className="w-3 h-3 text-purple-500" />
+                      {lang === "es" ? "Importar Archivo CSV / Excel" : "Upload CSV / Excel File"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAeroInputTab("manual")}
+                      className={`flex-1 py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1.5 ${
+                        aeroInputTab === "manual"
+                          ? "bg-background text-foreground shadow-xs border border-border/50"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Layers className="w-3 h-3 text-indigo-400" />
+                      {lang === "es" ? "Editor Manual / Pegar" : "Manual Paste / Editor"}
+                    </button>
+                  </div>
+
+                  {aeroInputTab === "upload" ? (
+                    <div className="space-y-2">
+                      {/* Structure Diagram & Template Download */}
+                      <div className="bg-muted/40 border border-border p-2 rounded-md text-[10px] space-y-1.5">
+                        <div className="flex items-center justify-between text-muted-foreground font-semibold">
+                          <span className="uppercase tracking-wider text-[9px]">
+                            {lang === "es" ? "Estructura esperada (Mach vs Cd)" : "Expected Format (Mach vs Cd)"}
+                          </span>
+                          <Button
+                            onClick={downloadAeroTemplate}
+                            size="sm"
+                            variant="outline"
+                            className="h-5 text-[9px] gap-1 px-1.5 py-0 border-purple-500/30 hover:border-purple-500 bg-background/50 hover:bg-purple-500/5 text-purple-600 dark:text-purple-400 font-bold"
+                          >
+                            <Download className="h-2.5 w-2.5" />
+                            {lang === "es" ? "Descargar Plantilla CSV" : "Download CSV Template"}
+                          </Button>
+                        </div>
+                        
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left font-mono border-collapse text-[9px]">
+                            <thead>
+                              <tr className="border-b border-border/60 text-muted-foreground/80">
+                                <th className="py-0.5 px-1.5">Col 1 ({lang === "es" ? "Mach" : "Mach"})</th>
+                                <th className="py-0.5 px-1.5">Col 2 ({lang === "es" ? "Cd (Arrastre)" : "Cd (Drag)"})</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b border-border/30 text-muted-foreground">
+                                <td className="py-0.5 px-1.5 font-bold text-foreground">0.00</td>
+                                <td className="py-0.5 px-1.5 text-purple-400">0.45</td>
+                              </tr>
+                              <tr className="border-b border-border/30 text-muted-foreground">
+                                <td className="py-0.5 px-1.5 font-bold text-foreground">1.00</td>
+                                <td className="py-0.5 px-1.5 text-purple-400">0.61</td>
+                              </tr>
+                              <tr className="border-b border-border/30 text-muted-foreground">
+                                <td className="py-0.5 px-1.5 font-bold text-foreground">2.00</td>
+                                <td className="py-0.5 px-1.5 text-purple-400">0.48</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Dropzone */}
+                      <div className="relative border-2 border-dashed border-border p-3 rounded-md text-center hover:bg-muted/30 transition-colors cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".csv, .xlsx, .xls, .txt"
+                          onChange={handleAeroFileUpload}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <FileSpreadsheet className="h-5 w-5 text-purple-500 mx-auto mb-1 opacity-80" />
+                        <p className="text-[10.5px] text-foreground font-semibold">
+                          {aeroParsed && aeroParsed.mach.length > 0 ? (
+                            <span className="text-emerald-500 dark:text-emerald-400 flex items-center justify-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 inline text-emerald-500" />
+                              {aeroFileName ? `${aeroFileName} (${aeroParsed.mach.length} pts)` : `${aeroParsed.mach.length} ${lang === "es" ? "puntos cargados con éxito" : "points loaded successfully"}`}
+                            </span>
+                          ) : (
+                            lang === "es" ? "Haz clic o arrastra tu archivo CSV o Excel aquí" : "Click or drop your Excel/CSV file here"
+                          )}
+                        </p>
+                        <p className="text-[9.5px] text-muted-foreground mt-0.5 font-mono">
+                          {lang === "es" ? "Reconoce cabeceras 'Mach', 'Cd', 'Drag', 'Coeficiente' automáticamente" : "Auto-detects 'Mach', 'Cd', 'Drag', 'Coefficient' headers"}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-h-[120px] flex flex-col relative">
+                      <textarea
+                        className="w-full h-full min-h-[130px] p-2 text-xs font-mono bg-muted/30 border border-border rounded focus:outline-none focus:ring-1 focus:ring-purple-500 resize-y"
+                        placeholder={lang === "es" ? "0.0\t0.45\n0.2\t0.45\n0.8\t0.46\n1.0\t0.61\n1.2\t0.66\n2.0\t0.48\n3.0\t0.38..." : "0.0\t0.45\n0.2\t0.45\n0.8\t0.46\n1.0\t0.61\n1.2\t0.66\n2.0\t0.48\n3.0\t0.38..."}
+                        value={aeroDataRaw}
+                        onChange={(e) => setAeroDataRaw(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Summary status badge */}
+                  {aeroParsed && aeroParsed.mach.length > 0 && (
+                    <div className="flex items-center justify-between p-1.5 px-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9.5px] text-emerald-600 dark:text-emerald-400 font-mono">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <CheckCircle2 size={11} />
+                        <span>{aeroParsed.mach.length} {lang === "es" ? "puntos procesados" : "points loaded"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span>M: {Math.min(...aeroParsed.mach).toFixed(1)} - {Math.max(...aeroParsed.mach).toFixed(1)}</span>
+                        <span>Cd max: {Math.max(...aeroParsed.cd).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+             )}
+          </CardContent>
+        </Card>
+        </div>
 
         {/* Experimental Data Upload */}
         <Card className="bg-card border-border shadow-sm">
@@ -634,32 +1031,34 @@ export function MissionControl({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-popover text-popover-foreground border-border">
-                  <SelectItem value="both">
-                    {t.cols_3 || "Time, Pressure, Force (3 cols)"}
+                  <SelectItem value="time_thrust">
+                    {lang === "es" ? "Tiempo y Empuje (Recomendado)" : "Time and Thrust (Recommended)"}
                   </SelectItem>
-                  <SelectItem value="pressure">
-                    {t.cols_2p || "Only Time and Pressure (2 cols)"}
+                  <SelectItem value="time_pressure">
+                    {lang === "es" ? "Tiempo y Presión" : "Time and Pressure"}
                   </SelectItem>
-                  <SelectItem value="force">
-                    {t.cols_2f || "Only Time and Force (2 cols)"}
+                  <SelectItem value="time_both">
+                    {lang === "es" ? "Tiempo, Presión y Empuje (Mismo Tiempo)" : "Time, Pressure & Thrust (Shared Time)"}
+                  </SelectItem>
+                  <SelectItem value="time_p_time_f">
+                    {lang === "es" ? "Tiempos Independientes (Tiempo P, Presión, Tiempo F, Empuje)" : "Independent Times (Time P, Pressure, Time F, Thrust)"}
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {expDataType === "pressure" && (
+              {expDataType === "time_pressure" && (
                 <p className="text-[9px] text-emerald-500 italic mt-0.5 leading-tight">
                   {t.est_thrust_msg ||
                     "* Thrust will be estimated from pressure using nozzle data."}
                 </p>
               )}
               <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
-                {expDataType === "both"
-                  ? t.import_desc_both ||
-                    "Calculates altitude and thrust from experimental pressure and thrust from Excel. Plotted alongside simulation data if available."
-                  : expDataType === "pressure"
-                    ? t.import_desc_pressure ||
-                      "Calculates thrust using experimental pressure and nozzle inputs (Dt0), then calculates altitude. Plotted alongside simulation if available."
-                    : t.import_desc_force ||
-                      "Uses experimental thrust to calculate altitude. Plotted alongside simulation data if available."}
+                {expDataType === "time_pressure"
+                  ? (t.import_desc_pressure || "Calculates thrust using experimental pressure and nozzle inputs (Dt0), then calculates altitude. Plotted alongside simulation if available.")
+                  : expDataType === "time_both"
+                  ? (lang === "es" ? "Importa presión y empuje compartiendo el mismo tiempo (3 columnas: Tiempo, Presión, Empuje). Permite contrastar el empuje medido con el deducido de la presión." : "Imports pressure and thrust with a shared time column (3 columns: Time, Pressure, Thrust). Allows plotting both curves and comparing.")
+                  : expDataType === "time_p_time_f"
+                  ? (lang === "es" ? "Importa presión y empuje con marcas de tiempo independientes (4 columnas: Tiempo P, Presión, Tiempo F, Empuje) por si cada sensor registró tiempos distintos. Sincroniza e interpola ambas señales automáticamente." : "Imports pressure and thrust with independent timestamp columns (4 columns: Time P, Pressure, Time F, Thrust) if sensors had different sample times. Automatically synchronizes and interpolates both signals.")
+                  : (t.import_desc_force || "Uses experimental thrust to calculate altitude. Plotted alongside simulation data if available.")}
               </p>
             </div>
             
@@ -720,21 +1119,69 @@ export function MissionControl({
                 <table className="w-full text-left font-mono border-collapse">
                   <thead>
                     <tr className="border-b border-border/60 text-muted-foreground/80 text-[9px]">
-                      <th className="py-1 px-2">Col 1 ({lang === "es" ? "Tiempo" : "Time"})</th>
-                      <th className="py-1 px-2">Col 2 ({expDataType === "force" ? (lang === "es" ? "Empuje" : "Force") : (lang === "es" ? "Presión" : "Pressure")})</th>
-                      {expDataType === "both" && <th className="py-1 px-2">Col 3 ({lang === "es" ? "Empuje" : "Force"})</th>}
+                      {expDataType === "time_p_time_f" ? (
+                        <>
+                          <th className="py-1 px-1.5">Col 1 ({lang === "es" ? "Tiempo P" : "Time P"})</th>
+                          <th className="py-1 px-1.5">Col 2 ({lang === "es" ? "Presión" : "Pressure"})</th>
+                          <th className="py-1 px-1.5">Col 3 ({lang === "es" ? "Tiempo F" : "Time F"})</th>
+                          <th className="py-1 px-1.5">Col 4 ({lang === "es" ? "Empuje" : "Thrust"})</th>
+                        </>
+                      ) : expDataType === "time_both" ? (
+                        <>
+                          <th className="py-1 px-1.5">Col 1 ({lang === "es" ? "Tiempo" : "Time"})</th>
+                          <th className="py-1 px-1.5">Col 2 ({lang === "es" ? "Presión" : "Pressure"})</th>
+                          <th className="py-1 px-1.5">Col 3 ({lang === "es" ? "Empuje" : "Thrust"})</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="py-1 px-2">Col 1 ({lang === "es" ? "Tiempo" : "Time"})</th>
+                          <th className="py-1 px-2">Col 2 ({expDataType === "time_thrust" ? (lang === "es" ? "Empuje" : "Force") : (lang === "es" ? "Presión" : "Pressure")})</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     <tr className="border-b border-border/30 text-[9.5px]">
-                      <td className="py-1 px-2 font-bold text-foreground">0.00</td>
-                      <td className="py-1 px-2 text-[#a855f7]">{expDataType === "force" ? "0.0" : "0.10"}</td>
-                      {expDataType === "both" && <td className="py-1 px-2 text-[#3b82f6]">0.0</td>}
+                      {expDataType === "time_p_time_f" ? (
+                        <>
+                          <td className="py-1 px-1.5 font-bold text-foreground">0.00</td>
+                          <td className="py-1 px-1.5 text-[#06b6d4]">0.10</td>
+                          <td className="py-1 px-1.5 font-bold text-foreground">0.00</td>
+                          <td className="py-1 px-1.5 text-[#a855f7]">0.0</td>
+                        </>
+                      ) : expDataType === "time_both" ? (
+                        <>
+                          <td className="py-1 px-1.5 font-bold text-foreground">0.00</td>
+                          <td className="py-1 px-1.5 text-[#06b6d4]">0.10</td>
+                          <td className="py-1 px-1.5 text-[#a855f7]">0.0</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-1 px-2 font-bold text-foreground">0.00</td>
+                          <td className="py-1 px-2 text-[#a855f7]">{expDataType === "time_thrust" ? "0.0" : "0.10"}</td>
+                        </>
+                      )}
                     </tr>
                     <tr className="border-b border-border/30 text-[9.5px]">
-                      <td className="py-1 px-2 font-bold text-foreground">0.15</td>
-                      <td className="py-1 px-2 text-[#a855f7]">{expDataType === "force" ? "510.9" : "4.10"}</td>
-                      {expDataType === "both" && <td className="py-1 px-2 text-[#3b82f6]">510.9</td>}
+                      {expDataType === "time_p_time_f" ? (
+                        <>
+                          <td className="py-1 px-1.5 font-bold text-foreground">0.15</td>
+                          <td className="py-1 px-1.5 text-[#06b6d4]">4.10</td>
+                          <td className="py-1 px-1.5 font-bold text-foreground">0.14</td>
+                          <td className="py-1 px-1.5 text-[#a855f7]">510.9</td>
+                        </>
+                      ) : expDataType === "time_both" ? (
+                        <>
+                          <td className="py-1 px-1.5 font-bold text-foreground">0.15</td>
+                          <td className="py-1 px-1.5 text-[#06b6d4]">4.10</td>
+                          <td className="py-1 px-1.5 text-[#a855f7]">510.9</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-1 px-2 font-bold text-foreground">0.15</td>
+                          <td className="py-1 px-2 text-[#a855f7]">{expDataType === "time_thrust" ? "510.9" : "4.10"}</td>
+                        </>
+                      )}
                     </tr>
                   </tbody>
                 </table>
@@ -1120,8 +1567,7 @@ export function MissionControl({
                           />
                         )}
                         {calcExpParams.expDataRaw.length > 0 &&
-                          (calcExpParams.expDataType === "force" ||
-                            calcExpParams.expDataType === "both") && (
+                          calcExpParams.expDataType !== "time_pressure" && (
                             <Line
                               connectNulls
                               type="monotone"
@@ -1134,8 +1580,7 @@ export function MissionControl({
                             />
                           )}
                         {calcExpParams.expDataRaw.length > 0 &&
-                          (calcExpParams.expDataType === "pressure" ||
-                            calcExpParams.expDataType === "both") && (
+                          calcExpParams.expDataType !== "time_thrust" && (
                             <Line
                               connectNulls
                               type="monotone"

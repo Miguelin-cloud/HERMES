@@ -9,10 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PROPELLANTS, SimulationInputs, SimulationResults } from './lib/types';
+import { PROPELLANTS, SimulationInputs, SimulationResults, getPropellantData } from './lib/types';
 import { runSimulation } from './lib/simulator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Label as ChartLabel } from 'recharts';
-import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen, FolderOpen, Trash2, Folder } from 'lucide-react';
+import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen, FolderOpen, Trash2, Folder, Wrench, Search, Sparkles, Brain, Bot, AlertTriangle, Construction, Cpu, ShieldCheck, DownloadCloud, Target, Info } from 'lucide-react';
 
 import { GrainViewer } from './components/GrainViewer';
 import { EngineViewer } from './components/EngineViewer';
@@ -20,7 +20,9 @@ import { GrainPreview } from './components/GrainPreview';
 import { MotorPreview } from './components/MotorPreview';
 import { PlaybackWrapper } from './components/PlaybackWrapper';
 import { MissionControl } from './components/MissionControl';
+import { DetailedAnalysisView } from './components/DetailedAnalysisView';
 import { SplashScreen } from './components/SplashScreen';
+import { VersionHistoryBook } from './components/VersionHistoryBook';
 import { Language, translations } from './lib/i18n';
 import { Logo } from './components/Logo';
 
@@ -192,7 +194,7 @@ const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
   it: [
     { title: "1. Inputs (Ingressi)", content: ["Configura la geometria della camera di combustione e dell'ugello.", "Definisci uno o più grani di propellente (Cilindrico, Stella, Solido).", "Regola i parametri del motore e i tipi di propellente."] },
     { title: "2. Results (Risultati)", content: ["Premi il pulsante rosso 'SIMULA' per avviare il motore.", "Analizza i grafici della pressione e della spinta in tempo reale.", "Esporta i dati in CSV per Excel."] },
-    { title: "3. Analysis (Analisi)", content: ["Esamina l'impulso totale, l'impulso specifico e la velocità caratteristica (C*).", "Controlla la classificazione del motore (es. H, I, J).", "Analizza i tempi di combustione individuali di ogni blocco."] },
+    { title: "3. Analysis (Analisi)", content: ["Esamina l'impulso totale, l'impulso specifico e la velocidad caratteristica (C*).", "Controlla la classificazione del motore (es. H, I, J).", "Analizza i tempi di combustione individuali di ogni blocco."] },
     { title: "4. Mission Control", content: ["Simula un volo verticale 1D usando la curva di spinta del tuo motore.", "Configura la massa a vuoto del razzo, il diametro e il coefficiente di resistenza (Cd).", "Prevedi l'apogeo e la velocità/accelerazione massima.", "Importa i tuoi dati di test (CSV) per calcolare l'apogeo."] },
     { title: "5. CFD Animation (Animazione CFD)", content: ["Visualizza il processo di combustione all'interno della camera nel tempo.", "Osserva come si evolve la geometria del propellente.", "Usa i controlli per riprodurre, mettere in pausa o scorrere il tempo."] }
   ]
@@ -212,6 +214,19 @@ export default function App() {
     const saved = localStorage.getItem('hermes_theme');
     return (saved === 'dark' || saved === 'light') ? saved : 'light';
   });
+  const [cursor, setCursor] = useState(() => localStorage.getItem('hermes_cursor') || 'default');
+  
+  React.useEffect(() => {
+    localStorage.setItem('hermes_cursor', cursor);
+  }, [cursor]);
+
+  const cursorClass = React.useMemo(() => {
+    if (cursor === 'rocket') return "cursor-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2224%22%20height=%2224%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%23a855f7%22%20stroke-width=%222%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22><path%20d=%22M4.5%2016.5c-1.5%201.26-2%205-2%205s3.74-.5%205-2c.71-.84.7-2.13-.09-2.91a2.18%202.18%200%200%200-2.91-.09z%22/><path%20d=%22m12%2015-3-3a22%2022%200%200%201%202-3.95A12.88%2012.88%200%200%201%2022%202c0%202.72-.78%207.5-6%2011a22.35%2022.35%200%200%201-4%202z%22/><path%20d=%22M9%2012H4s.55-3.03%202-4c1.62-1.08%205%200%205%200%20%22/><path%20d=%22M12%2015v5s3.03-.55%204-2c1.08-1.62%200-5%200-5%20%22/></svg>'),_auto]";
+    if (cursor === 'crosshair') return "cursor-crosshair";
+    if (cursor === 'pointer') return "cursor-pointer";
+    return "cursor-default";
+  }, [cursor]);
+
   const [showSplash, setShowSplash] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
@@ -252,6 +267,7 @@ export default function App() {
     return !hasSeenTutorial;
   });
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
   const closeTutorial = () => {
     localStorage.setItem('hermes_tutorial_seen', 'true');
@@ -346,6 +362,30 @@ export default function App() {
   const removeGrain = (id: string) => {
     setGrains(grains.filter(g => g.id !== id));
   };
+
+  const totalPropellantMass = React.useMemo(() => {
+    let mass = 0;
+    grains.forEach(g => {
+      let Vg = 0;
+      if (g.shape === 1) { // Cylindrical
+        Vg = (Math.PI / 4) * (Math.pow(g.D0, 2) - Math.pow(g.d0, 2)) * g.L0;
+      } else if (g.shape === 2) { // Star
+        const Np = g.Np || 5;
+        const Mx = g.d0mayor / 2;
+        const term_pablo_atan = Math.atan( (Mx - (g.d0/2) * Math.cos(Math.PI / Np)) / ((g.d0/2) * Math.sin(Math.PI / Np)) );
+        const pablo = Math.cos(-Math.PI / Np + term_pablo_atan);
+        const star_hole_area = Np * ( (Math.pow(Mx, 2) * pablo) / 2 + Math.pow(g.d0/2, 2) * Math.sin(Math.PI / Np) );
+        Vg = ( (Math.PI / 4) * Math.pow(g.D0, 2) - star_hole_area ) * g.L0;
+      } else if (g.shape === 3) { // BATES
+        Vg = (Math.PI / 4) * Math.pow(g.D0, 2) * g.L0;
+      }
+      const propData = getPropellantData(g.propellantType);
+      const rhoreal = propData.rho * (g.rhorat || 1);
+      const Vg0 = Vg * g.N;
+      mass += rhoreal * Vg0 / 1e6; // kg
+    });
+    return mass.toFixed(3);
+  }, [grains]);
 
   const simulate = () => {
     try {
@@ -447,7 +487,7 @@ export default function App() {
   const t = translations[lang];
 
   return (
-    <div className="h-screen max-h-screen bg-background text-foreground flex flex-col font-sans overflow-hidden">
+    <div className={`min-h-screen bg-background text-foreground flex flex-col font-sans overflow-x-hidden ${cursorClass}`}>
       {showSplash && <SplashScreen lang={lang} onComplete={() => setShowSplash(false)} />}
 
       <header className="bg-card border-border shadow-md text-slate-800 dark:text-slate-200 py-3 px-4 md:px-6 flex justify-between items-center border-b-4 border-b-purple-500 shrink-0 relative z-10 transition-all">
@@ -483,9 +523,54 @@ export default function App() {
               }`}></div>
               {t.system_op}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1.5 font-medium uppercase tracking-wider hidden sm:block">
-              V 1.2 D / V 1.0 U • {new Date().toISOString().split('T')[0]}
-            </div>
+          </div>
+
+          {/* Version History Book & Quick Guide Buttons */}
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowVersionHistory(true)}
+              title={
+                lang === 'es' ? 'Historial interactivo de versiones' :
+                lang === 'fr' ? 'Historique interactif des versions' :
+                lang === 'it' ? 'Cronologia interattiva delle versioni' : 'Interactive version history book'
+              }
+              className={`h-8 px-2.5 text-xs font-semibold gap-1.5 border transition-all shadow-sm ${
+                theme === 'light'
+                  ? 'bg-white hover:bg-purple-50 text-purple-700 border-purple-200 hover:border-purple-400'
+                  : 'bg-slate-900/90 hover:bg-purple-950/40 text-purple-300 border-purple-800/60 hover:border-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+              <span className="hidden sm:inline">
+                {lang === 'es' ? 'Versiones' : lang === 'fr' ? 'Versions' : lang === 'it' ? 'Versioni' : 'Versions'}
+              </span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setTutorialStep(0);
+                setShowTutorial(true);
+              }}
+              title={
+                lang === 'es' ? 'Guía rápida de uso' :
+                lang === 'fr' ? 'Guide d\'utilisation' :
+                lang === 'it' ? 'Guida rapida' : 'Quick user guide'
+              }
+              className={`h-8 px-2.5 text-xs font-semibold gap-1.5 border transition-all shadow-sm ${
+                theme === 'light'
+                  ? 'bg-white hover:bg-stone-50 text-stone-700 border-slate-300 hover:border-slate-400'
+                  : 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 border-slate-700/50 hover:border-slate-500'
+              }`}
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span className="hidden sm:inline">
+                {lang === 'es' ? 'Guía' : lang === 'fr' ? 'Guide' : lang === 'it' ? 'Guida' : 'Guide'}
+              </span>
+            </Button>
           </div>
 
           {showInstallBtn && (
@@ -528,6 +613,29 @@ export default function App() {
             )}
           </div>
 
+          {/* Cursor Dropdown */}
+          <Select value={cursor} onValueChange={(v) => setCursor(v)}>
+            <SelectTrigger className={`w-28 h-8 text-xs font-semibold px-2 flex items-center justify-between gap-1 backdrop-blur-sm shadow-sm transition-colors cursor-pointer rounded border focus:outline-none focus:ring-0 ${
+              theme === 'light' 
+                ? 'bg-white border-slate-300 text-slate-700' 
+                : 'bg-slate-900/80 border-slate-700/50 text-slate-200'
+            }`}>
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="truncate">{cursor === 'rocket' ? '🚀 Rocket' : cursor === 'crosshair' ? '⌖ Cross' : cursor === 'pointer' ? '👆 Point' : 'Mouse'}</span>
+              </div>
+            </SelectTrigger>
+            <SelectContent className={`border ${
+              theme === 'light' 
+                ? 'bg-white text-slate-800 border-slate-200' 
+                : 'bg-slate-900 text-slate-100 border-slate-700'
+            }`}>
+              <SelectItem value="default" className="text-xs cursor-pointer">Mouse</SelectItem>
+              <SelectItem value="rocket" className="text-xs cursor-pointer">🚀 Rocket</SelectItem>
+              <SelectItem value="crosshair" className="text-xs cursor-pointer">⌖ Cross</SelectItem>
+              <SelectItem value="pointer" className="text-xs cursor-pointer">👆 Point</SelectItem>
+            </SelectContent>
+          </Select>
+          
           {/* Theme Dropdown */}
           <Select value={theme} onValueChange={(v) => setTheme(v as 'dark' | 'light')}>
             <SelectTrigger className={`w-24 h-8 text-xs font-semibold px-2 flex items-center justify-between gap-1 backdrop-blur-sm shadow-sm transition-colors cursor-pointer rounded border focus:outline-none focus:ring-0 ${
@@ -583,7 +691,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="flex-1 p-2 md:p-4 max-w-[1600px] mx-auto w-full flex flex-col overflow-hidden relative z-0">
+      <main className="flex-1 p-2 md:p-4 max-w-[1600px] mx-auto w-full flex flex-col relative z-0">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col w-full min-h-0">
           <div className="flex justify-between items-center mb-1 shrink-0 overflow-x-auto">
             <TabsList className={`flex h-8 w-max shrink-0 ${theme === 'light' ? 'bg-[#f1ede3] border-[#dfd8ca]' : 'bg-slate-900/60 border-slate-800/80'} border backdrop-blur-md rounded-lg p-0.5 gap-1.5 shadow-sm`}>
@@ -591,6 +699,36 @@ export default function App() {
               <TabsTrigger value="results" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.results}</TabsTrigger>
               <TabsTrigger value="analysis" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.analysis || "Análisis"}</TabsTrigger>
               <TabsTrigger value="mission_control" className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.mission_control || "Mission Control"}</TabsTrigger>
+              <TabsTrigger 
+                value="smart_search" 
+                className={`font-bold text-xs transition-all flex items-center gap-1.5 px-3 py-1 rounded-md ${
+                  activeTab === 'smart_search'
+                    ? theme === 'light'
+                      ? '!bg-amber-100 !text-amber-950 !border-2 !border-amber-500 shadow-sm'
+                      : '!bg-amber-950/80 !text-white !border-2 !border-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.45)]'
+                    : theme === 'light'
+                      ? 'text-stone-700 hover:text-amber-800 hover:bg-amber-50 border border-amber-400/40'
+                      : 'text-stone-300 hover:text-amber-300 hover:bg-amber-950/30 border border-amber-500/30'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                Smart Search
+              </TabsTrigger>
+              <TabsTrigger 
+                value="agente_jesus" 
+                className={`font-bold text-xs transition-all flex items-center gap-1.5 px-3 py-1 rounded-md ${
+                  activeTab === 'agente_jesus'
+                    ? theme === 'light'
+                      ? '!bg-amber-100 !text-amber-950 !border-2 !border-amber-500 shadow-sm'
+                      : '!bg-amber-950/80 !text-white !border-2 !border-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.45)]'
+                    : theme === 'light'
+                      ? 'text-stone-700 hover:text-amber-800 hover:bg-amber-50 border border-amber-400/40'
+                      : 'text-stone-300 hover:text-amber-300 hover:bg-amber-950/30 border border-amber-500/30'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                Agente Jesús
+              </TabsTrigger>
               <TabsTrigger value="cfd" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.cfd || "CFD Animation"}</TabsTrigger>
             </TabsList>
             <Button onClick={simulate} className="bg-destructive hover:bg-destructive/80 text-slate-200 font-bold shadow-[0_0_15px_rgba(249,115,22,0.5)] whitespace-nowrap min-w-[150px] h-9 ml-4 shrink-0 transition-all">
@@ -616,13 +754,113 @@ export default function App() {
                 </Card>
 
                 <Card className="bg-card border-border shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-blue-500">
-                  <CardHeader className="py-2 px-3 bg-blue-500/10 dark:bg-indigo-950/30 border-b border-border flex-none"><CardTitle className="text-[11px] uppercase tracking-widest text-blue-700 dark:text-blue-400 font-bold">{t.nozzle}</CardTitle></CardHeader>
-                  <CardContent className="flex-1 p-2 grid grid-cols-2 gap-x-4 gap-y-1">
-                    <NumberInput label={t.throat_d + " [mm]"} value={nozzle.Dt0} onChange={(v:any) => setNozzle({...nozzle, Dt0: v})} tooltip={t.dt0_desc} />
-                    <NumberInput label={t.exit_d + " [mm]"} value={nozzle.Ds} onChange={(v:any) => setNozzle({...nozzle, Ds: v})} tooltip={t.ds_desc} />
-                    <NumberInput label={t.div_angle + " [º]"} step="1" value={nozzle.alpha} onChange={(v:any) => setNozzle({...nozzle, alpha: v})} tooltip={t.alpha_desc} />
-                    <NumberInput label={t.erosion + " [mm]"} step="0.1" value={nozzle.e} onChange={(v:any) => setNozzle({...nozzle, e: v})} tooltip={t.e_desc} />
-                    <NumberInput label={t.eff_n} step="0.01" value={nozzle.etanoz} onChange={(v:any) => setNozzle({...nozzle, etanoz: v})} tooltip={t.etanoz_desc} />
+                  <CardHeader className="py-1.5 px-3 bg-blue-500/10 dark:bg-indigo-950/30 border-b border-border flex-none flex flex-row items-center justify-between">
+                    <CardTitle className="text-[11px] uppercase tracking-widest text-blue-700 dark:text-blue-400 font-bold">{t.nozzle}</CardTitle>
+                    <div className="flex items-center gap-1 text-blue-600/80 dark:text-blue-400/80 hover:text-blue-600 cursor-help" title={t.slag_tooltip}>
+                      <Info className="w-3.5 h-3.5" />
+                      <span className="text-[9px] font-mono font-bold hidden sm:inline">{lang === 'es' ? 'Escoria / Erosión' : 'Slag / Erosion'}</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 p-2 flex flex-col gap-1 overflow-y-auto no-scrollbar">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <NumberInput label={t.throat_d + " [mm]"} value={nozzle.Dt0} onChange={(v:any) => setNozzle({...nozzle, Dt0: v})} tooltip={t.dt0_desc} />
+                      <NumberInput label={t.exit_d + " [mm]"} value={nozzle.Ds} onChange={(v:any) => setNozzle({...nozzle, Ds: v})} tooltip={t.ds_desc} />
+                      <NumberInput label={t.div_angle + " [º]"} step="1" value={nozzle.alpha} onChange={(v:any) => setNozzle({...nozzle, alpha: v})} tooltip={t.alpha_desc} />
+                      <NumberInput label={t.eff_n} step="0.01" value={nozzle.etanoz} onChange={(v:any) => setNozzle({...nozzle, etanoz: v})} tooltip={t.etanoz_desc} />
+                    </div>
+
+                    {/* Escoria / Slag & Erosion Panel */}
+                    <div className={`p-1.5 rounded border ${theme === 'light' ? 'bg-blue-50/40 border-blue-200/80' : 'bg-slate-900/60 border-blue-900/40'} flex flex-col gap-1 mt-0.5`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-tight">{t.slag_erosion_title}</span>
+                          <span title={t.slag_tooltip} className="cursor-help text-blue-500/80 hover:text-blue-500 inline-flex items-center">
+                            <Info className="w-3 h-3" />
+                          </span>
+                        </div>
+                        {nozzle.e !== 0 && (
+                          <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${nozzle.e < 0 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30'}`}>
+                            {nozzle.e < 0 ? `Slag: Dt → ${(Math.max(0.5, nozzle.Dt0 + nozzle.e)).toFixed(2)} mm` : `Ero: Dt → ${(nozzle.Dt0 + nozzle.e).toFixed(2)} mm`}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 items-center">
+                        <div className="col-span-1">
+                          <Select 
+                            value={nozzle.e < 0 ? 'slag' : nozzle.e > 0 ? 'erosion' : 'none'} 
+                            onValueChange={(v) => {
+                              if (v === 'none') {
+                                setNozzle({ ...nozzle, e: 0 });
+                              } else if (v === 'slag') {
+                                const mag = Math.abs(nozzle.e) || 0.8;
+                                const maxSafe = Math.max(0.1, nozzle.Dt0 - 0.5);
+                                setNozzle({ ...nozzle, e: -Math.min(mag, maxSafe), ero_model: nozzle.ero_model || 1 });
+                              } else if (v === 'erosion') {
+                                const mag = Math.abs(nozzle.e) || 0.8;
+                                setNozzle({ ...nozzle, e: mag, ero_model: nozzle.ero_model || 1 });
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-[10px] px-1.5 py-0 bg-background border-input font-medium cursor-pointer">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-card border-border text-foreground">
+                              <SelectItem value="none" className="text-[10px] cursor-pointer font-medium">{t.slag_none}</SelectItem>
+                              <SelectItem value="slag" className="text-[10px] cursor-pointer font-medium text-amber-600 dark:text-amber-400">{t.slag_deposit}</SelectItem>
+                              <SelectItem value="erosion" className="text-[10px] cursor-pointer font-medium text-blue-600 dark:text-blue-400">{t.slag_erosion}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="col-span-1">
+                          {nozzle.e !== 0 ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">|ΔDt| [mm]:</span>
+                              <Input
+                                type="number"
+                                step="0.1"
+                                min="0.01"
+                                max={nozzle.e < 0 ? String(Math.max(0.1, nozzle.Dt0 - 0.5)) : "15"}
+                                value={Math.abs(nozzle.e) || 0}
+                                onChange={(e) => {
+                                  const rawVal = parseFloat(e.target.value) || 0;
+                                  const sign = nozzle.e < 0 ? -1 : 1;
+                                  const maxSafe = nozzle.e < 0 ? Math.max(0.1, nozzle.Dt0 - 0.5) : 50;
+                                  const clamped = Math.min(rawVal, maxSafe);
+                                  setNozzle({ ...nozzle, e: sign * clamped });
+                                }}
+                                className="h-6 w-full text-[10px] font-mono px-1 py-0 bg-background border-input text-right font-bold"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-[9px] text-muted-foreground italic pl-1 font-mono">{lang === 'es' ? 'Tobera ideal / no ablativa' : 'Ideal nozzle / no ablation'}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {nozzle.e !== 0 && (
+                        <div className="mt-0.5">
+                          <UiLabel className="text-[9px] text-muted-foreground font-mono mb-0.5 block">{t.slag_model_label}</UiLabel>
+                          <Select 
+                            value={String(nozzle.ero_model || 1)} 
+                            onValueChange={(v) => setNozzle({ ...nozzle, ero_model: (+v as any) })}
+                          >
+                            <SelectTrigger className="h-6 text-[10px] px-1.5 py-0 bg-background border-input font-medium cursor-pointer">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-card border-border text-foreground">
+                              <SelectItem value="1" className="text-[10px] cursor-pointer">{t.model_linear}</SelectItem>
+                              <SelectItem value="2" className="text-[10px] cursor-pointer">{t.model_exp}</SelectItem>
+                              <SelectItem value="3" className="text-[10px] cursor-pointer">{t.model_quad}</SelectItem>
+                              <SelectItem value="4" className="text-[10px] cursor-pointer">{t.model_sqrt}</SelectItem>
+                              <SelectItem value="5" className="text-[10px] cursor-pointer">{t.model_parabola}</SelectItem>
+                              <SelectItem value="6" className="text-[10px] cursor-pointer">{t.model_sine}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -635,7 +873,12 @@ export default function App() {
             {/* BOTTOM AREA: Vertical list of horizontal grain rows */}
             <Card className="flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden bg-card border-border rounded-md">
                <CardHeader className={`py-2 px-3 ${theme === 'light' ? 'bg-purple-50/80 text-purple-800' : 'bg-muted/30 text-purple-400'} border-b border-border flex flex-row justify-between items-center shrink-0`}>
-                  <CardTitle className={`text-[12px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-purple-800' : 'text-purple-400'}`}>{t.grains}</CardTitle>
+                  <div className="flex items-center gap-4">
+                    <CardTitle className={`text-[12px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-purple-800' : 'text-purple-400'}`}>{t.grains}</CardTitle>
+                    <div className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${theme === 'light' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-purple-900/30 text-purple-300 border-purple-800/50'}`} title={lang === 'es' ? 'Masa Total del Propulsante' : 'Total Propellant Mass'}>
+                      M_prop: {totalPropellantMass} kg
+                    </div>
+                  </div>
                   <Button onClick={addGrain} size="sm" className="h-7 text-[10px] px-4 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-700 dark:text-purple-300 rounded font-bold shadow-[0_0_10px_rgba(168,85,247,0.15)] dark:shadow-[0_0_10px_rgba(168,85,247,0.2)] transition-all">
                     {t.new_grain}
                   </Button>
@@ -985,62 +1228,12 @@ export default function App() {
 
            <TabsContent value="analysis" className="flex-1 overflow-y-auto w-full no-scrollbar p-1">
              {results && (
-                <div className="flex flex-col h-full gap-4 pb-10">
-                   <div className="flex flex-wrap gap-4 shrink-0 mt-2">
-                    {results.grains.map((g, idx) => (
-                      <Card key={g.id} className="flex flex-col bg-card border-border shadow-sm flex-1 min-w-[320px]">
-                        <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border">
-                          <CardTitle className="text-[13px] uppercase tracking-widest text-purple-400">{t.grains} {idx + 1} - Area</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0 pt-4 h-[420px]">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData} margin={{ top: 10, right: 20, left: 70, bottom: 80 }}>
-                              <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#334155" />
-                              <XAxis 
-                                dataKey="time" 
-                                type="number" 
-                                domain={[0, 'dataMax']} 
-                                tickCount={8} 
-                                tickFormatter={(value) => value.toFixed(2)}
-                                tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'monospace' }}
-                                height={60}
-                                axisLine={{ stroke: '#475569' }}
-                                tickLine={{ stroke: '#475569' }}
-                              >
-                                <ChartLabel value={t.axis_time} position="bottom" offset={0} fill="#cbd5e1" style={{ fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, textAnchor: 'middle' }} />
-                              </XAxis>
-                              <YAxis 
-                                domain={[0, 'auto']} 
-                                tickFormatter={(value) => (value/1000).toFixed(1)} 
-                                width={70}
-                                tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'monospace' }}
-                                axisLine={{ stroke: '#475569' }}
-                                tickLine={{ stroke: '#475569' }}
-                              >
-                                <ChartLabel value={t.axis_area} angle={-90} position="left" offset={0} fill="#cbd5e1" style={{ fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, textAnchor: 'middle' }} />
-                              </YAxis>
-                              <Tooltip 
-                                formatter={(value: number) => (value/100).toFixed(2) + " cm²"} 
-                                labelFormatter={(label) => `T+ ${Number(label).toFixed(3)}s`} 
-                                contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid #334155', borderRadius: '4px', fontFamily: 'monospace', fontSize: '12px', color: '#f8fafc' }}
-                              />
-                              <Legend 
-                                verticalAlign="top" 
-                                align="right"
-                                iconSize={8}
-                                wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', paddingTop: '5px', color: '#cbd5e1' }} 
-                              />
-                              {g.ci === 1 && g.shape !== 3 && <Line type="monotone" dataKey={`g${idx}_Abc`} stroke="#ef4444" dot={false} strokeWidth={2} name={t.internal} />}
-                              {g.ei === 1 && <Line type="monotone" dataKey={`g${idx}_Abe`} stroke="#3b82f6" dot={false} strokeWidth={2} name={t.ends} />}
-                              {g.osi === 1 && <Line type="monotone" dataKey={`g${idx}_Abs`} stroke="#eab308" dot={false} strokeWidth={2} name={t.external} />}
-                              <Line type="monotone" dataKey={`g${idx}_Ab`} stroke="#10b981" dot={false} strokeWidth={2} strokeDasharray="4 4" name={t.total_area} style={{ filter: 'drop-shadow(0px 0px 3px rgba(16,185,129,0.5))' }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </CardContent>
-                      </Card>
-                    ))}
-                   </div>
-                </div>
+               <DetailedAnalysisView 
+                 results={results} 
+                 lang={lang} 
+                 motor={motor} 
+                 nozzle={nozzle} 
+               />
              )}
            </TabsContent>
 
@@ -1048,8 +1241,8 @@ export default function App() {
              {results && (
               <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col xl:flex-row gap-4 pb-10">
                  <div className="flex-1 flex flex-col gap-4">
-                     <div className="flex justify-between items-center bg-muted/50 p-2 rounded-lg border border-border">
-                        <span className="text-xs uppercase font-bold text-slate-300 font-mono tracking-widest">{t.exhaust_sim}</span>
+                     <div className="flex justify-between items-center bg-muted/60 p-2 rounded-lg border border-border">
+                        <span className="text-xs uppercase font-bold text-foreground font-mono tracking-widest">{t.exhaust_sim}</span>
                         <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => setShowCfdInfo(!showCfdInfo)}>{t.more_info}</Button>
                      </div>
                      {showCfdInfo && (
@@ -1058,8 +1251,8 @@ export default function App() {
                          {t.cfd_solver_desc}
                        </div>
                      )}
-                     <div className="flex flex-col flex-1 min-h-[350px] bg-card rounded-lg shadow-sm border overflow-hidden shrink-0 w-full">
-                        <PlaybackWrapper results={results} t_parent={t} />
+                     <div className="flex flex-col flex-1 min-h-[460px] bg-card rounded-lg shadow-sm border overflow-hidden shrink-0 w-full">
+                        <PlaybackWrapper results={results} t_parent={t} motor={motor} nozzle={nozzle} />
                      </div>
                  </div>
                  <div className="flex-1 flex flex-col min-h-[400px]">
@@ -1075,6 +1268,222 @@ export default function App() {
                onApogeeUpdate={(sim, exp) => { setSimApogee(sim); setExpApogee(exp); }} 
                nozzleParams={nozzle}
              />
+          </TabsContent>
+
+          {/* SMART SEARCH TAB CONTENT */}
+          <TabsContent value="smart_search" className="flex-1 flex flex-col min-h-0 gap-4 p-3 md:p-6 overflow-y-auto">
+            <div className={`max-w-4xl mx-auto w-full rounded-2xl border-2 border-dashed p-6 md:p-8 transition-all shadow-md ${
+              theme === 'light'
+                ? 'bg-amber-500/5 border-amber-500/40 text-stone-850'
+                : 'bg-amber-950/20 border-amber-500/40 text-slate-200'
+            }`}>
+              {/* Header Status Badge */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-6 border-b border-amber-500/25">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-inner">
+                    <Construction size={28} className="animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono uppercase tracking-widest px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                        {lang === 'es' ? 'En Mantenimiento • No disponible en Beta' : 'Under Maintenance • Not in Beta'}
+                      </span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-amber-700 dark:text-amber-400 mt-1 flex items-center gap-2">
+                      <Search size={22} />
+                      {lang === 'es' ? 'Smart Search / Optimización Multivariable' : 'Smart Search / Multivariable Optimization'}
+                    </h2>
+                  </div>
+                </div>
+                <div className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-amber-500/10 text-amber-750 dark:text-amber-300 border border-amber-500/30">
+                  {lang === 'es' ? 'Fase Conceptual' : 'Conceptual Phase'}
+                </div>
+              </div>
+
+              {/* Main Proposal Description */}
+              <div className="mt-6 space-y-5 text-sm md:text-base leading-relaxed">
+                <div className={`p-4 rounded-xl border ${
+                  theme === 'light' ? 'bg-white/80 border-amber-200 text-stone-800' : 'bg-slate-900/80 border-amber-500/20 text-slate-200'
+                }`}>
+                  <h3 className="font-bold text-amber-700 dark:text-amber-400 text-base mb-2 flex items-center gap-2">
+                    <Target size={18} />
+                    {lang === 'es' ? '¿Qué se va a plantear en esta sección?' : 'What will be developed in this section?'}
+                  </h3>
+                  <p>
+                    {lang === 'es'
+                      ? 'Integración de algoritmos computacionales de búsqueda y optimización para encontrar automáticamente la mejor solución geométrica y termodinámica del motor entre todo el espacio de configuraciones posibles.'
+                      : 'Integration of computational search and optimization algorithms to automatically find the optimal engine geometry and thermodynamic solution across the entire design space.'}
+                  </p>
+                </div>
+
+                {/* Practical Example Box */}
+                <div className={`p-5 rounded-xl border-l-4 border-l-amber-500 border ${
+                  theme === 'light' ? 'bg-amber-100/60 border-amber-300 text-amber-950' : 'bg-amber-950/40 border-amber-500/30 text-amber-200'
+                }`}>
+                  <h4 className="font-bold text-sm uppercase tracking-wider mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                    <Sparkles size={16} />
+                    {lang === 'es' ? 'Ejemplo Práctico de Uso:' : 'Practical Use Case Example:'}
+                  </h4>
+                  <p className="italic text-sm md:text-[15px] leading-relaxed">
+                    {lang === 'es'
+                      ? '«Quiero alcanzar 1 kilómetro (1.000 m) de altitud con este cohete. ¿Cuál es la configuración exacta de granos que debo aplicar (dimensiones, geometrías Tubular/Estrella/BATES, cantidad de bloques), teniendo en cuenta ciertas restricciones máximas de diámetro de cámara de combustión y longitud de tobera?»'
+                      : '«I want to achieve an altitude of 1 kilometer (1,000 m) with this rocket. What is the exact grain configuration I should apply (dimensions, Tubular/Star/BATES geometries, block counts), considering specific chamber volume and nozzle constraints?»'}
+                  </p>
+                </div>
+
+                {/* Planned Modules Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                  <div className={`p-4 rounded-xl border ${theme === 'light' ? 'bg-white/60 border-stone-250' : 'bg-slate-900/60 border-slate-800'}`}>
+                    <h5 className="font-bold text-xs uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">
+                      1. {lang === 'es' ? 'Algoritmos Genéticos' : 'Genetic Algorithms'}
+                    </h5>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {lang === 'es'
+                        ? 'Exploración iterativa sobre múltiples combinaciones de granos para maximizar empuje específico y apogeo.'
+                        : 'Iterative exploration over multiple grain combinations to maximize specific impulse and apogee.'}
+                    </p>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border ${theme === 'light' ? 'bg-white/60 border-stone-250' : 'bg-slate-900/60 border-slate-800'}`}>
+                    <h5 className="font-bold text-xs uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">
+                      2. {lang === 'es' ? 'Restricciones Físicas' : 'Physical Constraints'}
+                    </h5>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {lang === 'es'
+                        ? 'Filtro automático de presión máxima de cámara (Pmax) para evitar fallos estructurales o sobrepresión.'
+                        : 'Automatic filter for maximum chamber pressure (Pmax) to prevent structural burst or overpressure.'}
+                    </p>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border ${theme === 'light' ? 'bg-white/60 border-stone-250' : 'bg-slate-900/60 border-slate-800'}`}>
+                    <h5 className="font-bold text-xs uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">
+                      3. {lang === 'es' ? 'Tobera Óptima' : 'Optimal Nozzle'}
+                    </h5>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {lang === 'es'
+                        ? 'Cálculo del diámetro de garganta (Dt) y relación de expansión (ε) ideal según la curva de quemado.'
+                        : 'Calculation of ideal throat diameter (Dt) and expansion ratio (ε) tailored to the grain burn curve.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* AGENTE JESUS TAB CONTENT */}
+          <TabsContent value="agente_jesus" className="flex-1 flex flex-col min-h-0 gap-4 p-3 md:p-6 overflow-y-auto">
+            <div className={`max-w-4xl mx-auto w-full rounded-2xl border-2 border-dashed p-6 md:p-8 transition-all shadow-md ${
+              theme === 'light'
+                ? 'bg-amber-500/5 border-amber-500/40 text-stone-850'
+                : 'bg-amber-950/20 border-amber-500/40 text-slate-200'
+            }`}>
+              {/* Header Status Badge */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-6 border-b border-amber-500/25">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-inner">
+                    <Bot size={28} className="animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono uppercase tracking-widest px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                        {lang === 'es' ? 'En Mantenimiento • No disponible en Beta' : 'Under Maintenance • Not in Beta'}
+                      </span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-amber-700 dark:text-amber-400 mt-1 flex items-center gap-2">
+                      <Brain size={22} />
+                      {lang === 'es' ? 'Agente Jesús / IA Experta en Cohetería' : 'Agente Jesús / Rocketry Expert AI'}
+                    </h2>
+                  </div>
+                </div>
+                <div className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-amber-500/10 text-amber-750 dark:text-amber-300 border border-amber-500/30">
+                  {lang === 'es' ? '100% Local & Opcional' : '100% Local & Optional'}
+                </div>
+              </div>
+
+              {/* Main Proposal Description */}
+              <div className="mt-6 space-y-5 text-sm md:text-base leading-relaxed">
+                <div className={`p-4 rounded-xl border ${
+                  theme === 'light' ? 'bg-white/80 border-amber-200 text-stone-800' : 'bg-slate-900/80 border-amber-500/20 text-slate-200'
+                }`}>
+                  <h3 className="font-bold text-amber-700 dark:text-amber-400 text-base mb-2 flex items-center gap-2">
+                    <Sparkles size={18} />
+                    {lang === 'es' ? '¿Qué se va a plantear con el Agente Jesús?' : 'What is planned with Agente Jesús?'}
+                  </h3>
+                  <p>
+                    {lang === 'es'
+                      ? 'Un asistente de Inteligencia Artificial especializado en física y balística de cohetería. Estará diseñado para interactuar con los resultados de simulación, evaluar el rendimiento del motor y ayudarte a detectar posibles inconsistencias o áreas de mejora.'
+                      : 'An Artificial Intelligence assistant specialized in rocketry physics and internal ballistics. Designed to interact with your simulation results, evaluate engine performance, and help you detect potential anomalies or optimization areas.'}
+                  </p>
+                </div>
+
+                {/* Core Pillars Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className={`p-4 rounded-xl border flex gap-3 ${theme === 'light' ? 'bg-white/70 border-amber-200' : 'bg-slate-900/70 border-amber-500/20'}`}>
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <DownloadCloud size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-amber-700 dark:text-amber-300 mb-1">
+                        {lang === 'es' ? '100% Opcional, Local y Gratuito' : '100% Optional, Local & Free'}
+                      </h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {lang === 'es'
+                          ? 'Si el usuario desea descargarlo, funcionará integrado directamente en su aplicación. Si no lo descarga, HERMES funcionará exactamente igual sin verse afectado en absoluto.'
+                          : 'If the user chooses to download it, it will integrate directly into their app. If not downloaded, HERMES operates completely identically without any limitations.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border flex gap-3 ${theme === 'light' ? 'bg-white/70 border-amber-200' : 'bg-slate-900/70 border-amber-500/20'}`}>
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <ShieldCheck size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-amber-700 dark:text-amber-300 mb-1">
+                        {lang === 'es' ? 'Detección de Anomalías & Alertas' : 'Anomaly Detection & Alerts'}
+                      </h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {lang === 'es'
+                          ? 'Supervisará picos de presión extraños, velocidades críticas de erosión en tobera o anomalías en la curva de empuje tras cada simulación.'
+                          : 'Monitors strange pressure spikes, critical nozzle erosion velocities, or abnormal thrust curve shapes after every simulation.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border flex gap-3 ${theme === 'light' ? 'bg-white/70 border-amber-200' : 'bg-slate-900/70 border-amber-500/20'}`}>
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <Brain size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-amber-700 dark:text-amber-300 mb-1">
+                        {lang === 'es' ? 'Aprendizaje & Tutoría de Física' : 'Learning & Physics Tutoring'}
+                      </h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {lang === 'es'
+                          ? 'Te explicará qué fenómenos aerodinámicos o de combustión están ocurriendo en tu motor para enriquecer tu aprendizaje técnico.'
+                          : 'Explains the aerodynamic and combustion phenomena taking place in your engine to enrich your technical understanding.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border flex gap-3 ${theme === 'light' ? 'bg-white/70 border-amber-200' : 'bg-slate-900/70 border-amber-500/20'}`}>
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <Cpu size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-amber-700 dark:text-amber-300 mb-1">
+                        {lang === 'es' ? 'Privacidad Total (On-Device)' : 'Total Privacy (On-Device)'}
+                      </h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {lang === 'es'
+                          ? 'Tus motores, parámetros y datos de misión se procesan 100% en tu máquina sin conectarse a servicios de pago en la nube.'
+                          : 'Your motors, parameters, and mission data process 100% locally on your machine without relying on external cloud APIs.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </main>
@@ -1366,8 +1775,8 @@ export default function App() {
         )}
         {showTutorial && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <div className="bg-card w-full max-w-lg rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col">
-              <div className="bg-muted px-6 py-4 border-b border-border flex justify-between items-center">
+            <div className="bg-card w-full max-w-lg max-h-[85vh] rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col">
+              <div className="bg-muted px-6 py-4 border-b border-border flex justify-between items-center shrink-0">
                 <h2 className="text-xl font-bold text-foreground">
                   {(TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en'])[tutorialStep].title}
                 </h2>
@@ -1399,7 +1808,7 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="p-6">
+              <div className="p-6 overflow-y-auto max-h-[55vh]">
                 <ul className="space-y-3">
                   {(TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en'])[tutorialStep].content.map((bullet, idx) => (
                     <li key={idx} className="flex items-start gap-3">
@@ -1410,7 +1819,7 @@ export default function App() {
                 </ul>
               </div>
 
-              <div className="bg-muted/50 px-6 py-4 border-t border-border flex items-center justify-between">
+              <div className="bg-muted/50 px-6 py-4 border-t border-border flex items-center justify-between shrink-0">
                 <Button variant="ghost" onClick={closeTutorial} className="text-muted-foreground hover:text-foreground">
                   {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).skip}
                 </Button>
@@ -1438,6 +1847,13 @@ export default function App() {
             </div>
           </div>
         )}
+
+        <VersionHistoryBook
+          isOpen={showVersionHistory}
+          onClose={() => setShowVersionHistory(false)}
+          lang={lang}
+          theme={theme}
+        />
       </footer>
     </div>
   );
