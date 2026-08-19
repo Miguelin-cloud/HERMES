@@ -1,7 +1,32 @@
+export interface PressureRangeBurnRate {
+  id?: string;
+  pMin: number; // MPa
+  pMax: number; // MPa
+  a: number; // mm/(s * MPa^n)
+  n: number; // dimensionless
+}
+
+export interface CustomPropellant {
+  id: number;
+  name: string;
+  category: 'candy' | 'rnx' | 'apcp' | 'custom';
+  rho: number; // g/cm³
+  k2ph?: number;
+  k: number; // Specific heat ratio (gamma)
+  M: number; // Molecular mass (g/mol)
+  T0: number; // Flame temperature (K)
+  a: number; // Default Saint-Robert a
+  n: number; // Default Saint-Robert n
+  pressureRanges?: PressureRangeBurnRate[];
+  isCustom?: boolean;
+  color?: string;
+  description?: string;
+}
+
 export interface GrainInput {
   id: string;
   shape: 1 | 2 | 3;
-  propellantType: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  propellantType: number; // 1..7 for defaults, 8+ for custom propellants
   D0: number; // mm
   d0: number; // mm
   d0mayor: number; // mm
@@ -37,6 +62,7 @@ export interface SimulationInputs {
   motor: MotorInput;
   grains: GrainInput[];
   nozzle: NozzleInput;
+  customPropellants?: CustomPropellant[];
 }
 
 export interface SimulationResults {
@@ -55,6 +81,7 @@ export interface SimulationResults {
   grains_Abs: number[][]; // [grainIndex][timeStep] array of external burn area
   grains_Ab: number[][];  // [grainIndex][timeStep] array of total burn area
   propellantType: number; // Dominant propellant type for visual rendering
+  customPropellants?: CustomPropellant[];
   
   // Advanced Telemetry & Detailed Analysis Arrays
   Kn?: number[];
@@ -88,24 +115,143 @@ export interface SimulationResults {
   };
 }
 
-export const PROPELLANTS = [
-  { id: 1, name: "KNDX-65/35", rho: 1.879, k2ph: 1.043, k: 1.1308, M: 42.39, T0: 1710 },
-  { id: 2, name: "KNSO-65/35", rho: 1.841, k2ph: 1.042, k: 1.1361, M: 39.9, T0: 1600 },
-  { id: 3, name: "KNSU-65/35", rho: 1.889, k2ph: 1.044, k: 1.133, M: 42.02, T0: 1720 },
-  { id: 4, name: "RNX-71V", rho: 1.8161, k2ph: 1.027, k: 1.18, M: 41.83, T0: 1492 },
-  { id: 5, name: "RNX-57", rho: 1.869, k2ph: 1.026, k: 1.159, M: 45.54, T0: 1644 },
-  { id: 6, name: "AP+HTPB (Reliant Robin)", rho: 1.682, k2ph: 1.198, k: 1.198, M: 24.98, T0: 2977 },
-  { id: 7, name: "AP+HTPB (Risky Batman)", rho: 1.682, k2ph: 1.199, k: 1.198, M: 23.78, T0: 2884 }
+export const DEFAULT_PROPELLANTS: CustomPropellant[] = [
+  { 
+    id: 1, 
+    name: "KNDX-65/35", 
+    category: 'candy', 
+    rho: 1.879, 
+    k2ph: 1.043, 
+    k: 1.1308, 
+    M: 42.39, 
+    T0: 1710, 
+    a: 8.875, 
+    n: 0.619,
+    pressureRanges: [
+      { id: '1-1', pMin: 0.101, pMax: 0.779, a: 8.875, n: 0.619 },
+      { id: '1-2', pMin: 0.779, pMax: 2.572, a: 7.553, n: -0.009 },
+      { id: '1-3', pMin: 2.572, pMax: 5.930, a: 3.841, n: 0.688 },
+      { id: '1-4', pMin: 5.930, pMax: 8.502, a: 17.200, n: -0.148 },
+      { id: '1-5', pMin: 8.502, pMax: 11.200, a: 4.775, n: 0.442 }
+    ],
+    description: "Nakka Candy Dextrosa con 5 tramos de ajuste experimental"
+  },
+  { 
+    id: 2, 
+    name: "KNSO-65/35", 
+    category: 'candy', 
+    rho: 1.841, 
+    k2ph: 1.042, 
+    k: 1.1361, 
+    M: 39.9, 
+    T0: 1600, 
+    a: 10.708, 
+    n: 0.625,
+    pressureRanges: [
+      { id: '2-1', pMin: 0.101, pMax: 0.807, a: 10.708, n: 0.625 },
+      { id: '2-2', pMin: 0.807, pMax: 1.503, a: 8.763, n: -0.314 },
+      { id: '2-3', pMin: 1.503, pMax: 3.792, a: 7.852, n: -0.013 },
+      { id: '2-4', pMin: 3.792, pMax: 7.033, a: 3.907, n: 0.535 },
+      { id: '2-5', pMin: 7.033, pMax: 10.670, a: 9.653, n: 0.064 }
+    ],
+    description: "Nakka Candy Sorbitol con 5 tramos de ajuste experimental"
+  },
+  { 
+    id: 3, 
+    name: "KNSU-65/35", 
+    category: 'candy', 
+    rho: 1.889, 
+    k2ph: 1.044, 
+    k: 1.133, 
+    M: 42.02, 
+    T0: 1720, 
+    a: 8.3, 
+    n: 0.320,
+    pressureRanges: [
+      { id: '3-1', pMin: 0.101, pMax: 12.0, a: 8.3, n: 0.320 }
+    ],
+    description: "Candy Sacarosa clásico con coeficiente constante"
+  },
+  { 
+    id: 4, 
+    name: "RNX-71V", 
+    category: 'rnx', 
+    rho: 1.8161, 
+    k2ph: 1.027, 
+    k: 1.18, 
+    M: 41.83, 
+    T0: 1492, 
+    a: 2.570, 
+    n: 0.371,
+    pressureRanges: [
+      { id: '4-1', pMin: 0.101, pMax: 15.0, a: 2.570, n: 0.371 }
+    ],
+    description: "Resina Epoxi RNX-71V de combustión lenta"
+  },
+  { 
+    id: 5, 
+    name: "RNX-57", 
+    category: 'rnx', 
+    rho: 1.869, 
+    k2ph: 1.026, 
+    k: 1.159, 
+    M: 45.54, 
+    T0: 1644, 
+    a: 2.570, 
+    n: 0.371,
+    pressureRanges: [
+      { id: '5-1', pMin: 0.101, pMax: 15.0, a: 2.570, n: 0.371 }
+    ],
+    description: "Resina Epoxi RNX-57 modificada"
+  },
+  { 
+    id: 6, 
+    name: "AP+HTPB (Reliant Robin)", 
+    category: 'apcp', 
+    rho: 1.682, 
+    k2ph: 1.198, 
+    k: 1.198, 
+    M: 24.98, 
+    T0: 2977, 
+    a: 2.6650, 
+    n: 0.412,
+    pressureRanges: [
+      { id: '6-1', pMin: 0.101, pMax: 20.0, a: 2.6650, n: 0.412 }
+    ],
+    description: "Composite Perclorato Amónico / HTPB grado Robin"
+  },
+  { 
+    id: 7, 
+    name: "AP+HTPB (Risky Batman)", 
+    category: 'apcp', 
+    rho: 1.682, 
+    k2ph: 1.199, 
+    k: 1.198, 
+    M: 23.78, 
+    T0: 2884, 
+    a: 2.7522, 
+    n: 0.456,
+    pressureRanges: [
+      { id: '7-1', pMin: 0.101, pMax: 20.0, a: 2.7522, n: 0.456 }
+    ],
+    description: "Composite Perclorato Amónico / HTPB grado Batman"
+  }
 ];
 
-export function getPropellantData(type: number) {
-  return PROPELLANTS.find(p => p.id === type) || PROPELLANTS[0];
+export const PROPELLANTS = DEFAULT_PROPELLANTS;
+
+export function getPropellantData(type: number, customList?: CustomPropellant[]): CustomPropellant {
+  if (customList && customList.length > 0) {
+    const custom = customList.find(p => p.id === type);
+    if (custom) return custom;
+  }
+  return DEFAULT_PROPELLANTS.find(p => p.id === type) || DEFAULT_PROPELLANTS[0];
 }
 
 export interface PropellantVisualProfile {
   id: number;
   name: string;
-  category: 'candy' | 'rnx' | 'apcp';
+  category: 'candy' | 'rnx' | 'apcp' | 'custom';
   displayName: string;
   hasFlame: boolean;
   hasDiamonds: boolean;
@@ -118,7 +264,32 @@ export interface PropellantVisualProfile {
   description: string;
 }
 
-export function getPropellantVisualProfile(type: number, lang: string = 'es'): PropellantVisualProfile {
+export function getPropellantVisualProfile(type: number, lang: string = 'es', customList?: CustomPropellant[]): PropellantVisualProfile {
+  if (type > 7 && customList) {
+    const custom = customList.find(p => p.id === type);
+    if (custom) {
+      const isApcp = custom.category === 'apcp' || custom.T0 > 2200;
+      const isCandy = custom.category === 'candy';
+      return {
+        id: custom.id,
+        name: custom.name,
+        category: custom.category || 'custom',
+        displayName: custom.name,
+        hasFlame: isApcp || custom.T0 > 2000,
+        hasDiamonds: isApcp && custom.T0 > 2500,
+        isSmoky: !isApcp || isCandy,
+        smokeColorHex: custom.color || (isCandy ? "#e2e8f0" : "#111827"),
+        smokeColorThree: isCandy ? 0xf1f5f9 : 0x334155,
+        grainColorThree: 0x8b5cf6,
+        grainColor2D: "#8b5cf6",
+        flameColorThree: isApcp ? 0x38bdf8 : 0xf59e0b,
+        description: lang === 'es' 
+          ? `Propulsante personalizado "${custom.name}": T0=${custom.T0}K, ρ=${custom.rho} g/cm³, k=${custom.k}` 
+          : `Custom propellant "${custom.name}": T0=${custom.T0}K, ρ=${custom.rho} g/cm³, k=${custom.k}`
+      };
+    }
+  }
+
   switch (type) {
     case 1:
       return {
@@ -236,7 +407,27 @@ export function getPropellantVisualProfile(type: number, lang: string = 'es'): P
   }
 }
 
-export function getBurnRate(P: number, type: number): { a: number; n: number } {
+export function getBurnRate(P: number, type: number, customList?: CustomPropellant[]): { a: number; n: number } {
+  // Check custom propellants first if provided
+  if (customList && customList.length > 0) {
+    const custom = customList.find(p => p.id === type);
+    if (custom) {
+      if (custom.pressureRanges && custom.pressureRanges.length > 0) {
+        for (const range of custom.pressureRanges) {
+          if (P >= range.pMin && P < range.pMax) {
+            return { a: range.a, n: range.n };
+          }
+        }
+        if (P < custom.pressureRanges[0].pMin) {
+          return { a: custom.pressureRanges[0].a, n: custom.pressureRanges[0].n };
+        }
+        const last = custom.pressureRanges[custom.pressureRanges.length - 1];
+        return { a: last.a, n: last.n };
+      }
+      return { a: custom.a ?? 1.0, n: custom.n ?? 0.5 };
+    }
+  }
+
   let a = 0, n = 0;
   if (type === 1) { // KNDX
     if (P < 0.779) { a = 8.875; n = 0.619; }

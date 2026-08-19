@@ -9,10 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PROPELLANTS, SimulationInputs, SimulationResults, getPropellantData } from './lib/types';
+import { PROPELLANTS, DEFAULT_PROPELLANTS, CustomPropellant, SimulationInputs, SimulationResults, getPropellantData } from './lib/types';
 import { runSimulation } from './lib/simulator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Label as ChartLabel } from 'recharts';
-import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen, FolderOpen, Trash2, Folder, Wrench, Search, Sparkles, Brain, Bot, AlertTriangle, Construction, Cpu, ShieldCheck, DownloadCloud, Target, Info } from 'lucide-react';
+import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen, FolderOpen, Trash2, Folder, Wrench, Search, Sparkles, Brain, Bot, AlertTriangle, Construction, Cpu, ShieldCheck, DownloadCloud, Target, Info, Beaker, Plus, Scale } from 'lucide-react';
 
 import { GrainViewer } from './components/GrainViewer';
 import { EngineViewer } from './components/EngineViewer';
@@ -23,6 +23,7 @@ import { MissionControl } from './components/MissionControl';
 import { DetailedAnalysisView } from './components/DetailedAnalysisView';
 import { SplashScreen } from './components/SplashScreen';
 import { VersionHistoryBook } from './components/VersionHistoryBook';
+import { CustomPropellantModal, loadCustomPropellantsFromStorage, saveCustomPropellantsToStorage } from './components/CustomPropellantModal';
 import { Language, translations } from './lib/i18n';
 import { Logo } from './components/Logo';
 
@@ -33,7 +34,7 @@ function NumberInput({
   step = "1",
   tooltip,
   decimals,
-  inputWidth = "w-[65px]"
+  inputWidth
 }: { 
   value: number, 
   onChange: (v: number) => void, 
@@ -54,14 +55,19 @@ function NumberInput({
   }, [value, decimals]);
 
   return (
-    <div className="group relative flex items-center justify-between gap-1 w-full border-b border-border pb-1 mb-[2px] hover:bg-muted/50 px-1 rounded transition-all focus-within:bg-purple-500/10 focus-within:shadow-[inset_0_0_8px_rgba(168,85,247,0.08)]" title={tooltip}>
-      <div className="absolute bottom-[-1px] left-0 right-0 h-[1.5px] bg-gradient-to-r from-purple-500 via-purple-300 to-blue-500 opacity-0 group-focus-within:opacity-100 transition-all duration-300 shadow-[0_0_10px_rgba(168,85,247,0.8)]"></div>
-      <UiLabel className="text-[10px] text-muted-foreground font-mono tracking-tight whitespace-nowrap group-focus-within:text-foreground transition-colors z-10">{label}</UiLabel>
+    <div 
+      className="group relative flex items-center justify-between gap-1.5 w-full min-w-0 border-b border-border/80 pb-1 mb-1 hover:bg-muted/40 px-1.5 py-0.5 rounded transition-all focus-within:bg-purple-500/10 focus-within:border-purple-500/50" 
+      title={tooltip || label}
+    >
+      <div className="absolute bottom-[-1px] left-0 right-0 h-[1.5px] bg-gradient-to-r from-purple-500 via-purple-300 to-blue-500 opacity-0 group-focus-within:opacity-100 transition-all duration-300"></div>
+      <UiLabel className="text-[10px] sm:text-[11px] text-muted-foreground font-medium truncate flex-1 min-w-0 group-focus-within:text-foreground transition-colors z-10 cursor-help select-none">
+        {label}
+      </UiLabel>
       <Input
         type="number"
         step={step}
         value={internal}
-        className={`${inputWidth} h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background/80 border-transparent text-primary font-mono shadow-inner outline-none ring-0 focus-visible:ring-0 focus-visible:border-transparent focus-within:text-purple-600 dark:focus-within:text-purple-300 transition-all z-10`}
+        className={`${inputWidth ? inputWidth : 'w-16 sm:w-20'} min-w-[58px] h-6 min-h-0 text-[11px] sm:text-xs py-0 px-1.5 text-right bg-background/90 border border-border/40 text-foreground font-mono font-semibold shadow-2xs rounded outline-none ring-0 focus-visible:ring-1 focus-visible:ring-purple-500 focus-visible:border-purple-500 focus-within:text-purple-600 dark:focus-within:text-purple-300 transition-all shrink-0 z-10`}
         onChange={(e) => {
           setInternal(e.target.value);
           if (e.target.value !== '' && e.target.value !== '-' && e.target.value !== '.') {
@@ -171,11 +177,11 @@ import { FlightViewer } from './components/FlightViewer';
 
 const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
   en: [
-    { title: "1. Inputs", content: [
+    { title: "1. Inputs & Chemistry", content: [
       "In this tab, you configure the physical properties of your rocket motor step by step.",
-      "Motor & Nozzle: Specify the internal chamber diameter, and the nozzle throat and exit diameters.",
-      "Propellant: Choose a standard fuel type (KNSU, KNDX, etc.), or define a custom propellant by adjusting its density, pressure exponent (n), and coefficient (a).",
-      "Grain Geometry: Add and configure the solid fuel blocks (grains). You can use Cylindrical (BATES), Star core, or Solid shapes, and define their dimensions and which faces are inhibited."
+      "Motor & Nozzle: Specify the internal chamber diameter, nozzle throat and exit diameters, and slag/erosion behavior.",
+      "Custom Chemistry & Propellants: Click 'Propellant Chemistry' to choose from built-in propellants (KNDX, KNSU, RNX, APCP) or synthesize your own custom fuel defining density, adiabatic flame temperature, and Saint-Robert regression coefficients (a & n) either globally or piecewise across pressure intervals.",
+      "Grain Geometry: Add and configure the solid fuel grains. You can use Cylindrical (BATES), Star core, or Solid shapes, and define their dimensions and inhibited faces."
     ]},
     { title: "2. Results", content: [
       "Once everything is configured, press the 'SIMULATE' button to run the internal ballistics calculations.",
@@ -187,7 +193,7 @@ const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
       "This section allows you to dive deep into the technical details of the simulation through four sub-tabs.",
       "Burn Surface: Watch how the fire-exposed area of each grain (internal, external, and ends) evolves as it is consumed.",
       "Kn Regime: Visualize the ratio between the burn area and the nozzle throat area. This helps predict potential pressure instabilities.",
-      "Burn Rate: Examine how the propellant consumption rate (r) varies with time and pressure, according to Saint-Robert's Law.",
+      "Burn Rate: Examine how the propellant consumption rate (r) varies with time and pressure, according to Saint-Robert's Law (r = a · Pⁿ).",
       "Mass Flow: Analyze the rate at which gases are generated and expelled, and monitor the propellant consumption percentage."
     ]},
     { title: "4. Mission Control", content: [
@@ -203,10 +209,10 @@ const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
     ]}
   ],
   es: [
-    { title: "1. Inputs (Entradas)", content: [
+    { title: "1. Entradas & Síntesis Química", content: [
       "En esta pestaña configuras las propiedades físicas de tu motor cohete paso a paso.",
-      "Motor y Tobera: Especifica el diámetro interno de la cámara, y los diámetros de garganta y salida de la tobera.",
-      "Propelente: Elige el tipo de combustible (KNSU, KNDX, etc.), o define un propelente personalizado ajustando su densidad, exponente de presión (n) y coeficiente (a).",
+      "Motor y Tobera: Especifica el diámetro interno de la cámara, diámetros de garganta y salida de la tobera, y comportamiento de escoria/erosión.",
+      "Química y Propulsantes Personalizados: Pulsa en 'Química & Propulsantes' para elegir entre combustibles estándar (KNDX, KNSU, RNX, APCP) o sintetizar tu propio propulsante personalizado definiendo su densidad, temperatura de llama y coeficientes de Saint-Robert (a y n) de forma global o por tramos de presión.",
       "Geometría de Granos: Añade y configura los bloques de combustible (granos). Puedes usar formas cilíndricas (BATES), de estrella o macizas, definiendo sus dimensiones y qué caras están inhibidas (protegidas del fuego)."
     ]},
     { title: "2. Results (Resultados)", content: [
@@ -219,7 +225,7 @@ const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
       "Esta sección te permite profundizar en los detalles técnicos de la simulación mediante cuatro sub-pestañas.",
       "Superficie de Quemado: Observa cómo evoluciona el área expuesta al fuego de cada grano (interno, externo y extremos) a medida que se consume.",
       "Régimen Kn: Visualiza la relación entre el área de quemado y el área de la garganta de la tobera. Te ayuda a predecir si habrá inestabilidades.",
-      "Velocidad de Quemado: Examina cómo la velocidad a la que se consume el propelente (r) varía con el tiempo y con la presión, según la Ley de Saint-Robert.",
+      "Velocidad de Quemado: Examina cómo la velocidad a la que se consume el propelente (r) varía con el tiempo y con la presión, según la Ley de Saint-Robert (r = a · Pⁿ).",
       "Flujo Másico: Analiza la velocidad a la que se generan y expulsan los gases, y monitoriza el consumo porcentual del propelente."
     ]},
     { title: "4. Mission Control", content: [
@@ -235,10 +241,10 @@ const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
     ]}
   ],
   fr: [
-    { title: "1. Inputs (Entrées)", content: [
+    { title: "1. Inputs & Chimie", content: [
       "Dans cet onglet, vous configurez les propriétés physiques de votre moteur-fusée étape par étape.",
       "Moteur et Tuyère : Spécifiez le diamètre interne de la chambre, ainsi que les diamètres au col et à la sortie de la tuyère.",
-      "Propergol : Choisissez le type de carburant ou définissez un propergol personnalisé en ajustant sa densité, son exposant de pression (n) et son coefficient (a).",
+      "Chimie & Propergols Personnalisés : Cliquez sur 'Chimie & Propergols' pour choisir un carburant ou créer une formule personnalisée avec ses coefficients de Saint-Robert (a & n) et ses plages de pression.",
       "Géométrie des Blocs : Ajoutez et configurez les blocs de propergol. Vous pouvez utiliser des formes Cylindriques (BATES), en Étoile ou Pleines, en définissant leurs dimensions et les faces inhibées."
     ]},
     { title: "2. Results (Résultats)", content: [
@@ -267,10 +273,10 @@ const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
     ]}
   ],
   it: [
-    { title: "1. Inputs (Ingressi)", content: [
+    { title: "1. Ingressi & Chimica", content: [
       "In questa scheda configuri le proprietà fisiche del tuo motore a razzo passo dopo passo.",
       "Motore e Ugello: Specifica il diametro interno della camera, e i diametri di gola e di uscita dell'ugello.",
-      "Propellente: Scegli il tipo di carburante o definisci un propellente personalizzato regolando densità, esponente di pressione (n) e coefficiente (a).",
+      "Chimica & Propellenti Personalizzati: Clicca su 'Chimica & Propellenti' per selezionare propellenti standard o creare formulazioni personalizzate definendo a, n e intervalli di pressione.",
       "Geometria dei Grani: Aggiungi e configura i blocchi di propellente solido. Puoi usare forme Cilindriche (BATES), a Stella o Piene, definendone le dimensioni e le facce inibite."
     ]},
     { title: "2. Results (Risultati)", content: [
@@ -283,7 +289,7 @@ const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
       "Questa sezione permette di approfondire i dettagli tecnici attraverso quattro sotto-schede.",
       "Superficie di Combustione: Osserva come evolve l'area esposta al fuoco di ogni grano (interna, esterna e alle estremità).",
       "Regime Kn: Visualizza il rapporto tra l'area di combustione e l'area della gola dell'ugello per prevedere eventuali instabilità.",
-      "Velocità di Combustione: Esamina come varia la velocità di consumo (r) secondo la Legge di Saint-Robert.",
+      "Velocità di Combustione: Esamina come varia la velocidad de consumo (r) secondo la Legge di Saint-Robert.",
       "Flusso di Massa: Analizza la velocità di generazione ed espulsione dei gas e monitora il consumo percentuale del propellente."
     ]},
     { title: "4. Mission Control", content: [
@@ -434,8 +440,33 @@ export default function App() {
     localStorage.setItem('hermes_nozzle', JSON.stringify(nozzle));
   }, [nozzle]);
 
+  const [customPropellants, setCustomPropellants] = useState<CustomPropellant[]>(() => {
+    return loadCustomPropellantsFromStorage();
+  });
+  const [showPropellantModal, setShowPropellantModal] = useState<boolean>(false);
+  const [targetGrainForModal, setTargetGrainForModal] = useState<string | null>(null);
+
+  const handleSavePropellants = (list: CustomPropellant[]) => {
+    setCustomPropellants(list);
+    saveCustomPropellantsToStorage(list);
+    // If any grain was using a custom propellant that got deleted, reset it to default propellant 1 (KNDX)
+    const validIds = new Set([...DEFAULT_PROPELLANTS.map(p => p.id), ...list.map(p => p.id)]);
+    setGrains(prev => prev.map(g => validIds.has(Number(g.propellantType)) ? g : { ...g, propellantType: 1 as any }));
+  };
+
+  const handleSelectPropellantForGrain = (propellantId: number) => {
+    if (targetGrainForModal) {
+      setGrains(grains.map(g => g.id === targetGrainForModal ? { ...g, propellantType: propellantId as any } : g));
+      setTargetGrainForModal(null);
+    }
+  };
+
+  const allPropellants = React.useMemo(() => {
+    return [...DEFAULT_PROPELLANTS, ...customPropellants];
+  }, [customPropellants]);
+
   const defaultGrains = [
-    { id: '1', shape: 1 as 1 | 2 | 3, propellantType: 1 as 1 | 2 | 3 | 4 | 5 | 6 | 7, D0: 56, d0: 25, d0mayor: 0, L0: 60, N: 5, Np: 0, osi: 1, ci: 1, ei: 1, rhorat: 0.94 }
+    { id: '1', shape: 1 as 1 | 2 | 3, propellantType: 1 as any, D0: 56, d0: 25, d0mayor: 0, L0: 60, N: 5, Np: 0, osi: 1, ci: 1, ei: 1, rhorat: 0.94 }
   ];
 
   const [grains, setGrains] = useState(() => {
@@ -479,17 +510,17 @@ export default function App() {
       } else if (g.shape === 3) { // BATES
         Vg = (Math.PI / 4) * Math.pow(g.D0, 2) * g.L0;
       }
-      const propData = getPropellantData(g.propellantType);
+      const propData = getPropellantData(g.propellantType, customPropellants);
       const rhoreal = propData.rho * (g.rhorat || 1);
       const Vg0 = Vg * g.N;
       mass += rhoreal * Vg0 / 1e6; // kg
     });
     return mass.toFixed(3);
-  }, [grains]);
+  }, [grains, customPropellants]);
 
   const simulate = () => {
     try {
-      const res = runSimulation({ motor, nozzle, grains: grains as any });
+      const res = runSimulation({ motor, nozzle, grains: grains as any, customPropellants });
       setResults(res);
       setActiveTab('results');
     } catch (err) {
@@ -973,15 +1004,40 @@ export default function App() {
             {/* BOTTOM AREA: Vertical list of horizontal grain rows */}
             <Card className="flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden bg-card border-border rounded-md">
                <CardHeader className={`py-2 px-3 ${theme === 'light' ? 'bg-purple-50/80 text-purple-800' : 'bg-muted/30 text-purple-400'} border-b border-border flex flex-row justify-between items-center shrink-0`}>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
                     <CardTitle className={`text-[12px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-purple-800' : 'text-purple-400'}`}>{t.grains}</CardTitle>
-                    <div className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${theme === 'light' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-purple-900/30 text-purple-300 border-purple-800/50'}`} title={lang === 'es' ? 'Masa Total del Propulsante' : 'Total Propellant Mass'}>
-                      M_prop: {totalPropellantMass} kg
+                    <div 
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono shadow-xs transition-all ${
+                        theme === 'light' 
+                          ? 'bg-purple-100 text-purple-900 border-purple-300' 
+                          : 'bg-purple-950/70 text-purple-200 border-purple-700/60'
+                      }`} 
+                      title={lang === 'es' ? 'Masa Total de todos los bloques de propulsante' : 'Total mass of all propellant grains'}
+                    >
+                      <Scale className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                      <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-300">
+                        {lang === 'es' ? 'Masa de Propulsante:' : 'Propellant Mass:'}
+                      </span>
+                      <span className="text-xs font-bold text-foreground bg-background/90 dark:bg-slate-900/90 px-1.5 py-0.5 rounded border border-purple-500/30">
+                        {totalPropellantMass} kg
+                      </span>
                     </div>
                   </div>
-                  <Button onClick={addGrain} size="sm" className="h-7 text-[10px] px-4 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-700 dark:text-purple-300 rounded font-bold shadow-[0_0_10px_rgba(168,85,247,0.15)] dark:shadow-[0_0_10px_rgba(168,85,247,0.2)] transition-all">
-                    {t.new_grain}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      onClick={() => { setTargetGrainForModal(null); setShowPropellantModal(true); }} 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-7 text-[10px] px-2.5 sm:px-3 gap-1.5 border-purple-500/40 text-purple-700 dark:text-purple-300 hover:bg-purple-500/15 font-semibold rounded"
+                    >
+                      <Beaker className="w-3.5 h-3.5 text-purple-500" />
+                      <span className="hidden sm:inline">{lang === 'es' ? 'Química & Propulsantes' : 'Propellant Chemistry'}</span>
+                      <span className="sm:hidden">{lang === 'es' ? 'Química' : 'Chemistry'}</span>
+                    </Button>
+                    <Button onClick={addGrain} size="sm" className="h-7 text-[10px] px-3 sm:px-4 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-700 dark:text-purple-300 rounded font-bold shadow-[0_0_10px_rgba(168,85,247,0.15)] dark:shadow-[0_0_10px_rgba(168,85,247,0.2)] transition-all">
+                      {t.new_grain}
+                    </Button>
+                  </div>
                </CardHeader>
                
                <CardContent className="flex-1 overflow-y-auto p-3 flex flex-col gap-4 no-scrollbar">
@@ -999,11 +1055,55 @@ export default function App() {
                         <div className="flex-1 p-2.5 grid grid-cols-2 gap-x-6 gap-y-1 min-w-[300px]">
                             <div className="space-y-1.5">
                                 <div>
-                                  <UiLabel className="text-[10px] mb-1 block px-0.5 uppercase tracking-wider text-slate-550 dark:text-slate-400 font-bold">{t.propellant}</UiLabel>
-                                  <Select value={String(g.propellantType)} onValueChange={v => setGrains(grains.map(x => x.id === g.id ? {...x, propellantType: +v as any} : x))}>
-                                    <SelectTrigger className="bg-background border-input h-8 text-[11px] px-2 py-0 min-h-0 text-foreground cursor-pointer flex items-center justify-between"><SelectValue/></SelectTrigger>
-                                    <SelectContent className="bg-card text-foreground border-border">
-                                      {PROPELLANTS.map(p => <SelectItem key={p.id} value={String(p.id)} className="text-[11px] font-medium cursor-pointer">{p.name}</SelectItem>)}
+                                  <div className="flex items-center justify-between mb-1">
+                                    <UiLabel className="text-[10px] block px-0.5 uppercase tracking-wider text-slate-550 dark:text-slate-400 font-bold">{t.propellant}</UiLabel>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => { setTargetGrainForModal(g.id); setShowPropellantModal(true); }}
+                                      className="text-[9px] text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-0.5"
+                                    >
+                                      <Beaker className="w-2.5 h-2.5" />
+                                      {lang === 'es' ? 'Fórmula' : 'Formula'}
+                                    </button>
+                                  </div>
+                                  <Select 
+                                    value={String(g.propellantType)} 
+                                    onValueChange={v => {
+                                      if (v === '__manage_propellants__') {
+                                        setTargetGrainForModal(g.id);
+                                        setShowPropellantModal(true);
+                                      } else {
+                                        setGrains(grains.map(x => x.id === g.id ? {...x, propellantType: +v as any} : x));
+                                      }
+                                    }}
+                                  >
+                                    <SelectTrigger className="bg-background border-input h-8 text-[11px] px-2 py-0 min-h-0 text-foreground cursor-pointer flex items-center justify-between">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-card text-foreground border-border max-h-64">
+                                      <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                                        {lang === 'es' ? 'Estándar' : 'Standard'}
+                                      </div>
+                                      {DEFAULT_PROPELLANTS.map(p => (
+                                        <SelectItem key={p.id} value={String(p.id)} className="text-[11px] font-medium cursor-pointer">
+                                          {p.name}
+                                        </SelectItem>
+                                      ))}
+                                      {customPropellants.length > 0 && (
+                                        <>
+                                          <div className="px-2 py-1 mt-1.5 text-[9px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 border-t border-border/50">
+                                            {lang === 'es' ? 'Personalizados' : 'Custom'}
+                                          </div>
+                                          {customPropellants.map(p => (
+                                            <SelectItem key={p.id} value={String(p.id)} className="text-[11px] font-medium cursor-pointer">
+                                              🧪 {p.name}
+                                            </SelectItem>
+                                          ))}
+                                        </>
+                                      )}
+                                      <SelectItem value="__manage_propellants__" className="text-[10px] font-bold text-purple-600 dark:text-purple-400 cursor-pointer border-t border-border mt-1">
+                                        + {lang === 'es' ? 'Gestionar Química...' : 'Manage Chemistry...'}
+                                      </SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </div>
@@ -1333,6 +1433,7 @@ export default function App() {
                  lang={lang} 
                  motor={motor} 
                  nozzle={nozzle} 
+                 customPropellants={customPropellants}
                />
              )}
            </TabsContent>
@@ -1937,6 +2038,21 @@ export default function App() {
         <VersionHistoryBook
           isOpen={showVersionHistory}
           onClose={() => setShowVersionHistory(false)}
+          lang={lang}
+          theme={theme}
+        />
+
+        <CustomPropellantModal
+          isOpen={showPropellantModal}
+          onClose={() => {
+            setShowPropellantModal(false);
+            setTargetGrainForModal(null);
+          }}
+          customPropellants={customPropellants}
+          onSavePropellants={handleSavePropellants}
+          onSelectPropellantForGrain={(id) => {
+            handleSelectPropellantForGrain(id);
+          }}
           lang={lang}
           theme={theme}
         />

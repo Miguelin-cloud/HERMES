@@ -64,7 +64,7 @@ export function calculateThroatErosion(
   return { Dt, At, ydero };
 }
 
-export function runSimulation({ motor, grains, nozzle }: SimulationInputs): SimulationResults {
+export function runSimulation({ motor, grains, nozzle, customPropellants }: SimulationInputs): SimulationResults {
   const t: number[] = [];
   const P0_MPa: number[] = [];
   const P0_gage: number[] = [];
@@ -121,7 +121,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     let Lg0 = g.L0 * g.N;
     let Vg0 = Vg * g.N;
     
-    const prop = getPropellantData(g.propellantType);
+    const prop = getPropellantData(g.propellantType, customPropellants);
     const rhoreal = prop.rho * g.rhorat; // g/cm3 
     const mg0 = rhoreal * Vg0 / 1e6; // kg
     
@@ -200,7 +200,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
   let k_active_count = 0;
   
   const initial_total_Ab = state.reduce((sum, s) => sum + s.Ab, 0);
-  const { a: a0, n: n0 } = getBurnRate(Patm, state[0]?.propellantType || 1);
+  const { a: a0, n: n0 } = getBurnRate(Patm, state[0]?.propellantType || 1, customPropellants);
   const initial_r = a0 * Math.pow(Patm, n0);
 
   // Guardar estado inicial en t=0
@@ -240,7 +240,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     for (let s of state) {
       if (s.D === 0 && s.L === 0) continue;
 
-      const { a, n } = getBurnRate(P0, s.propellantType);
+      const { a, n } = getBurnRate(P0, s.propellantType, customPropellants);
       const Aduct_At = Math.max(0, s.Aduct / At0);
       let Gg = Math.max(0, motor.Gstar - Aduct_At);
       
@@ -794,6 +794,7 @@ export function runSimulation({ motor, grains, nozzle }: SimulationInputs): Simu
     grains, grains_x, 
     grains_Abc, grains_Abe, grains_Abs, grains_Ab,
     propellantType: dominantPropellantType,
+    customPropellants,
     Kn: Kn_arr,
     At_mm2: At_mm2_arr,
     r_burn: r_burn_arr,

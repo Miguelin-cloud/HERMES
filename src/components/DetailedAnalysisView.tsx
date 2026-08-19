@@ -3,7 +3,9 @@ import {
   SimulationResults, 
   MotorInput, 
   NozzleInput,
-  getBurnRate 
+  CustomPropellant,
+  getBurnRate,
+  getPropellantData 
 } from '../lib/types';
 import { translations, Language } from '../lib/i18n';
 import { 
@@ -40,6 +42,7 @@ interface DetailedAnalysisViewProps {
   lang: Language;
   motor?: MotorInput;
   nozzle?: NozzleInput;
+  customPropellants?: CustomPropellant[];
 }
 
 type SubTab = 'areas' | 'kn' | 'burn_rate' | 'mass_flow';
@@ -48,7 +51,8 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
   results,
   lang,
   motor,
-  nozzle
+  nozzle,
+  customPropellants
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('areas');
   const [selectedGrainIdx, setSelectedGrainIdx] = useState<number | 'all'>('all');
@@ -134,7 +138,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
     const points: Array<{ pressure: number; r: number }> = [];
     
     for (let p = 0.1; p <= pMax; p += 0.2) {
-      const { a, n } = getBurnRate(p, pType);
+      const { a, n } = getBurnRate(p, pType, results.customPropellants || customPropellants);
       const r = a * Math.pow(p, n);
       points.push({
         pressure: Number(p.toFixed(2)),
@@ -142,7 +146,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
       });
     }
     return points;
-  }, [results]);
+  }, [results, customPropellants]);
 
   // ── Diagnóstico y clasificación de perfiles ─────────────────────────────────
   const knAnalysis = useMemo(() => {
@@ -179,7 +183,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
     const rAvg = results.summary.r_avg ?? 0;
     const rInit = results.summary.r_initial ?? 0;
     
-    const { a, n } = getBurnRate(Math.max(0.5, results.summary.Pmed_MPa || 3), results.propellantType || 1);
+    const { a, n } = getBurnRate(Math.max(0.5, results.summary.Pmed_MPa || 3), results.propellantType || 1, results.customPropellants || customPropellants);
 
     // Determinar si es progresivo, regresivo o neutro
     let profileType = {
@@ -203,8 +207,10 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
       };
     }
 
-    return { rMax, rAvg, rInit, a, n, profileType };
-  }, [results, t]);
+    const activePropellant = getPropellantData(results.propellantType || 1, results.customPropellants || customPropellants);
+
+    return { rMax, rAvg, rInit, a, n, profileType, activePropellant };
+  }, [results, t, customPropellants]);
 
   const massFlowAnalysis = useMemo(() => {
     const mdotMax_gs = (results.summary.mdot_max ?? 0) * 1000;
@@ -716,6 +722,65 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Table of Burn Rate vs Pressure Ranges for the simulated propellant */}
+          {burnRateAnalysis.activePropellant && (
+            <div className="p-4 rounded-xl bg-card border border-border shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Flame size={16} className="text-amber-500" />
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground">
+                    {lang === 'es' ? 'Tabla de Tasa de Quemado del Propulsor Seleccionado' : 'Selected Propellant Burn Rate Table'}: {burnRateAnalysis.activePropellant.name}
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-muted-foreground">
+                  r = a · Pⁿ [mm/s] (P en MPa)
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-border overflow-hidden bg-background">
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="bg-muted/40 border-b border-border text-[11px] text-muted-foreground font-semibold">
+                      <th className="py-2 px-3 text-left">{lang === 'es' ? 'Rango de Presión P [MPa]' : 'Pressure Range P [MPa]'}</th>
+                      <th className="py-2 px-3 text-right">{lang === 'es' ? 'Coeficiente a' : 'Coefficient a'}</th>
+                      <th className="py-2 px-3 text-right">{lang === 'es' ? 'Exponente n' : 'Exponent n'}</th>
+                      <th className="py-2 px-3 text-right">{lang === 'es' ? 'Tasa a Pmed (mm/s)' : 'Rate at Pavg (mm/s)'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {(burnRateAnalysis.activePropellant.pressureRanges && burnRateAnalysis.activePropellant.pressureRanges.length > 0) ? (
+                      burnRateAnalysis.activePropellant.pressureRanges.map((range, rIdx) => {
+                        const pSample = Math.max(0.5, results.summary.Pmed_MPa || 3.0);
+                        const isInRange = pSample >= range.pMin && pSample <= range.pMax;
+                        const rAtPmed = (range.a * Math.pow(pSample, range.n)).toFixed(2);
+                        return (
+                          <tr key={rIdx} className={`hover:bg-muted/30 transition-colors ${isInRange ? 'bg-amber-500/10 font-bold' : ''}`}>
+                            <td className="py-1.5 px-3 text-foreground font-medium">
+                              {range.pMin.toFixed(3)} – {range.pMax >= 90 ? '∞' : range.pMax.toFixed(3)} MPa
+                              {isInRange && <span className="ml-2 text-[10px] text-amber-500 font-bold uppercase">{lang === 'es' ? '(Régimen Actual)' : '(Current Regime)'}</span>}
+                            </td>
+                            <td className="py-1.5 px-3 text-right text-primary font-bold">{range.a.toFixed(4).replace(/\.?0+$/, '')}</td>
+                            <td className="py-1.5 px-3 text-right text-amber-500 font-bold">{range.n.toFixed(3)}</td>
+                            <td className="py-1.5 px-3 text-right text-foreground">{rAtPmed} mm/s</td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr className="hover:bg-muted/30 transition-colors bg-amber-500/10 font-bold">
+                        <td className="py-1.5 px-3 text-foreground font-medium">0.101 – ∞ MPa</td>
+                        <td className="py-1.5 px-3 text-right text-primary font-bold">{burnRateAnalysis.activePropellant.a}</td>
+                        <td className="py-1.5 px-3 text-right text-amber-500 font-bold">{burnRateAnalysis.activePropellant.n}</td>
+                        <td className="py-1.5 px-3 text-right text-foreground">
+                          {(burnRateAnalysis.activePropellant.a * Math.pow(Math.max(0.5, results.summary.Pmed_MPa || 3), burnRateAnalysis.activePropellant.n)).toFixed(2)} mm/s
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

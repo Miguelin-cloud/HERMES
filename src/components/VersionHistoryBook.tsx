@@ -199,8 +199,8 @@ export const VERSIONS_LOG: VersionData[] = [
     version: '1.3',
     codename: 'Deep Telemetry',
     date: '2026-08-18',
-    isLatest: true,
-    badge: { en: 'Latest Release', es: 'Versión Actual', fr: 'Dernière Version', it: 'Ultima Versione' },
+    isLatest: false,
+    badge: { en: 'Telemetry', es: 'Telemetría', fr: 'Télémétrie', it: 'Telemetria' },
     title: {
       en: 'Detailed Analysis Overhaul & Advanced Telemetry Suite',
       es: 'Reforma Integral de Análisis Detallado y Telemetría',
@@ -252,6 +252,67 @@ export const VERSIONS_LOG: VersionData[] = [
           es: 'Filtro por grano individual y suma total para cavidad interna (Abc), extremos (Abe) y superficie exterior (Abs) en cm².',
           fr: 'Filtrage par grain et vue globale des surfaces de combustion interne, extrémités et externe.',
           it: 'Filtro per singolo grano e somma totale per cavità interna, estremità e superficie esterna.'
+        }
+      }
+    ]
+  },
+  {
+    version: '1.4',
+    codename: 'Custom Chemistry',
+    date: '2026-08-19',
+    isLatest: true,
+    badge: { en: 'Latest Release', es: 'Versión Actual', fr: 'Dernière Version', it: 'Ultima Versione' },
+    title: {
+      en: 'Custom Propellant Synthesis & Responsive Input Precision',
+      es: 'Síntesis de Propulsantes Personalizados y Precisión en Entradas',
+      fr: 'Synthèse de Propergols Personnalisés et Précision des Entrées',
+      it: 'Sintesi Propellenti Personalizzati e Precisione degli Input'
+    },
+    summary: {
+      en: 'Introduces a powerful Custom Propellant Manager with persistent storage, Saint-Robert burn rate parameters (a & n), multi-pressure range definitions, thermodynamic parameters (T0, gamma, M, rho), and responsive layout improvements for half-screen displays.',
+      es: 'Incorpora el gestor de Propulsantes Personalizados con persistencia local, definición de coeficientes de Saint-Robert (a y n), rangos de presión operativos, termodinámica completa (T0, gamma, M, rho) y optimización de entradas para ventanas divididas.',
+      fr: 'Ajout du gestionnaire de Propergols Personnalisés avec sauvegarde locale, paramètres de Saint-Robert (a & n), plages de pression et affichage réactif.',
+      it: 'Aggiunge il gestore di Propellenti Personalizzati con salvataggio locale, parametri di Saint-Robert (a e n), intervalli di pressione e layout reattivo.'
+    },
+    highlights: [
+      {
+        icon: Flame,
+        title: { en: 'Custom Propellant Creator', es: 'Creador de Propulsantes a Medida', fr: 'Créateur de Propergols Personnalisés', it: 'Creatore di Propellenti Personalizzati' },
+        desc: {
+          en: 'Create, name, edit, and save unlimited custom fuels directly from the motor setup, storing custom densities (rho), chamber flame temperatures (T0), specific heat ratios (gamma), and molecular weights (M).',
+          es: 'Crea, nombra, edita y almacena propelentes personalizados desde la interfaz, configurando densidad (rho), temperatura de llama (T0), ratio de calores específicos (gamma) y masa molar (M).',
+          fr: 'Créez, nommez et sauvegardez vos propres carburants avec densité, température de flamme, gamma et masse molaire.',
+          it: 'Crea, nomina e salva carburanti personalizzati con densità, temperatura di fiamma, gamma e massa molare.'
+        }
+      },
+      {
+        icon: Activity,
+        title: { en: 'Saint-Robert Pressure Ranges (a & n)', es: 'Rangos de Presión y Ley de Saint-Robert (a y n)', fr: 'Plages de Pression Saint-Robert (a & n)', it: 'Intervalli di Pressione Saint-Robert (a e n)' },
+        desc: {
+          en: 'Configure regression parameters a and n for custom propellants, including specific pressure intervals to match empirical burn rate test curves.',
+          es: 'Define los coeficientes empíricos a y n por intervalos de presión para reproducir curvas experimentales reales de velocidad de combustión r = a · P^n.',
+          fr: 'Configurez les coefficients a et n par plages de pression pour reproduire fidèlement les essais réels de combustion.',
+          it: 'Configura i coefficienti a e n per intervalli di pressione per riprodurre le curve sperimentali reali.'
+        }
+      },
+      {
+        icon: Box,
+        title: { en: 'Responsive Input Viewport', es: 'Visualización de Entradas Responsiva', fr: 'Entrées Numériques Réactives', it: 'Visualizzazione Input Reattiva' },
+        desc: {
+          en: 'Resolved digit clipping and text truncation on resized and split-screen windows, guaranteeing complete numerical clarity for all chamber, nozzle, and grain parameters.',
+          es: 'Corrección del recorte de cifras y decimales en pantallas divididas o ventanas compactas, garantizando visibilidad total en cámara, tobera y granos.',
+          fr: 'Correction du rognage des chiffres en écran partagé pour une lisibilité parfaite des valeurs et décimales.',
+          it: 'Correzione del taglio dei numeri su finestre ridotte o divise, garantendo la visualizzazione completa dei decimali.'
+        }
+      },
+      {
+        icon: Sparkles,
+        title: { en: 'Persistent Local Storage', es: 'Memoria Local Persistente', fr: 'Mémoire Locale Persistente', it: 'Memoria Locale Persistente' },
+        desc: {
+          en: 'Custom propellants are automatically saved to your browser storage, allowing instant recall across sessions, editing, or duplication.',
+          es: 'Tus propulsantes personalizados se conservan automáticamente en la memoria del navegador para reutilizarlos, editarlos o renombrarlos en cualquier momento.',
+          fr: 'Vos propergols personnalisés sont sauvegardés automatiquement dans le navigateur pour une réutilisation continue.',
+          it: 'I propellenti personalizzati vengono salvati automaticamente per essere riutilizzati o modificati in qualsiasi momento.'
         }
       }
     ]
