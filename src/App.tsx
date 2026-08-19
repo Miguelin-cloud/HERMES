@@ -56,18 +56,18 @@ function NumberInput({
 
   return (
     <div 
-      className="group relative flex items-center justify-between gap-1.5 w-full min-w-0 border-b border-border/80 pb-1 mb-1 hover:bg-muted/40 px-1.5 py-0.5 rounded transition-all focus-within:bg-purple-500/10 focus-within:border-purple-500/50" 
+      className="group relative flex items-center justify-between gap-1.5 w-full min-w-0 border-b border-border/80 pb-1 mb-1 hover:bg-muted/40 px-1 py-0.5 rounded transition-all focus-within:bg-purple-500/10 focus-within:border-purple-500/50" 
       title={tooltip || label}
     >
       <div className="absolute bottom-[-1px] left-0 right-0 h-[1.5px] bg-gradient-to-r from-purple-500 via-purple-300 to-blue-500 opacity-0 group-focus-within:opacity-100 transition-all duration-300"></div>
-      <UiLabel className="text-[10px] sm:text-[11px] text-muted-foreground font-medium truncate flex-1 min-w-0 group-focus-within:text-foreground transition-colors z-10 cursor-help select-none">
+      <UiLabel className="text-[10px] sm:text-[11px] text-muted-foreground font-medium flex-1 min-w-0 group-focus-within:text-foreground transition-colors z-10 cursor-help select-none leading-tight py-0.5 whitespace-normal break-words">
         {label}
       </UiLabel>
       <Input
         type="number"
         step={step}
         value={internal}
-        className={`${inputWidth ? inputWidth : 'w-16 sm:w-20'} min-w-[58px] h-6 min-h-0 text-[11px] sm:text-xs py-0 px-1.5 text-right bg-background/90 border border-border/40 text-foreground font-mono font-semibold shadow-2xs rounded outline-none ring-0 focus-visible:ring-1 focus-visible:ring-purple-500 focus-visible:border-purple-500 focus-within:text-purple-600 dark:focus-within:text-purple-300 transition-all shrink-0 z-10`}
+        className={`${inputWidth ? inputWidth : 'w-[52px] sm:w-[62px]'} min-w-[48px] h-6 min-h-0 text-[11px] sm:text-xs py-0 px-1 text-right bg-background/90 border border-border/40 text-foreground font-mono font-semibold shadow-2xs rounded outline-none ring-0 focus-visible:ring-1 focus-visible:ring-purple-500 focus-visible:border-purple-500 focus-within:text-purple-600 dark:focus-within:text-purple-300 transition-all shrink-0 z-10`}
         onChange={(e) => {
           setInternal(e.target.value);
           if (e.target.value !== '' && e.target.value !== '-' && e.target.value !== '.') {
@@ -873,14 +873,14 @@ export default function App() {
             <div className="flex-none grid grid-cols-1 xl:grid-cols-3 gap-3 min-h-[170px] mb-1">
                 <Card className="bg-card border-border shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-purple-500">
                   <CardHeader className="py-2 px-3 bg-purple-500/10 dark:bg-indigo-950/30 border-b border-border flex-none"><CardTitle className="text-[11px] uppercase tracking-widest text-purple-700 dark:text-purple-400 font-bold">{t.motor}</CardTitle></CardHeader>
-                  <CardContent className="flex-1 p-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                  <CardContent className="flex-1 p-2 grid grid-cols-2 gap-x-2.5 sm:gap-x-3 gap-y-1">
                     <NumberInput label={t.chamber_d + " [mm]"} value={motor.Dc} onChange={(v:any) => setMotor({...motor, Dc: v})} tooltip={t.dc_desc} />
                     <NumberInput label={t.chamber_l + " [mm]"} value={motor.Lc} onChange={(v:any) => setMotor({...motor, Lc: v})} tooltip={t.lc_desc} />
                     <NumberInput label={t.gstar} step="0.1" value={motor.Gstar} onChange={(v:any) => setMotor({...motor, Gstar: v})} tooltip={t.gstar_desc} />
                     <NumberInput label={t.kv} step="0.1" value={motor.kv} onChange={(v:any) => setMotor({...motor, kv: v})} tooltip={t.kv_desc} />
                     <NumberInput label={t.eff_c} step="0.01" value={motor.etac} onChange={(v:any) => setMotor({...motor, etac: v})} tooltip={t.etac_desc} />
-                    <NumberInput label={t.time_step } step="0.001" decimals={3} value={motor.paso_de_tiempo} onChange={(v:any) => setMotor({...motor, paso_de_tiempo: v})} tooltip={t.dt_desc} inputWidth="w-[75px]" />
-                    <NumberInput label={t.p_amb } step="0.001" decimals={3} value={motor.Pamb} onChange={(v:any) => setMotor({...motor, Pamb: v})} tooltip={t.pamb_desc} inputWidth="w-[75px]" />
+                    <NumberInput label={t.time_step } step="0.001" decimals={3} value={motor.paso_de_tiempo} onChange={(v:any) => setMotor({...motor, paso_de_tiempo: v})} tooltip={t.dt_desc} inputWidth="w-[58px] sm:w-[68px]" />
+                    <NumberInput label={t.p_amb } step="0.001" decimals={3} value={motor.Pamb} onChange={(v:any) => setMotor({...motor, Pamb: v})} tooltip={t.pamb_desc} inputWidth="w-[58px] sm:w-[68px]" />
                   </CardContent>
                 </Card>
 
@@ -893,7 +893,7 @@ export default function App() {
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 p-2 flex flex-col gap-1 overflow-y-auto no-scrollbar">
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div className="grid grid-cols-2 gap-x-2.5 sm:gap-x-3 gap-y-1">
                       <NumberInput label={t.throat_d + " [mm]"} value={nozzle.Dt0} onChange={(v:any) => setNozzle({...nozzle, Dt0: v})} tooltip={t.dt0_desc} />
                       <NumberInput label={t.exit_d + " [mm]"} value={nozzle.Ds} onChange={(v:any) => setNozzle({...nozzle, Ds: v})} tooltip={t.ds_desc} />
                       <NumberInput label={t.div_angle + " [º]"} step="1" value={nozzle.alpha} onChange={(v:any) => setNozzle({...nozzle, alpha: v})} tooltip={t.alpha_desc} />
@@ -1052,7 +1052,7 @@ export default function App() {
                         </div>
 
                         {/* 2. Inputs (Propellant/Shape & Main dimensions) */}
-                        <div className="flex-1 p-2.5 grid grid-cols-2 gap-x-6 gap-y-1 min-w-[300px]">
+                        <div className="flex-1 p-2.5 grid grid-cols-2 gap-x-3.5 sm:gap-x-5 gap-y-1 min-w-[280px]">
                             <div className="space-y-1.5">
                                 <div>
                                   <div className="flex items-center justify-between mb-1">
