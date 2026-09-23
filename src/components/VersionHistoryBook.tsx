@@ -258,26 +258,41 @@ export const VERSIONS_LOG: VersionData[] = [
   },
   {
     version: '1.4',
-    codename: 'Custom Chemistry',
-    date: '2026-08-19',
+    codename: 'Smart Search & Custom Chemistry',
+    date: '2026-08-20',
     isLatest: true,
-    badge: { en: 'Latest Release', es: 'Versión Actual', fr: 'Dernière Version', it: 'Ultima Versione' },
+    badge: { en: 'Active Version', es: 'Versión Activa', fr: 'Version Active', it: 'Versione Attiva' },
     title: {
-      en: 'Custom Propellant Synthesis & Responsive Input Precision',
-      es: 'Síntesis de Propulsantes Personalizados y Precisión en Entradas',
-      fr: 'Synthèse de Propergols Personnalisés et Précision des Entrées',
-      it: 'Sintesi Propellenti Personalizzati e Precisione degli Input'
+      en: 'Smart Search Engine, Custom Propellants & Technical Notes',
+      es: 'Motor Smart Search, Propulsantes Personalizados y Notas Técnicas',
+      fr: 'Moteur Smart Search, Propergols Personnalisés et Notes Techniques',
+      it: 'Motore Smart Search, Propellenti Personalizzati e Note Tecniche'
     },
     summary: {
-      en: 'Introduces a powerful Custom Propellant Manager with persistent storage, Saint-Robert burn rate parameters (a & n), multi-pressure range definitions, thermodynamic parameters (T0, gamma, M, rho), and responsive layout improvements for half-screen displays.',
-      es: 'Incorpora el gestor de Propulsantes Personalizados con persistencia local, definición de coeficientes de Saint-Robert (a y n), rangos de presión operativos, termodinámica completa (T0, gamma, M, rho) y optimización de entradas para ventanas divididas.',
-      fr: 'Ajout du gestionnaire de Propergols Personnalisés avec sauvegarde locale, paramètres de Saint-Robert (a & n), plages de pression et affichage réactif.',
-      it: 'Aggiunge il gestore di Propellenti Personalizzati con salvataggio locale, parametri di Saint-Robert (a e n), intervalli di pressione e layout reattivo.'
+      en: 'Launches Version 1.4 featuring the Smart Search inverse optimization architecture, the Custom Propellant Synthesizer with multi-pressure Saint-Robert ranges, technical documentation suite in /NOTAS, and responsive split-screen input precision.',
+      es: 'Inaugura la Versión 1.4 destacando la arquitectura de optimización inversa Smart Search, el sintetizador de propulsantes a medida con rangos múltiples de Saint-Robert, la suite de documentación técnica en /NOTAS y la precisión responsiva de entradas.',
+      fr: 'Lancement de la Version 1.4 avec l\'architecture d\'optimisation Smart Search, le synthétiseur de propergols sur mesure, la documentation /NOTAS et les entrées réactives.',
+      it: 'Lancio della Versione 1.4 con l\'architettura di ottimizzazione Smart Search, il sintetizzatore di propellenti, la documentazione /NOTAS e gli input reattivi.'
     },
     highlights: [
       {
+        icon: Sparkles,
+        title: { 
+          en: 'Smart Search Inverse Optimization (Max Altitude Most Validated)', 
+          es: 'Optimización Inversa Smart Search (Máxima Altitud Más Validada)', 
+          fr: 'Optimisation Inverse Smart Search (Altitude Maximale Validée)', 
+          it: 'Ottimizzazione Inversa Smart Search (Altitudine Massima Validata)' 
+        },
+        desc: {
+          en: 'Inverse design engine that finds the optimal grain combination and nozzle throat. The "Maximum Altitude / Peak Total Impulse" mode is the most thoroughly tested and ballistically validated algorithm in the engine.',
+          es: 'Motor de diseño inverso que calcula la combinación óptima de granos y tobera. El objetivo de "Máxima Altitud / Mayor Impulso Total" es el algoritmo más extensamente probado y validado balísticamente.',
+          fr: 'Moteur de conception inverse. Le mode "Altitude Maximale / Impulsion Totale" est l\'algorithme le plus testé et validé balistiquement.',
+          it: 'Motore di progettazione inversa. La modalità "Altitudine Massima / Impulso Totale" è l\'algoritmo più testato e validato balisticamente.'
+        }
+      },
+      {
         icon: Flame,
-        title: { en: 'Custom Propellant Creator', es: 'Creador de Propulsantes a Medida', fr: 'Créateur de Propergols Personnalisés', it: 'Creatore di Propellenti Personalizzati' },
+        title: { en: 'Custom Propellant Synthesizer', es: 'Sintetizador de Propulsantes a Medida', fr: 'Créateur de Propergols Personnalisés', it: 'Creatore di Propellenti Personalizzati' },
         desc: {
           en: 'Create, name, edit, and save unlimited custom fuels directly from the motor setup, storing custom densities (rho), chamber flame temperatures (T0), specific heat ratios (gamma), and molecular weights (M).',
           es: 'Crea, nombra, edita y almacena propelentes personalizados desde la interfaz, configurando densidad (rho), temperatura de llama (T0), ratio de calores específicos (gamma) y masa molar (M).',
@@ -296,23 +311,13 @@ export const VERSIONS_LOG: VersionData[] = [
         }
       },
       {
-        icon: Box,
-        title: { en: 'Responsive Input Viewport', es: 'Visualización de Entradas Responsiva', fr: 'Entrées Numériques Réactives', it: 'Visualizzazione Input Reattiva' },
+        icon: BookOpen,
+        title: { en: 'Technical Documentation Suite (/NOTAS)', es: 'Suite de Documentación Técnica (/NOTAS)', fr: 'Documentation Technique (/NOTAS)', it: 'Documentazione Tecnica (/NOTAS)' },
         desc: {
-          en: 'Resolved digit clipping and text truncation on resized and split-screen windows, guaranteeing complete numerical clarity for all chamber, nozzle, and grain parameters.',
-          es: 'Corrección del recorte de cifras y decimales en pantallas divididas o ventanas compactas, garantizando visibilidad total en cámara, tobera y granos.',
-          fr: 'Correction du rognage des chiffres en écran partagé pour une lisibilité parfaite des valeurs et décimales.',
-          it: 'Correzione del taglio dei numeri su finestre ridotte o divise, garantendo la visualizzazione completa dei decimali.'
-        }
-      },
-      {
-        icon: Sparkles,
-        title: { en: 'Persistent Local Storage', es: 'Memoria Local Persistente', fr: 'Mémoire Locale Persistente', it: 'Memoria Locale Persistente' },
-        desc: {
-          en: 'Custom propellants are automatically saved to your browser storage, allowing instant recall across sessions, editing, or duplication.',
-          es: 'Tus propulsantes personalizados se conservan automáticamente en la memoria del navegador para reutilizarlos, editarlos o renombrarlos en cualquier momento.',
-          fr: 'Vos propergols personnalisés sont sauvegardés automatiquement dans le navigateur pour une réutilisation continue.',
-          it: 'I propellenti personalizzati vengono salvati automaticamente per essere riutilizzati o modificati in qualsiasi momento.'
+          en: 'Comprehensive developer and engineering notes covering ballistics modeling, Electron executable build guide (.exe), chemistry databases, and telemetry algorithms.',
+          es: 'Directorio completo de notas de ingeniería que documenta los modelos balísticos, la guía para compilar el ejecutable (.exe), la química y los algoritmos de telemetría.',
+          fr: 'Dossier complet de notes techniques documentant la balistique, la compilation (.exe), la chimie et la télémétrie.',
+          it: 'Cartella completa di note tecniche che documenta la balistica, la compilazione (.exe), la chimica e la telemetria.'
         }
       }
     ]
@@ -385,7 +390,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
     book_title: { en: 'Version History Log', es: 'Historial de Versiones', fr: 'Historique des Versions', it: 'Cronologia Versioni' },
     book_subtitle: { en: 'HERMES Engineering Release Notes', es: 'Registro de Lanzamientos y Cambios HERMES', fr: 'Notes de Version et Évolutions HERMES', it: 'Note di Rilascio HERMES' },
     index_title: { en: 'Table of Contents', es: 'Índice de Versiones', fr: 'Table des Matières', it: 'Indice delle Versioni' },
-    open_latest: { en: 'View Latest Version (v1.3)', es: 'Ver Última Versión (v1.3)', fr: 'Voir Dernière Version (v1.3)', it: 'Vedi Ultima Versione (v1.3)' },
+    open_latest: { en: 'View Latest Version (v1.4)', es: 'Ver Última Versión (v1.4)', fr: 'Voir Dernière Version (v1.4)', it: 'Vedi Ultima Versione (v1.4)' },
     prev_page: { en: 'Previous Page', es: 'Página Anterior', fr: 'Page Précédente', it: 'Pagina Precedente' },
     next_page: { en: 'Next Page', es: 'Página Siguiente', fr: 'Page Suivante', it: 'Pagina Successiva' },
     back_to_index: { en: 'Index', es: 'Índice', fr: 'Sommaire', it: 'Indice' },

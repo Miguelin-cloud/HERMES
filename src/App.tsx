@@ -21,6 +21,7 @@ import { MotorPreview } from './components/MotorPreview';
 import { PlaybackWrapper } from './components/PlaybackWrapper';
 import { MissionControl } from './components/MissionControl';
 import { DetailedAnalysisView } from './components/DetailedAnalysisView';
+import { SmartSearchEngine } from './components/SmartSearchEngine';
 import { SplashScreen } from './components/SplashScreen';
 import { VersionHistoryBook } from './components/VersionHistoryBook';
 import { CustomPropellantModal, loadCustomPropellantsFromStorage, saveCustomPropellantsToStorage } from './components/CustomPropellantModal';
@@ -529,6 +530,19 @@ export default function App() {
     }
   };
 
+  const handleApplySmartSearchConfiguration = (newMotor: any, newNozzle: any, newGrains: any[]) => {
+    setMotor(newMotor);
+    setNozzle(newNozzle);
+    setGrains(newGrains);
+    try {
+      const res = runSimulation({ motor: newMotor, nozzle: newNozzle, grains: newGrains, customPropellants });
+      setResults(res);
+    } catch (err) {
+      console.error(err);
+    }
+    setActiveTab('inputs');
+  };
+
   const prepareExport = (res: SimulationResults) => {
     const data: any[] = [];
     
@@ -835,14 +849,14 @@ export default function App() {
                 className={`font-bold text-xs transition-all flex items-center gap-1.5 px-3 py-1 rounded-md ${
                   activeTab === 'smart_search'
                     ? theme === 'light'
-                      ? '!bg-amber-100 !text-amber-950 !border-2 !border-amber-500 shadow-sm'
-                      : '!bg-amber-950/80 !text-white !border-2 !border-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.45)]'
+                      ? '!bg-emerald-100 !text-emerald-950 !border-2 !border-emerald-500 shadow-sm'
+                      : '!bg-emerald-950/80 !text-white !border-2 !border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.45)]'
                     : theme === 'light'
-                      ? 'text-stone-700 hover:text-amber-800 hover:bg-amber-50 border border-amber-400/40'
-                      : 'text-stone-300 hover:text-amber-300 hover:bg-amber-950/30 border border-amber-500/30'
+                      ? 'text-stone-700 hover:text-emerald-800 hover:bg-emerald-50 border border-emerald-400/40'
+                      : 'text-stone-300 hover:text-emerald-300 hover:bg-emerald-950/30 border border-emerald-500/30'
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 Smart Search
               </TabsTrigger>
               <TabsTrigger 
@@ -1472,103 +1486,16 @@ export default function App() {
           </TabsContent>
 
           {/* SMART SEARCH TAB CONTENT */}
-          <TabsContent value="smart_search" className="flex-1 flex flex-col min-h-0 gap-4 p-3 md:p-6 overflow-y-auto">
-            <div className={`max-w-4xl mx-auto w-full rounded-2xl border-2 border-dashed p-6 md:p-8 transition-all shadow-md ${
-              theme === 'light'
-                ? 'bg-amber-500/5 border-amber-500/40 text-stone-850'
-                : 'bg-amber-950/20 border-amber-500/40 text-slate-200'
-            }`}>
-              {/* Header Status Badge */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-6 border-b border-amber-500/25">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-inner">
-                    <Construction size={28} className="animate-pulse" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-mono uppercase tracking-widest px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                        {lang === 'es' ? 'En Mantenimiento • No disponible en Beta' : 'Under Maintenance • Not in Beta'}
-                      </span>
-                    </div>
-                    <h2 className="text-2xl font-bold text-amber-700 dark:text-amber-400 mt-1 flex items-center gap-2">
-                      <Search size={22} />
-                      {lang === 'es' ? 'Smart Search / Optimización Multivariable' : 'Smart Search / Multivariable Optimization'}
-                    </h2>
-                  </div>
-                </div>
-                <div className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-amber-500/10 text-amber-750 dark:text-amber-300 border border-amber-500/30">
-                  {lang === 'es' ? 'Fase Conceptual' : 'Conceptual Phase'}
-                </div>
-              </div>
-
-              {/* Main Proposal Description */}
-              <div className="mt-6 space-y-5 text-sm md:text-base leading-relaxed">
-                <div className={`p-4 rounded-xl border ${
-                  theme === 'light' ? 'bg-white/80 border-amber-200 text-stone-800' : 'bg-slate-900/80 border-amber-500/20 text-slate-200'
-                }`}>
-                  <h3 className="font-bold text-amber-700 dark:text-amber-400 text-base mb-2 flex items-center gap-2">
-                    <Target size={18} />
-                    {lang === 'es' ? '¿Qué se va a plantear en esta sección?' : 'What will be developed in this section?'}
-                  </h3>
-                  <p>
-                    {lang === 'es'
-                      ? 'Integración de algoritmos computacionales de búsqueda y optimización para encontrar automáticamente la mejor solución geométrica y termodinámica del motor entre todo el espacio de configuraciones posibles.'
-                      : 'Integration of computational search and optimization algorithms to automatically find the optimal engine geometry and thermodynamic solution across the entire design space.'}
-                  </p>
-                </div>
-
-                {/* Practical Example Box */}
-                <div className={`p-5 rounded-xl border-l-4 border-l-amber-500 border ${
-                  theme === 'light' ? 'bg-amber-100/60 border-amber-300 text-amber-950' : 'bg-amber-950/40 border-amber-500/30 text-amber-200'
-                }`}>
-                  <h4 className="font-bold text-sm uppercase tracking-wider mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-300">
-                    <Sparkles size={16} />
-                    {lang === 'es' ? 'Ejemplo Práctico de Uso:' : 'Practical Use Case Example:'}
-                  </h4>
-                  <p className="italic text-sm md:text-[15px] leading-relaxed">
-                    {lang === 'es'
-                      ? '«Quiero alcanzar 1 kilómetro (1.000 m) de altitud con este cohete. ¿Cuál es la configuración exacta de granos que debo aplicar (dimensiones, geometrías Tubular/Estrella/BATES, cantidad de bloques), teniendo en cuenta ciertas restricciones máximas de diámetro de cámara de combustión y longitud de tobera?»'
-                      : '«I want to achieve an altitude of 1 kilometer (1,000 m) with this rocket. What is the exact grain configuration I should apply (dimensions, Tubular/Star/BATES geometries, block counts), considering specific chamber volume and nozzle constraints?»'}
-                  </p>
-                </div>
-
-                {/* Planned Modules Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                  <div className={`p-4 rounded-xl border ${theme === 'light' ? 'bg-white/60 border-stone-250' : 'bg-slate-900/60 border-slate-800'}`}>
-                    <h5 className="font-bold text-xs uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">
-                      1. {lang === 'es' ? 'Algoritmos Genéticos' : 'Genetic Algorithms'}
-                    </h5>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {lang === 'es'
-                        ? 'Exploración iterativa sobre múltiples combinaciones de granos para maximizar empuje específico y apogeo.'
-                        : 'Iterative exploration over multiple grain combinations to maximize specific impulse and apogee.'}
-                    </p>
-                  </div>
-
-                  <div className={`p-4 rounded-xl border ${theme === 'light' ? 'bg-white/60 border-stone-250' : 'bg-slate-900/60 border-slate-800'}`}>
-                    <h5 className="font-bold text-xs uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">
-                      2. {lang === 'es' ? 'Restricciones Físicas' : 'Physical Constraints'}
-                    </h5>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {lang === 'es'
-                        ? 'Filtro automático de presión máxima de cámara (Pmax) para evitar fallos estructurales o sobrepresión.'
-                        : 'Automatic filter for maximum chamber pressure (Pmax) to prevent structural burst or overpressure.'}
-                    </p>
-                  </div>
-
-                  <div className={`p-4 rounded-xl border ${theme === 'light' ? 'bg-white/60 border-stone-250' : 'bg-slate-900/60 border-slate-800'}`}>
-                    <h5 className="font-bold text-xs uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">
-                      3. {lang === 'es' ? 'Tobera Óptima' : 'Optimal Nozzle'}
-                    </h5>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {lang === 'es'
-                        ? 'Cálculo del diámetro de garganta (Dt) y relación de expansión (ε) ideal según la curva de quemado.'
-                        : 'Calculation of ideal throat diameter (Dt) and expansion ratio (ε) tailored to the grain burn curve.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <TabsContent value="smart_search" className="flex-1 flex flex-col min-h-0 gap-4 p-2 md:p-4 overflow-y-auto">
+            <SmartSearchEngine
+              initialMotor={motor}
+              initialNozzle={nozzle}
+              initialGrains={grains}
+              customPropellants={customPropellants}
+              lang={lang}
+              theme={theme}
+              onApplyConfiguration={handleApplySmartSearchConfiguration}
+            />
           </TabsContent>
 
           {/* AGENTE JESUS TAB CONTENT */}

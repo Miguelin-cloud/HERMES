@@ -73,8 +73,8 @@ export function GrainPreview({
             d={pathStr} 
             fill="#64748b" 
             fillRule="evenodd" 
-            stroke={grain.osi === 1 ? "#ef4444" : "#d97706"} 
-            strokeWidth={grain.osi === 1 ? "2" : "1.5"} 
+            stroke={grain.osi === 1 ? "#ef4444" : "#09090b"} 
+            strokeWidth={grain.osi === 1 ? "2" : "3.2"} 
           />
         )}
         
@@ -82,8 +82,8 @@ export function GrainPreview({
           <polygon 
             points={corePathStr.replace(/M |L |Z/g, "")} 
             fill="var(--card)" 
-            stroke={grain.ci === 1 ? "#ef4444" : "#d97706"} 
-            strokeWidth={grain.ci === 1 ? "2" : "1.5"} 
+            stroke={grain.ci === 1 ? "#ef4444" : "#09090b"} 
+            strokeWidth={grain.ci === 1 ? "2" : "3.2"} 
           />
         )}
         
@@ -91,8 +91,8 @@ export function GrainPreview({
           <path 
             d={corePathStr} 
             fill="var(--card)" 
-            stroke={grain.ci === 1 ? "#ef4444" : "#d97706"} 
-            strokeWidth={grain.ci === 1 ? "2" : "1.5"} 
+            stroke={grain.ci === 1 ? "#ef4444" : "#09090b"} 
+            strokeWidth={grain.ci === 1 ? "2" : "3.2"} 
           />
         )}
       </svg>
@@ -137,26 +137,26 @@ export function GrainPreview({
                       {/* Top burn line */}
                       <line 
                         x1={0} y1={topY} x2={scaledL} y2={topY} 
-                        stroke={grain.osi === 1 ? "#ef4444" : "#d97706"} 
-                        strokeWidth={grain.osi === 1 ? "2" : "1"} 
+                        stroke={grain.osi === 1 ? "#ef4444" : "#09090b"} 
+                        strokeWidth={grain.osi === 1 ? "2" : "3.2"} 
                       />
                       {/* Bottom burn line */}
                       <line 
                         x1={0} y1={topY + scaledD} x2={scaledL} y2={topY + scaledD} 
-                        stroke={grain.osi === 1 ? "#ef4444" : "#d97706"} 
-                        strokeWidth={grain.osi === 1 ? "2" : "1"} 
+                        stroke={grain.osi === 1 ? "#ef4444" : "#09090b"} 
+                        strokeWidth={grain.osi === 1 ? "2" : "3.2"} 
                       />
                       
                       {/* Left and Right end faces */}
                       <line 
                         x1={0} y1={topY} x2={0} y2={topY + scaledD} 
-                        stroke={grain.ei === 1 ? "#ef4444" : "#d97706"} 
-                        strokeWidth={grain.ei === 1 ? "2" : "1"} 
+                        stroke={grain.ei === 1 ? "#ef4444" : "#09090b"} 
+                        strokeWidth={grain.ei === 1 ? "2" : "3.2"} 
                       />
                       <line 
                         x1={scaledL} y1={topY} x2={scaledL} y2={topY + scaledD} 
-                        stroke={grain.ei === 1 ? "#ef4444" : "#d97706"} 
-                        strokeWidth={grain.ei === 1 ? "2" : "1"} 
+                        stroke={grain.ei === 1 ? "#ef4444" : "#09090b"} 
+                        strokeWidth={grain.ei === 1 ? "2" : "3.2"} 
                       />
 
                       {/* Inner core if hollow */}
@@ -173,14 +173,14 @@ export function GrainPreview({
                           {/* Top core line */}
                           <line 
                             x1={0} y1={yCenter - innerY_half} x2={scaledL} y2={yCenter - innerY_half} 
-                            stroke={grain.ci === 1 ? "#ef4444" : "#d97706"} 
-                            strokeWidth={grain.ci === 1 ? "2" : "1"} 
+                            stroke={grain.ci === 1 ? "#ef4444" : "#09090b"} 
+                            strokeWidth={grain.ci === 1 ? "2" : "3.2"} 
                           />
                           {/* Bottom core line */}
                           <line 
                             x1={0} y1={yCenter + innerY_half} x2={scaledL} y2={yCenter + innerY_half} 
-                            stroke={grain.ci === 1 ? "#ef4444" : "#d97706"} 
-                            strokeWidth={grain.ci === 1 ? "2" : "1"} 
+                            stroke={grain.ci === 1 ? "#ef4444" : "#09090b"} 
+                            strokeWidth={grain.ci === 1 ? "2" : "3.2"} 
                           />
                         </g>
                       )}
