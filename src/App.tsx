@@ -209,7 +209,12 @@ export default function App() {
   }, [cursor]);
 
   const cursorClass = React.useMemo(() => {
-    if (cursor === 'rocket') return "cursor-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2224%22%20height=%2224%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22%23a855f7%22%20stroke-width=%222%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22><path%20d=%22M4.5%2016.5c-1.5%201.26-2%205-2%205s3.74-.5%205-2c.71-.84.7-2.13-.09-2.91a2.18%202.18%200%200%200-2.91-.09z%22/><path%20d=%22m12%2015-3-3a22%2022%200%200%201%202-3.95A12.88%2012.88%200%200%201%2022%202c0%202.72-.78%207.5-6%2011a22.35%2022.35%200%200%201-4%202z%22/><path%20d=%22M9%2012H4s.55-3.03%202-4c1.62-1.08%205%200%205%200%20%22/><path%20d=%22M12%2015v5s3.03-.55%204-2c1.08-1.62%200-5%200-5%20%22/></svg>'),_auto]";
+    if (cursor === 'rocket') return "cursor-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2232%22%20height=%2232%22%20viewBox=%220%200%2032%2032%22><text%20x=%220%22%20y=%2224%22%20font-size=%2222%22>🚀</text></svg>'),_auto]";
+    if (cursor === 'satellite') return "cursor-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2232%22%20height=%2232%22%20viewBox=%220%200%2032%2032%22><text%20x=%220%22%20y=%2224%22%20font-size=%2222%22>🛰️</text></svg>'),_auto]";
+    if (cursor === 'avocado') return "cursor-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2232%22%20height=%2232%22%20viewBox=%220%200%2032%2032%22><text%20x=%220%22%20y=%2224%22%20font-size=%2222%22>🥑</text></svg>'),_auto]";
+    if (cursor === 'drumstick') return "cursor-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2232%22%20height=%2232%22%20viewBox=%220%200%2032%2032%22><text%20x=%220%22%20y=%2224%22%20font-size=%2222%22>🍗</text></svg>'),_auto]";
+    if (cursor === 'frying_pan') return "cursor-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2232%22%20height=%2232%22%20viewBox=%220%200%2032%2032%22><text%20x=%220%22%20y=%2224%22%20font-size=%2222%22>🍳</text></svg>'),_auto]";
+    if (cursor === 'star') return "cursor-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2232%22%20height=%2232%22%20viewBox=%220%200%2032%2032%22><text%20x=%220%22%20y=%2224%22%20font-size=%2222%22>⭐</text></svg>'),_auto]";
     if (cursor === 'crosshair') return "cursor-crosshair";
     if (cursor === 'pointer') return "cursor-pointer";
     return "cursor-default";
@@ -716,13 +721,23 @@ export default function App() {
 
           {/* Cursor Dropdown */}
           <Select value={cursor} onValueChange={(v) => setCursor(v)}>
-            <SelectTrigger className={`w-28 h-8 text-xs font-semibold px-2 flex items-center justify-between gap-1 backdrop-blur-sm shadow-sm transition-colors cursor-pointer rounded border focus:outline-none focus:ring-0 ${
+            <SelectTrigger className={`w-32 h-8 text-xs font-semibold px-2 flex items-center justify-between gap-1 backdrop-blur-sm shadow-sm transition-colors cursor-pointer rounded border focus:outline-none focus:ring-0 ${
               theme === 'light' 
                 ? 'bg-white border-slate-300 text-slate-700' 
                 : 'bg-slate-900/80 border-slate-700/50 text-slate-200'
             }`}>
               <div className="flex items-center gap-1.5 truncate">
-                <span className="truncate">{cursor === 'rocket' ? '🚀 Rocket' : cursor === 'crosshair' ? '⌖ Cross' : cursor === 'pointer' ? '👆 Point' : 'Mouse'}</span>
+                <span className="truncate">
+                  {cursor === 'rocket' ? '🚀 Cohete' : 
+                   cursor === 'satellite' ? '🛰️ Satélite' : 
+                   cursor === 'avocado' ? '🥑 Aguacate' : 
+                   cursor === 'drumstick' ? '🍗 Muslito' : 
+                   cursor === 'frying_pan' ? '🍳 Sartén' : 
+                   cursor === 'star' ? '⭐ Estrella' : 
+                   cursor === 'crosshair' ? '⌖ Cross' : 
+                   cursor === 'pointer' ? '👆 Point' : 
+                   'Mouse'}
+                </span>
               </div>
             </SelectTrigger>
             <SelectContent className={`border ${
@@ -730,10 +745,15 @@ export default function App() {
                 ? 'bg-white text-slate-800 border-slate-200' 
                 : 'bg-slate-900 text-slate-100 border-slate-700'
             }`}>
-              <SelectItem value="default" className="text-xs cursor-pointer">Mouse</SelectItem>
-              <SelectItem value="rocket" className="text-xs cursor-pointer">🚀 Rocket</SelectItem>
-              <SelectItem value="crosshair" className="text-xs cursor-pointer">⌖ Cross</SelectItem>
-              <SelectItem value="pointer" className="text-xs cursor-pointer">👆 Point</SelectItem>
+              <SelectItem value="default" className="text-xs cursor-pointer">Mouse Normal</SelectItem>
+              <SelectItem value="rocket" className="text-xs cursor-pointer">🚀 Cohete / Rocket</SelectItem>
+              <SelectItem value="satellite" className="text-xs cursor-pointer">🛰️ Satélite</SelectItem>
+              <SelectItem value="avocado" className="text-xs cursor-pointer">🥑 Aguacate</SelectItem>
+              <SelectItem value="drumstick" className="text-xs cursor-pointer">🍗 Muslito de Pollo</SelectItem>
+              <SelectItem value="frying_pan" className="text-xs cursor-pointer">🍳 Sartén</SelectItem>
+              <SelectItem value="star" className="text-xs cursor-pointer">⭐ Estrella</SelectItem>
+              <SelectItem value="crosshair" className="text-xs cursor-pointer">⌖ Crosshair</SelectItem>
+              <SelectItem value="pointer" className="text-xs cursor-pointer">👆 Pointer</SelectItem>
             </SelectContent>
           </Select>
           

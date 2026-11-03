@@ -257,11 +257,11 @@ export const VERSIONS_LOG: VersionData[] = [
     ]
   },
   {
-    version: '1.4',
+    version: '2.0',
     codename: 'Smart Search & Custom Chemistry',
-    date: '2026-08-20',
+    date: '2026-11-03',
     isLatest: true,
-    badge: { en: 'Active Version', es: 'Versión Activa', fr: 'Version Active', it: 'Versione Attiva' },
+    badge: { en: 'Active Version v2.0', es: 'Versión Activa v2.0', fr: 'Version Active v2.0', it: 'Versione Attiva v2.0' },
     title: {
       en: 'Smart Search Engine, Custom Propellants & Technical Notes',
       es: 'Motor Smart Search, Propulsantes Personalizados y Notas Técnicas',
@@ -390,7 +390,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
     book_title: { en: 'Version History Log', es: 'Historial de Versiones', fr: 'Historique des Versions', it: 'Cronologia Versioni' },
     book_subtitle: { en: 'HERMES Engineering Release Notes', es: 'Registro de Lanzamientos y Cambios HERMES', fr: 'Notes de Version et Évolutions HERMES', it: 'Note di Rilascio HERMES' },
     index_title: { en: 'Table of Contents', es: 'Índice de Versiones', fr: 'Table des Matières', it: 'Indice delle Versioni' },
-    open_latest: { en: 'View Latest Version (v1.4)', es: 'Ver Última Versión (v1.4)', fr: 'Voir Dernière Version (v1.4)', it: 'Vedi Ultima Versione (v1.4)' },
+    open_latest: { en: 'View Latest Version (v2.0)', es: 'Ver Última Versión (v2.0)', fr: 'Voir Dernière Version (v2.0)', it: 'Vedi Ultima Versione (v2.0)' },
     prev_page: { en: 'Previous Page', es: 'Página Anterior', fr: 'Page Précédente', it: 'Pagina Precedente' },
     next_page: { en: 'Next Page', es: 'Página Siguiente', fr: 'Page Suivante', it: 'Pagina Successiva' },
     back_to_index: { en: 'Index', es: 'Índice', fr: 'Sommaire', it: 'Indice' },

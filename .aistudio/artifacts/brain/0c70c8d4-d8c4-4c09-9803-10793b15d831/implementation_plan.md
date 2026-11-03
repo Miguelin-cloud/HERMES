@@ -1,36 +1,24 @@
-# Implementation Plan: Fix Propellant Guide Box & Update Results Guide Simulation Flow
+# Implementation Plan - HERMES Simulator v2.0 Redesign & Splash Screen
 
-## Problem Summary
-1. **Propellant Guide Step 2 Bounding Box**: In `tour_create_propellant` (Step 2), the spotlight bounding box around `data-tour="propellant-standard-section"` extends off the top of the modal overlay, causing clipping and visual misalignment.
-2. **Results Guide (`tour_results`) Simulation Flow**: Automatically triggering `runSim()` synchronously during step autofill caused missing results. Per user choice, Step 1 will load the motor preset inputs and explicitly guide the user to click the red **"SIMULAR"** button to generate clean ballistic curves before proceeding through the guide.
+## Objective
+Upgrade HERMES Simulator to Version 2.0 with professional aerospace UI enhancements (glassmorphism, neon glowing accents, floating depth panels, and high contrast typography) and redesign the splash loading screen with the user's rocket workshop photo (`_DSC0362_f879f6df.JPG`) as an atmospheric, dark-purple tinted background with high-contrast glowing title and loading indicator.
 
 ---
 
 ## Proposed Changes
 
-### 1. Fix Propellant Guide Step 2 Highlight Box
-- **Target File**: `src/components/CustomPropellantModal.tsx` & `src/lib/toursData.ts`
-- **Actions**:
-  - Relocate `data-tour="propellant-standard-section"` to the inner grid container of standard propellant cards inside the modal's scrollable body rather than wrapping external margins.
-  - Ensure `InteractiveTourOverlay.tsx` accurately calculates `getBoundingClientRect()` for elements inside scrolled modal views, clamping padding to visible viewport boundaries so the spotlight box never overflows the modal header.
+### 1. Splash Screen Redesign (`src/components/SplashScreen.tsx`)
+- Update background to display `/public/assets/aistudio/_DSC0362_f879f6df.JPG` with a rich dark purple / slate gradient overlay (`bg-slate-950/85` combined with `backdrop-blur-sm` and purple shadow glows) so the photo provides an immersive engineering background while keeping text crystal clear.
+- Display "HERMES SIMULATOR v2.0" in large, bold typography with aerospace glowing accents.
+- Display subtitle "High Efficiency Rocket Motor Emulation System".
+- Refine loading spinner and progress bar with smooth purple/cyan gradient effects.
 
-### 2. Update Results Guide (`tour_results`) Step 1 Flow
-- **Target File**: `src/lib/toursData.ts`
-- **Actions**:
-  - Update Step 1 of `tour_results` to load the preset motor parameters (BATES 3x54mm KNSB) and clearly instruct the user:
-    1. Click **"Cargar Motor BATES 3x54mm KNSB"** to load the motor configuration.
-    2. Click the red **"SIMULAR"** button in the top bar to run the differential solver.
-    3. Click **"Siguiente"** in the tour to inspect the generated $P(t)$ and $F(t)$ curves, Tripoli motor class, and performance cards.
-  - Ensure the preset callback (`onAutofill`) sets the grains, motor, and nozzle parameters without attempting premature synchronous execution, letting the user trigger the simulation cleanly.
+### 2. Global v2.0 Aesthetic Enhancements (`src/App.tsx` & Tailwind UI)
+- Enhance card containers and headers across the application with refined glassmorphism (`backdrop-blur-md bg-slate-900/80 border-slate-700/60 shadow-[0_8px_30px_rgb(0,0,0,0.3)]`), subtle neon purple borders, and depth lighting.
+- Ensure all version badges and footer notes reflect v2.0.
 
 ---
 
 ## Verification Plan
-
-### Automated Build & Lint Verification
-1. Run `lint_applet` (`tsc --noEmit`) to verify no type or syntax errors.
-2. Run `compile_applet` to confirm the Vite build succeeds.
-
-### Interactive Visual Verification
-1. Open the "Create a Custom Propellant" guide (`tour_create_propellant`) and verify that Step 2 highlights `data-tour="propellant-standard-section"` cleanly inside the modal bounds without top overflow.
-2. Open the "Results" guide (`tour_results`), click the preset button to load the BATES 3x54mm motor, click "SIMULAR", and confirm that the simulation completes and all ballistic cards and charts render properly.
+- Run `lint_applet` (`tsc --noEmit`).
+- Run `compile_applet` (Vite build).
