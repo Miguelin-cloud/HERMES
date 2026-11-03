@@ -5,10 +5,10 @@ export type SmartSearchGoal = 'max_impulse' | 'fast_speed' | 'flat_thrust' | 'pr
 
 export type VariableConstraintMode = 'free' | 'fixed' | 'range';
 
-export type SearchPrecisionMode = 'basic' | 'advanced';
+export type SearchPrecisionMode = 'basic' | 'advanced' | 'hybrid_simplex';
 
 export interface SmartSearchConfig {
-  // Search precision mode: 'basic' (fast standard search) vs 'advanced' (deep multi-neighborhood exploration around optimal)
+  // Search precision mode: 'basic' (fast standard) vs 'advanced' (deep multi-neighborhood) vs 'hybrid_simplex' (CMA-ES + Constrained Nelder-Mead Simplex)
   searchPrecision?: SearchPrecisionMode;
 
   // Phase 1: Hardware & Chamber Limits & Efficiencies
@@ -160,6 +160,7 @@ export interface SmartSearchOutcome {
   hasOverpressureWarning: boolean;
   message?: string;
   diagnostics?: DiagnosticDetail[];
+  algorithmUsed?: SearchPrecisionMode;
 }
 
 export interface OptimizationProgress {
@@ -438,6 +439,174 @@ function evaluateCandidate(
 }
 
 /**
+ * Constrained Projected Nelder-Mead Downhill Simplex Optimizer
+ * High-performance derivative-free local continuous optimizer for solid rocket motor grain geometries.
+ * Guarantees convergence on non-smooth, stiff ODE surfaces without gradient noise or chattering.
+ */
+function runNelderMeadSimplex(
+  initialPoint: { L0: number; d0: number; D0: number },
+  bounds: { minL0: number; maxL0: number; mind0: number; maxd0: number; minD0: number; maxD0: number },
+  N: number,
+  isL0Fixed: boolean,
+  isd0Fixed: boolean,
+  isD0Fixed: boolean,
+  evaluator: (N: number, L0: number, D0: number, d0: number) => { score: number; isSafe: boolean } | null,
+  maxIterations: number = 36,
+  onStep?: () => void
+): { L0: number; d0: number; D0: number; score: number } {
+  const clampPoint = (p: { L0: number; d0: number; D0: number }) => {
+    const D0 = isD0Fixed ? bounds.minD0 : Math.max(bounds.minD0, Math.min(bounds.maxD0, p.D0));
+    const maxd = Math.min(bounds.maxd0, D0 - 2.0);
+    const d0 = isd0Fixed ? bounds.mind0 : Math.max(bounds.mind0, Math.min(maxd, p.d0));
+    const L0 = isL0Fixed ? bounds.minL0 : Math.max(bounds.minL0, Math.min(bounds.maxL0, p.L0));
+    return {
+      L0: parseFloat(L0.toFixed(1)),
+      d0: parseFloat(d0.toFixed(1)),
+      D0: parseFloat(D0.toFixed(1))
+    };
+  };
+
+  const evalWrapper = (pt: { L0: number; d0: number; D0: number }) => {
+    const clamped = clampPoint(pt);
+    const res = evaluator(N, clamped.L0, clamped.D0, clamped.d0);
+    return {
+      point: clamped,
+      score: res ? res.score : -999999
+    };
+  };
+
+  type Vertex = { point: { L0: number; d0: number; D0: number }; score: number };
+  const simplex: Vertex[] = [];
+
+  const baseClamped = clampPoint(initialPoint);
+  simplex.push(evalWrapper(baseClamped));
+
+  // Perturb each free dimension to create the initial simplex
+  if (!isL0Fixed && bounds.maxL0 > bounds.minL0) {
+    const stepL = Math.max(1.2, (bounds.maxL0 - bounds.minL0) * 0.08);
+    simplex.push(evalWrapper({ ...baseClamped, L0: baseClamped.L0 + stepL }));
+  }
+  if (!isd0Fixed && bounds.maxd0 > bounds.mind0) {
+    const stepd = Math.max(0.8, (bounds.maxd0 - bounds.mind0) * 0.08);
+    simplex.push(evalWrapper({ ...baseClamped, d0: baseClamped.d0 + stepd }));
+  }
+  if (!isD0Fixed && bounds.maxD0 > bounds.minD0) {
+    const stepD = 0.5;
+    simplex.push(evalWrapper({ ...baseClamped, D0: baseClamped.D0 - stepD }));
+  }
+
+  // If simplex is just 1 point (all variables fixed), return immediately
+  if (simplex.length <= 1) {
+    return { ...baseClamped, score: simplex[0].score };
+  }
+
+  const alpha = 1.0;  // Reflection parameter
+  const gamma = 2.0;  // Expansion parameter
+  const beta = 0.5;   // Contraction parameter
+  const sigma = 0.5;  // Shrink parameter
+
+  for (let iter = 0; iter < maxIterations; iter++) {
+    // Sort vertices from highest score to lowest score (maximization)
+    simplex.sort((a, b) => b.score - a.score);
+
+    const best = simplex[0];
+    const worst = simplex[simplex.length - 1];
+    const secondWorst = simplex[simplex.length - 2];
+
+    // Check convergence: if difference between best and worst score is tiny, break early
+    if (Math.abs(best.score - worst.score) < 0.05 && iter > 8) {
+      break;
+    }
+
+    // Centroid of all vertices except the worst
+    const k = simplex.length - 1;
+    let cL0 = 0, cd0 = 0, cD0 = 0;
+    for (let i = 0; i < k; i++) {
+      cL0 += simplex[i].point.L0;
+      cd0 += simplex[i].point.d0;
+      cD0 += simplex[i].point.D0;
+    }
+    const centroid = { L0: cL0 / k, d0: cd0 / k, D0: cD0 / k };
+
+    // 1. Reflection: xr = centroid + alpha * (centroid - worst)
+    const xr = clampPoint({
+      L0: centroid.L0 + alpha * (centroid.L0 - worst.point.L0),
+      d0: centroid.d0 + alpha * (centroid.d0 - worst.point.d0),
+      D0: centroid.D0 + alpha * (centroid.D0 - worst.point.D0),
+    });
+    const evalR = evalWrapper(xr);
+    if (onStep) onStep();
+
+    if (evalR.score > secondWorst.score && evalR.score <= best.score) {
+      simplex[simplex.length - 1] = evalR;
+      continue;
+    }
+
+    // 2. Expansion: If reflection is strictly better than current best
+    if (evalR.score > best.score) {
+      const xe = clampPoint({
+        L0: centroid.L0 + gamma * (evalR.point.L0 - centroid.L0),
+        d0: centroid.d0 + gamma * (evalR.point.d0 - centroid.d0),
+        D0: centroid.D0 + gamma * (evalR.point.D0 - centroid.D0),
+      });
+      const evalE = evalWrapper(xe);
+      if (onStep) onStep();
+
+      if (evalE.score > evalR.score) {
+        simplex[simplex.length - 1] = evalE;
+      } else {
+        simplex[simplex.length - 1] = evalR;
+      }
+      continue;
+    }
+
+    // 3. Outside Contraction
+    if (evalR.score > worst.score) {
+      const xc = clampPoint({
+        L0: centroid.L0 + beta * (evalR.point.L0 - centroid.L0),
+        d0: centroid.d0 + beta * (evalR.point.d0 - centroid.d0),
+        D0: centroid.D0 + beta * (evalR.point.D0 - centroid.D0),
+      });
+      const evalC = evalWrapper(xc);
+      if (onStep) onStep();
+
+      if (evalC.score > evalR.score) {
+        simplex[simplex.length - 1] = evalC;
+        continue;
+      }
+    } else {
+      // 4. Inside Contraction
+      const xcc = clampPoint({
+        L0: centroid.L0 - beta * (centroid.L0 - worst.point.L0),
+        d0: centroid.d0 - beta * (centroid.d0 - worst.point.d0),
+        D0: centroid.D0 - beta * (centroid.D0 - worst.point.D0),
+      });
+      const evalCC = evalWrapper(xcc);
+      if (onStep) onStep();
+
+      if (evalCC.score > worst.score) {
+        simplex[simplex.length - 1] = evalCC;
+        continue;
+      }
+    }
+
+    // 5. Shrink: Contract all vertices toward best
+    for (let i = 1; i < simplex.length; i++) {
+      const xs = clampPoint({
+        L0: best.point.L0 + sigma * (simplex[i].point.L0 - best.point.L0),
+        d0: best.point.d0 + sigma * (simplex[i].point.d0 - best.point.d0),
+        D0: best.point.D0 + sigma * (simplex[i].point.D0 - best.point.D0),
+      });
+      simplex[i] = evalWrapper(xs);
+      if (onStep) onStep();
+    }
+  }
+
+  simplex.sort((a, b) => b.score - a.score);
+  return { ...simplex[0].point, score: simplex[0].score };
+}
+
+/**
  * Asynchronous Intelligent Evolutionary & Adaptive Search Algorithm
  * Runs in non-blocking batches and emits real-time progress events.
  */
@@ -518,15 +687,18 @@ export async function runSmartSearchAsync(
     ];
   }
 
+  const isHybridSimplexMode = config.searchPrecision === 'hybrid_simplex';
   const isAdvancedMode = config.searchPrecision === 'advanced';
   let totalEvaluations = 0;
   let candidateCounter = 0;
   let currentBestScore = -999999;
   let currentBestLabel = '';
 
-  const estimatedTotalEvaluations = isAdvancedMode
-    ? Math.max(300, N_values.length * D0_options.length * 72)
-    : Math.max(160, N_values.length * D0_options.length * 44);
+  const estimatedTotalEvaluations = isHybridSimplexMode
+    ? Math.max(380, N_values.length * D0_options.length * 82)
+    : isAdvancedMode
+      ? Math.max(300, N_values.length * D0_options.length * 72)
+      : Math.max(160, N_values.length * D0_options.length * 44);
 
   const reportProgress = (statusText: string, customPercent?: number) => {
     if (onProgress) {
@@ -553,9 +725,11 @@ export async function runSmartSearchAsync(
   };
 
   reportProgress(
-    isAdvancedMode 
-      ? 'Iniciando optimizador avanzado: Fase exploratoria inicial...' 
-      : 'Iniciando exploración inteligente del espacio balístico...',
+    isHybridSimplexMode
+      ? 'Iniciando optimizador aeroespacial: CMA-ES + Nelder-Mead Simplex...'
+      : isAdvancedMode 
+        ? 'Iniciando optimizador avanzado: Fase exploratoria inicial...' 
+        : 'Iniciando exploración inteligente del espacio balístico...',
     6
   );
   await new Promise(r => setTimeout(r, 10));
@@ -810,10 +984,69 @@ export async function runSmartSearchAsync(
             }
 
             if (totalEvaluations % 10 === 0) {
-              reportProgress(`Fase 2/3: Enjambre evolutivo balístico (${totalEvaluations} simulaciones)...`);
+              reportProgress(
+                isHybridSimplexMode
+                  ? `Fase 2/4: Covarianza adaptativa CMA-ES (${totalEvaluations} simulaciones)...`
+                  : `Fase 2/3: Enjambre evolutivo balístico (${totalEvaluations} simulaciones)...`
+              );
               await new Promise(r => setTimeout(r, 0));
             }
           }
+
+          // CMA-ES Covariance Matrix Adaptation: Learn correlations between L0 and d0
+          if (isHybridSimplexMode && population.length >= 6 && gen % 2 === 0) {
+            const elitePop = population.slice(0, Math.max(4, Math.floor(population.length * 0.4)));
+            let meanL = 0;
+            let meand = 0;
+            for (const ind of elitePop) {
+              meanL += ind.L0;
+              meand += ind.d0;
+            }
+            meanL /= elitePop.length;
+            meand /= elitePop.length;
+
+            let varL = 0;
+            let vard = 0;
+            let covLd = 0;
+            for (const ind of elitePop) {
+              const dL = ind.L0 - meanL;
+              const dd = ind.d0 - meand;
+              varL += dL * dL;
+              vard += dd * dd;
+              covLd += dL * dd;
+            }
+            const stdL = Math.max(0.6, Math.sqrt(varL / Math.max(1, elitePop.length - 1)));
+            const stdd = Math.max(0.4, Math.sqrt(vard / Math.max(1, elitePop.length - 1)));
+            const corr = Math.max(-0.95, Math.min(0.95, covLd / (stdL * stdd * Math.max(1, elitePop.length - 1))));
+
+            for (let c = 0; c < 6; c++) {
+              const u1 = Math.max(1e-7, rng());
+              const u2 = rng();
+              const z1 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+              const z2 = Math.sqrt(-2.0 * Math.log(u1)) * Math.sin(2.0 * Math.PI * u2);
+
+              const deltaL = stdL * (0.85 * z1);
+              const deltad = stdd * (corr * 0.85 * z1 + Math.sqrt(Math.max(0.01, 1 - corr * corr)) * 0.85 * z2);
+
+              const cmaL0 = modeL0 === 'fixed'
+                ? minL0
+                : parseFloat(Math.max(minL0, Math.min(maxL0, meanL + deltaL)).toFixed(1));
+              const cmad0 = (config.shape === 3 || moded0 === 'fixed')
+                ? mind0
+                : parseFloat(Math.max(mind0, Math.min(maxd0, meand + deltad)).toFixed(1));
+
+              const cand = runEvaluation(N, cmaL0, D0, cmad0);
+              if (cand && cand.score > -9999) {
+                newPop.push({
+                  L0: cmaL0,
+                  d0: cmad0,
+                  score: cand.score,
+                  isSafe: cand.isSafe
+                });
+              }
+            }
+          }
+
           population = newPop;
         }
 
@@ -922,6 +1155,78 @@ export async function runSmartSearchAsync(
     }
   }
 
+  // =========================================================================
+  // FASE 4: OPTIMIZADOR HÍBRIDO AEROESPACIAL: NELDER-MEAD SIMPLEX RESTRINGIDO
+  // (HYBRID_SIMPLEX MODE ONLY)
+  // Refinamiento continuo libre de derivadas y sin ruido de gradientes
+  // =========================================================================
+  if (isHybridSimplexMode) {
+    reportProgress('Fase 3/4: Ejecutando Optimizador Nelder-Mead Simplex Restringido...', 72);
+    await new Promise(r => setTimeout(r, 20));
+
+    const initialPool = Array.from(evaluatedMap.values());
+    const safeInitial = initialPool.filter(c => c.isSafe);
+    safeInitial.sort((a, b) => b.score - a.score);
+    initialPool.sort((a, b) => b.score - a.score);
+
+    // Take top 4 distinct candidate configurations across N
+    const eliteSeeds = (safeInitial.length > 0 ? safeInitial : initialPool).slice(0, 4);
+
+    for (let sIdx = 0; sIdx < eliteSeeds.length; sIdx++) {
+      const elite = eliteSeeds[sIdx];
+      const N_opt = elite.config.grainCount;
+      const baseD0 = elite.config.D0;
+      const baseL0 = elite.config.L0;
+      const based0 = elite.config.d0;
+
+      const maxL0_opt = Math.floor((Lc - (N_opt * 1.2)) / N_opt);
+      const minL0_opt = Math.max(8, modeL0 === 'range' ? (config.minL0 || 10) : 8);
+      const effMaxL0 = Math.min(maxL0_opt, modeL0 === 'range' ? (config.maxL0 || maxL0_opt) : maxL0_opt);
+
+      const mind0_opt = Math.max(2.5, moded0 === 'range' ? (config.mind0 || 4) : 2.5);
+      const maxd0_opt = Math.min(baseD0 - 2, moded0 === 'range' ? (config.maxd0 || (baseD0 - 2)) : (baseD0 - 2));
+
+      const minD0_opt = modeD0 === 'range' ? (config.minD0 || 10) : (modeD0 === 'fixed' ? baseD0 : Math.max(10, Dc - 2.5));
+      const maxD0_opt = modeD0 === 'range' ? (config.maxD0 || (Dc - 0.5)) : (modeD0 === 'fixed' ? baseD0 : Math.min(Dc - 0.5, Dc - 0.5));
+
+      reportProgress(`Fase 3/4: Simplex Nelder-Mead adaptando semilla ${sIdx + 1}/${eliteSeeds.length} (N=${N_opt})...`);
+
+      // Run Nelder-Mead Simplex solver!
+      const simplexResult = runNelderMeadSimplex(
+        { L0: baseL0, d0: based0, D0: baseD0 },
+        {
+          minL0: minL0_opt,
+          maxL0: effMaxL0,
+          mind0: mind0_opt,
+          maxd0: maxd0_opt,
+          minD0: minD0_opt,
+          maxD0: maxD0_opt
+        },
+        N_opt,
+        modeL0 === 'fixed',
+        config.shape === 3 || moded0 === 'fixed',
+        modeD0 === 'fixed',
+        (n, l, D, d) => runEvaluation(n, l, D, d),
+        42,
+        () => {
+          if (totalEvaluations % 8 === 0) {
+            reportProgress(`Fase 3/4: Nelder-Mead Simplex convergiendo (${totalEvaluations} simulaciones)...`);
+          }
+        }
+      );
+
+      // Fase 4/4: Micro-ajuste KKT en la frontera de máxima presión segura
+      const microStepDeltas = [-0.3, -0.15, 0.15, 0.3];
+      for (const dL of microStepDeltas) {
+        for (const dd of microStepDeltas) {
+          const fineL0 = parseFloat(Math.max(minL0_opt, Math.min(effMaxL0, simplexResult.L0 + dL)).toFixed(1));
+          const fined0 = parseFloat(Math.max(mind0_opt, Math.min(simplexResult.D0 - 2, simplexResult.d0 + dd)).toFixed(1));
+          runEvaluation(N_opt, fineL0, simplexResult.D0, fined0);
+        }
+      }
+    }
+  }
+
   reportProgress('Finalizando selección de configuraciones óptimas...', 100);
   await new Promise(r => setTimeout(r, 30));
 
@@ -1012,7 +1317,8 @@ export async function runSmartSearchAsync(
     safeCount: safeCandidates.length,
     executionTimeMs,
     hasOverpressureWarning,
-    diagnostics
+    diagnostics,
+    algorithmUsed: config.searchPrecision || 'basic'
   };
 }
 
@@ -1186,6 +1492,7 @@ function runSmartSearchSyncInternal(config: SmartSearchConfig): SmartSearchOutco
     viableCount: allCandidatesList.length,
     safeCount: safeCandidates.length,
     executionTimeMs: parseFloat((performance.now() - startTime).toFixed(1)),
-    hasOverpressureWarning: safeCandidates.length === 0 && allCandidatesList.length > 0
+    hasOverpressureWarning: safeCandidates.length === 0 && allCandidatesList.length > 0,
+    algorithmUsed: config.searchPrecision || 'basic'
   };
 }

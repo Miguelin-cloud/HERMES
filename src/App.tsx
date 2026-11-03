@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PROPELLANTS, DEFAULT_PROPELLANTS, CustomPropellant, SimulationInputs, SimulationResults, getPropellantData } from './lib/types';
 import { runSimulation } from './lib/simulator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Label as ChartLabel } from 'recharts';
-import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen, FolderOpen, Trash2, Folder, Wrench, Search, Sparkles, Brain, Bot, AlertTriangle, Construction, Cpu, ShieldCheck, DownloadCloud, Target, Info, Beaker, Plus, Scale } from 'lucide-react';
+import { Download, Monitor, Sun, Moon, User, HelpCircle, BookOpen, FolderOpen, Trash2, Folder, Wrench, Search, Sparkles, Brain, Bot, AlertTriangle, Construction, Cpu, ShieldCheck, DownloadCloud, Target, Info, Beaker, Plus, Scale, BarChart3 } from 'lucide-react';
 
 import { GrainViewer } from './components/GrainViewer';
 import { EngineViewer } from './components/EngineViewer';
@@ -24,9 +24,14 @@ import { DetailedAnalysisView } from './components/DetailedAnalysisView';
 import { SmartSearchEngine } from './components/SmartSearchEngine';
 import { SplashScreen } from './components/SplashScreen';
 import { VersionHistoryBook } from './components/VersionHistoryBook';
+import { GuideBookModal } from './components/GuideBookModal';
+import { InteractiveTourOverlay, TourSequence } from './components/InteractiveTourOverlay';
+import { getTourSequences } from './lib/toursData';
 import { CustomPropellantModal, loadCustomPropellantsFromStorage, saveCustomPropellantsToStorage } from './components/CustomPropellantModal';
 import { Language, translations } from './lib/i18n';
 import { Logo } from './components/Logo';
+import { recordAppLaunch, trackTabVisit, trackEvent } from './lib/telemetry';
+import { UsageAnalyticsModal } from './components/UsageAnalyticsModal';
 
 function NumberInput({ 
   value, 
@@ -37,7 +42,7 @@ function NumberInput({
   decimals,
   inputWidth
 }: { 
-  value: number, 
+  value?: number | null, 
   onChange: (v: number) => void, 
   label: string, 
   step?: string,
@@ -45,15 +50,18 @@ function NumberInput({
   decimals?: number,
   inputWidth?: string
 }) {
-  const [internal, setInternal] = useState(decimals !== undefined ? value.toFixed(decimals) : value.toString());
-  const lastPushedValue = React.useRef(value);
+  const safeValue = (typeof value === 'number' && !isNaN(value)) ? value : 0;
+  const formatVal = (v: number) => (decimals !== undefined ? v.toFixed(decimals) : v.toString());
+
+  const [internal, setInternal] = useState(formatVal(safeValue));
+  const lastPushedValue = React.useRef(safeValue);
 
   React.useEffect(() => {
-    if (value !== lastPushedValue.current) {
-      setInternal(decimals !== undefined ? value.toFixed(decimals) : value.toString());
-      lastPushedValue.current = value;
+    if (safeValue !== lastPushedValue.current) {
+      setInternal(formatVal(safeValue));
+      lastPushedValue.current = safeValue;
     }
-  }, [value, decimals]);
+  }, [value, decimals, safeValue]);
 
   return (
     <div 
@@ -80,11 +88,9 @@ function NumberInput({
           }
         }}
         onBlur={() => {
-          if (decimals !== undefined && !isNaN(value)) {
-            const formatted = value.toFixed(decimals);
-            setInternal(formatted);
-            lastPushedValue.current = value;
-          }
+          const formatted = formatVal(safeValue);
+          setInternal(formatted);
+          lastPushedValue.current = safeValue;
         }}
         onFocus={e => e.target.select()}
       />
@@ -176,147 +182,22 @@ function InteractiveGrain3D({ grain }: { grain: any }) {
 import { ApogeeResult } from './lib/apogee';
 import { FlightViewer } from './components/FlightViewer';
 
-const TUTORIAL_STEPS: Record<string, { title: string, content: string[] }[]> = {
-  en: [
-    { title: "1. Inputs & Chemistry", content: [
-      "In this tab, you configure the physical properties of your rocket motor step by step.",
-      "Motor & Nozzle: Specify the internal chamber diameter, nozzle throat and exit diameters, and slag/erosion behavior.",
-      "Custom Chemistry & Propellants: Click 'Propellant Chemistry' to choose from built-in propellants (KNDX, KNSU, RNX, APCP) or synthesize your own custom fuel defining density, adiabatic flame temperature, and Saint-Robert regression coefficients (a & n) either globally or piecewise across pressure intervals.",
-      "Grain Geometry: Add and configure the solid fuel grains. You can use Cylindrical (BATES), Star core, or Solid shapes, and define their dimensions and inhibited faces."
-    ]},
-    { title: "2. Results", content: [
-      "Once everything is configured, press the 'SIMULATE' button to run the internal ballistics calculations.",
-      "Here you will see the main performance graphs: Chamber Pressure vs Time and Thrust vs Time.",
-      "The top card gives you an instant summary of the motor: its classification class (e.g., G, H, I), Total Impulse, Maximum Thrust, and Burn Time.",
-      "Advanced Use: You can save the simulation to your local library, or export all numerical data to Excel or CSV using the 'Export' button."
-    ]},
-    { title: "3. Detailed Analysis", content: [
-      "This section allows you to dive deep into the technical details of the simulation through four sub-tabs.",
-      "Burn Surface: Watch how the fire-exposed area of each grain (internal, external, and ends) evolves as it is consumed.",
-      "Kn Regime: Visualize the ratio between the burn area and the nozzle throat area. This helps predict potential pressure instabilities.",
-      "Burn Rate: Examine how the propellant consumption rate (r) varies with time and pressure, according to Saint-Robert's Law (r = a · Pⁿ).",
-      "Mass Flow: Analyze the rate at which gases are generated and expelled, and monitor the propellant consumption percentage."
-    ]},
-    { title: "4. Mission Control", content: [
-      "Here you can simulate a 1D vertical launch using the thrust curve you just generated or by importing real test data (CSV/Excel).",
-      "Enter your rocket's data: Dry mass (without motor), outer diameter, and aerodynamic drag coefficient (Cd).",
-      "The simulation will instantly calculate the Apogee (maximum altitude), maximum velocity, and maximum acceleration.",
-      "You can view full flight profile graphs (Altitude and Thrust) up to the apogee moment."
-    ]},
-    { title: "5. CFD Animation", content: [
-      "Watch an interactive 2D animation of your engine's combustion process over time.",
-      "This tool visualizes how the fire consumes the solid propellant from the core outward.",
-      "You can play the animation automatically, pause it, or use the slider to inspect the engine at a precise second of the simulation."
-    ]}
-  ],
-  es: [
-    { title: "1. Entradas & Síntesis Química", content: [
-      "En esta pestaña configuras las propiedades físicas de tu motor cohete paso a paso.",
-      "Motor y Tobera: Especifica el diámetro interno de la cámara, diámetros de garganta y salida de la tobera, y comportamiento de escoria/erosión.",
-      "Química y Propulsantes Personalizados: Pulsa en 'Química & Propulsantes' para elegir entre combustibles estándar (KNDX, KNSU, RNX, APCP) o sintetizar tu propio propulsante personalizado definiendo su densidad, temperatura de llama y coeficientes de Saint-Robert (a y n) de forma global o por tramos de presión.",
-      "Geometría de Granos: Añade y configura los bloques de combustible (granos). Puedes usar formas cilíndricas (BATES), de estrella o macizas, definiendo sus dimensiones y qué caras están inhibidas (protegidas del fuego)."
-    ]},
-    { title: "2. Results (Resultados)", content: [
-      "Una vez configurado todo, pulsa el botón 'SIMULAR' para ejecutar los cálculos de balística interior.",
-      "En esta pestaña verás las gráficas principales: Presión de Cámara vs Tiempo y Empuje vs Tiempo.",
-      "La tarjeta superior te da un resumen instantáneo del motor: su clasificación (ej. Clase G, H, I), Impulso Total, Empuje Máximo y Tiempo de Quemado.",
-      "Uso Avanzado: Puedes guardar la simulación en tu biblioteca local, o exportar todos los datos numéricos a Excel o CSV usando el botón 'Exportar'."
-    ]},
-    { title: "3. Detailed Analysis (Análisis Detallado)", content: [
-      "Esta sección te permite profundizar en los detalles técnicos de la simulación mediante cuatro sub-pestañas.",
-      "Superficie de Quemado: Observa cómo evoluciona el área expuesta al fuego de cada grano (interno, externo y extremos) a medida que se consume.",
-      "Régimen Kn: Visualiza la relación entre el área de quemado y el área de la garganta de la tobera. Te ayuda a predecir si habrá inestabilidades.",
-      "Velocidad de Quemado: Examina cómo la velocidad a la que se consume el propelente (r) varía con el tiempo y con la presión, según la Ley de Saint-Robert (r = a · Pⁿ).",
-      "Flujo Másico: Analiza la velocidad a la que se generan y expulsan los gases, y monitoriza el consumo porcentual del propelente."
-    ]},
-    { title: "4. Mission Control", content: [
-      "Aquí puedes simular un lanzamiento vertical (1D) usando la curva de empuje que has generado o importando un archivo de banco de pruebas (CSV/Excel).",
-      "Introduce los datos de tu cohete: Masa en vacío (sin motor), diámetro exterior y coeficiente aerodinámico (Cd).",
-      "La simulación calculará instantáneamente el Apogeo (altitud máxima), la velocidad máxima y la aceleración máxima.",
-      "Podrás ver gráficas del perfil de vuelo (Altitud y Empuje) hasta el momento del apogeo."
-    ]},
-    { title: "5. CFD Animation (Animación CFD)", content: [
-      "Observa una animación interactiva 2D del proceso de combustión de tu motor a lo largo del tiempo.",
-      "Esta herramienta visualiza cómo el fuego consume el propelente desde el núcleo hacia el exterior.",
-      "Puedes reproducir la animación automáticamente, pausarla, o mover la barra deslizante para inspeccionar el motor en un segundo exacto de la simulación."
-    ]}
-  ],
-  fr: [
-    { title: "1. Inputs & Chimie", content: [
-      "Dans cet onglet, vous configurez les propriétés physiques de votre moteur-fusée étape par étape.",
-      "Moteur et Tuyère : Spécifiez le diamètre interne de la chambre, ainsi que les diamètres au col et à la sortie de la tuyère.",
-      "Chimie & Propergols Personnalisés : Cliquez sur 'Chimie & Propergols' pour choisir un carburant ou créer une formule personnalisée avec ses coefficients de Saint-Robert (a & n) et ses plages de pression.",
-      "Géométrie des Blocs : Ajoutez et configurez les blocs de propergol. Vous pouvez utiliser des formes Cylindriques (BATES), en Étoile ou Pleines, en définissant leurs dimensions et les faces inhibées."
-    ]},
-    { title: "2. Results (Résultats)", content: [
-      "Une fois configuré, appuyez sur le bouton 'SIMULER' pour lancer les calculs de balistique interne.",
-      "Ici, vous verrez les graphiques principaux : Pression de la Chambre et Poussée au fil du temps.",
-      "Le résumé affiche la classification du moteur (ex: G, H, I), l'Impulsion Totale, la Poussée Maximale et le Temps de Combustion.",
-      "Utilisation Avancée : Sauvegardez la simulation ou exportez toutes les données numériques vers Excel ou CSV via le bouton 'Exporter'."
-    ]},
-    { title: "3. Detailed Analysis (Analyse Détaillée)", content: [
-      "Cette section permet d'approfondir les détails techniques de la simulation via quatre sous-onglets.",
-      "Surface de Combustion : Observez l'évolution de la zone exposée au feu de chaque bloc (interne, externe et extrémités).",
-      "Régime Kn : Visualisez le rapport entre la surface de combustion et la surface du col de la tuyère pour prévoir les instabilités.",
-      "Vitesse de Combustion : Examinez comment la vitesse de consommation (r) varie selon la loi de Saint-Robert.",
-      "Débit Massique : Analysez la vitesse de génération et d'expulsion des gaz, et suivez la consommation du propergol."
-    ]},
-    { title: "4. Mission Control", content: [
-      "Simulez un lancement vertical (1D) en utilisant la courbe de poussée générée ou en important des données de test réelles (CSV/Excel).",
-      "Entrez les données de votre fusée : Masse à vide, diamètre extérieur et coefficient de traînée (Cd).",
-      "La simulation calcule instantanément l'Apogée (altitude maximale), la vitesse max et l'accélération max.",
-      "Consultez les graphiques du profil de vol complet (Altitude et Poussée) jusqu'à l'apogée."
-    ]},
-    { title: "5. CFD Animation (Animation CFD)", content: [
-      "Regardez une animation 2D interactive du processus de combustion de votre moteur.",
-      "Cet outil montre comment le feu consomme le propergol solide depuis le centre vers l'extérieur.",
-      "Lisez l'animation automatiquement, mettez-la en pause ou utilisez le curseur pour inspecter le moteur à une seconde précise."
-    ]}
-  ],
-  it: [
-    { title: "1. Ingressi & Chimica", content: [
-      "In questa scheda configuri le proprietà fisiche del tuo motore a razzo passo dopo passo.",
-      "Motore e Ugello: Specifica il diametro interno della camera, e i diametri di gola e di uscita dell'ugello.",
-      "Chimica & Propellenti Personalizzati: Clicca su 'Chimica & Propellenti' per selezionare propellenti standard o creare formulazioni personalizzate definendo a, n e intervalli di pressione.",
-      "Geometria dei Grani: Aggiungi e configura i blocchi di propellente solido. Puoi usare forme Cilindriche (BATES), a Stella o Piene, definendone le dimensioni e le facce inibite."
-    ]},
-    { title: "2. Results (Risultati)", content: [
-      "Una volta configurato, premi il pulsante 'SIMULA' per avviare i calcoli di balistica interna.",
-      "Qui vedrai i grafici principali: Pressione in Camera e Spinta nel tempo.",
-      "Il riepilogo mostra la classe del motore (es. G, H, I), l'Impulso Totale, la Spinta Massima e il Tempo di Combustione.",
-      "Uso Avanzato: Salva la simulazione nella tua libreria o esporta i dati numerici in Excel o CSV usando il pulsante 'Esporta'."
-    ]},
-    { title: "3. Detailed Analysis (Analisi Dettagliata)", content: [
-      "Questa sezione permette di approfondire i dettagli tecnici attraverso quattro sotto-schede.",
-      "Superficie di Combustione: Osserva come evolve l'area esposta al fuoco di ogni grano (interna, esterna e alle estremità).",
-      "Regime Kn: Visualizza il rapporto tra l'area di combustione e l'area della gola dell'ugello per prevedere eventuali instabilità.",
-      "Velocità di Combustione: Esamina come varia la velocidad de consumo (r) secondo la Legge di Saint-Robert.",
-      "Flusso di Massa: Analizza la velocità di generazione ed espulsione dei gas e monitora il consumo percentuale del propellente."
-    ]},
-    { title: "4. Mission Control", content: [
-      "Simula un lancio verticale (1D) usando la curva di spinta generata o importando dati di test reali (CSV/Excel).",
-      "Inserisci i dati del tuo razzo: Massa a vuoto, diametro esterno e coefficiente di resistenza aerodinamica (Cd).",
-      "La simulazione calcola istantaneamente l'Apogeo (altitudine massima), la velocità massima e l'accelerazione massima.",
-      "Visualizza i grafici del profilo di volo (Altitudine e Spinta) fino all'apogeo."
-    ]},
-    { title: "5. CFD Animation (Animazione CFD)", content: [
-      "Guarda un'animazione 2D interattiva del processo di combustione del tuo motore.",
-      "Questo strumento mostra come il fuoco consuma il propellente solido dal nucleo verso l'esterno.",
-      "Riproduci l'animazione, mettila in pausa o usa la barra per ispezionare il motore in un secondo preciso della simulazione."
-    ]}
-  ]
-};
-
-const TUTORIAL_BTN_TEXTS: Record<string, Record<string, string>> = {
-  en: { skip: "Skip", next: "Next", prev: "Back", done: "Ready" },
-  es: { skip: "Saltar", next: "Siguiente", prev: "Atrás", done: "¡Hecho!" },
-  fr: { skip: "Passer", next: "Suivant", prev: "Retour", done: "Terminé" },
-  it: { skip: "Salta", next: "Avanti", prev: "Indietro", done: "Fatto" }
-};
-
 export default function App() {
-  const [activeTab, setActiveTab] = useState('inputs');
+  const [activeTabState, setActiveTabState] = useState('inputs');
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+
+  const activeTab = activeTabState;
+  const setActiveTab = (tab: string) => {
+    setActiveTabState(tab);
+    trackTabVisit(tab);
+  };
+
   const [lang, setLang] = useState<Language>('en');
+
+  React.useEffect(() => {
+    recordAppLaunch(lang);
+  }, []);
+
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const saved = localStorage.getItem('hermes_theme');
     return (saved === 'dark' || saved === 'light') ? saved : 'light';
@@ -369,18 +250,28 @@ export default function App() {
     localStorage.setItem('hermes_saved_sims', JSON.stringify(savedSimulations));
   }, [savedSimulations]);
   
-  const [showTutorial, setShowTutorial] = useState(() => {
-    const hasSeenTutorial = localStorage.getItem('hermes_tutorial_seen');
-    return !hasSeenTutorial;
-  });
-  const [tutorialStep, setTutorialStep] = useState(0);
+  const [showGuideBook, setShowGuideBook] = useState(false);
+  const [activeTourSequence, setActiveTourSequence] = useState<TourSequence | null>(null);
+  const [tourStepIndex, setTourStepIndex] = useState(0);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
-  const closeTutorial = () => {
-    localStorage.setItem('hermes_tutorial_seen', 'true');
-    setShowTutorial(false);
-    setTutorialStep(0);
-  };
+  React.useEffect(() => {
+    const handleOpenPropellant = (e?: Event) => {
+      setShowPropellantModal(true);
+      if ((e as CustomEvent)?.detail?.startEditor) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('hermes-start-new-propellant-editor'));
+        }, 100);
+      }
+    };
+    const handleClosePropellant = () => setShowPropellantModal(false);
+    window.addEventListener('hermes-open-propellant-modal', handleOpenPropellant);
+    window.addEventListener('hermes-close-propellant-modal', handleClosePropellant);
+    return () => {
+      window.removeEventListener('hermes-open-propellant-modal', handleOpenPropellant);
+      window.removeEventListener('hermes-close-propellant-modal', handleClosePropellant);
+    };
+  }, []);
 
   React.useEffect(() => {
     localStorage.setItem('hermes_theme', theme);
@@ -450,6 +341,7 @@ export default function App() {
   const handleSavePropellants = (list: CustomPropellant[]) => {
     setCustomPropellants(list);
     saveCustomPropellantsToStorage(list);
+    trackEvent('propellant_created');
     // If any grain was using a custom propellant that got deleted, reset it to default propellant 1 (KNDX)
     const validIds = new Set([...DEFAULT_PROPELLANTS.map(p => p.id), ...list.map(p => p.id)]);
     setGrains(prev => prev.map(g => validIds.has(Number(g.propellantType)) ? g : { ...g, propellantType: 1 as any }));
@@ -524,6 +416,7 @@ export default function App() {
       const res = runSimulation({ motor, nozzle, grains: grains as any, customPropellants });
       setResults(res);
       setActiveTab('results');
+      trackEvent('simulation');
     } catch (err) {
       console.error(err);
       alert("Error during simulation. Check the console for details.");
@@ -534,13 +427,79 @@ export default function App() {
     setMotor(newMotor);
     setNozzle(newNozzle);
     setGrains(newGrains);
+    trackEvent('smart_search');
     try {
       const res = runSimulation({ motor: newMotor, nozzle: newNozzle, grains: newGrains, customPropellants });
       setResults(res);
+      trackEvent('simulation');
     } catch (err) {
       console.error(err);
     }
     setActiveTab('inputs');
+  };
+
+  const handleApplyPresetMotor = (type: 'bates_j' | 'star_k' | 'apcp_l' | 'nozzle_opt') => {
+    if (type === 'bates_j') {
+      const newMotor = { Dc: 60.5, Lc: 483, Gstar: 2.0, kv: 0, etac: 0.90, paso_de_tiempo: 0.0005, Pamb: 0.101325 };
+      const newNozzle = { Dt0: 17.5, Ds: 38.0, e: 0, alpha: 14, etanoz: 0.88 };
+      const newGrains = [
+        { id: 'bates-1', shape: 1 as 1, propellantType: 1 as any, D0: 56, d0: 22, d0mayor: 0, L0: 75, N: 4, Np: 0, osi: 0, ci: 1, ei: 1, rhorat: 0.95 }
+      ];
+      setMotor(newMotor);
+      setNozzle(newNozzle);
+      setGrains(newGrains);
+      try {
+        const res = runSimulation({ motor: newMotor, nozzle: newNozzle, grains: newGrains as any, customPropellants });
+        setResults(res);
+      } catch (err) {}
+    } else if (type === 'star_k') {
+      const newMotor = { Dc: 75.0, Lc: 360, Gstar: 2.2, kv: 0, etac: 0.92, paso_de_tiempo: 0.0005, Pamb: 0.101325 };
+      const newNozzle = { Dt0: 22.0, Ds: 48.0, e: 0, alpha: 14, etanoz: 0.85 };
+      const newGrains = [
+        { id: 'star-1', shape: 2 as 2, propellantType: 2 as any, D0: 70, d0: 20, d0mayor: 50, L0: 300, N: 1, Np: 5, osi: 0, ci: 1, ei: 0, rhorat: 0.94 }
+      ];
+      setMotor(newMotor);
+      setNozzle(newNozzle);
+      setGrains(newGrains);
+      try {
+        const res = runSimulation({ motor: newMotor, nozzle: newNozzle, grains: newGrains as any, customPropellants });
+        setResults(res);
+      } catch (err) {}
+    } else if (type === 'apcp_l') {
+      const newMotor = { Dc: 98.0, Lc: 650, Gstar: 2.5, kv: 0, etac: 0.95, paso_de_tiempo: 0.0005, Pamb: 0.101325 };
+      const newNozzle = { Dt0: 28.0, Ds: 68.0, e: 0, alpha: 15, etanoz: 0.90 };
+      const newGrains = [
+        { id: 'apcp-1', shape: 1 as 1, propellantType: 4 as any, D0: 92, d0: 32, d0mayor: 0, L0: 140, N: 4, Np: 0, osi: 0, ci: 1, ei: 1, rhorat: 0.97 }
+      ];
+      setMotor(newMotor);
+      setNozzle(newNozzle);
+      setGrains(newGrains);
+      try {
+        const res = runSimulation({ motor: newMotor, nozzle: newNozzle, grains: newGrains as any, customPropellants });
+        setResults(res);
+      } catch (err) {}
+    } else if (type === 'nozzle_opt') {
+      setNozzle((prev: any) => ({ ...prev, Dt0: 17.5, Ds: 38.0, alpha: 14, e: 0 }));
+    }
+    setActiveTab('inputs');
+  };
+
+  const tourSequences = React.useMemo(() => {
+    return getTourSequences(lang, {
+      setGrains,
+      setMotor,
+      setNozzle,
+      runSim: simulate
+    });
+  }, [lang, customPropellants, motor, nozzle, grains]);
+
+  const handleStartTour = (tourId: string) => {
+    const seq = tourSequences[tourId];
+    if (seq) {
+      setActiveTourSequence(seq);
+      setTourStepIndex(0);
+      setShowGuideBook(false);
+    }
   };
 
   const prepareExport = (res: SimulationResults) => {
@@ -696,24 +655,21 @@ export default function App() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setTutorialStep(0);
-                setShowTutorial(true);
-              }}
+              onClick={() => setShowGuideBook(true)}
               title={
-                lang === 'es' ? 'Guía rápida de uso' :
-                lang === 'fr' ? 'Guide d\'utilisation' :
-                lang === 'it' ? 'Guida rapida' : 'Quick user guide'
+                lang === 'es' ? 'Libro de Guías e Instructivos Interactivos' :
+                lang === 'fr' ? 'Livre des guides interactifs' :
+                lang === 'it' ? 'Libro delle guide interattive' : 'Interactive Guide Book & Tours'
               }
-              className={`h-8 px-2.5 text-xs font-semibold gap-1.5 border transition-all shadow-sm ${
+              className={`h-8 px-2.5 text-xs font-bold gap-1.5 border transition-all shadow-sm ${
                 theme === 'light'
-                  ? 'bg-white hover:bg-stone-50 text-stone-700 border-slate-300 hover:border-slate-400'
-                  : 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 border-slate-700/50 hover:border-slate-500'
+                  ? 'bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 hover:bg-purple-100 text-purple-700 border-purple-300 hover:border-purple-400'
+                  : 'bg-slate-900/90 hover:bg-purple-950/40 text-purple-300 border-purple-700/60 hover:border-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
               }`}
             >
-              <HelpCircle className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span className="hidden sm:inline">
-                {lang === 'es' ? 'Guía' : lang === 'fr' ? 'Guide' : lang === 'it' ? 'Guida' : 'Guide'}
+              <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0 animate-pulse" />
+              <span>
+                {lang === 'es' ? 'Libro de Guías' : lang === 'fr' ? 'Guides' : lang === 'it' ? 'Guide' : 'Guide Book'}
               </span>
             </Button>
           </div>
@@ -731,6 +687,7 @@ export default function App() {
           {/* Saved Simulations */}
           <div className="hidden md:flex items-center gap-2">
             <Button 
+              data-tour="save-sim-btn"
               variant="outline" 
               onClick={() => setShowSaveModal(true)}
               className={`h-8 text-[10px] uppercase font-bold px-3 transition-colors ${
@@ -742,20 +699,19 @@ export default function App() {
               {lang === 'es' ? 'Guardar' : 'Save'}
             </Button>
             
-            {savedSimulations.length > 0 && (
-              <Button 
-                variant="outline"
-                onClick={() => setShowLibraryModal(true)}
-                className={`h-8 text-[10px] uppercase font-bold px-3 transition-colors ${
-                  theme === 'light'
-                    ? 'bg-white border-[#e4dfd5] text-stone-700 hover:text-stone-900 hover:bg-stone-50'
-                    : 'bg-slate-800/80 border-slate-700/50 text-slate-300 hover:text-slate-100'
-                }`}
-              >
-                <FolderOpen size={14} className="mr-1.5" />
-                {lang === 'es' ? 'Biblioteca' : 'Library'}
-              </Button>
-            )}
+            <Button 
+              data-tour="library-btn"
+              variant="outline"
+              onClick={() => setShowLibraryModal(true)}
+              className={`h-8 text-[10px] uppercase font-bold px-3 transition-colors ${
+                theme === 'light'
+                  ? 'bg-white border-[#e4dfd5] text-stone-700 hover:text-stone-900 hover:bg-stone-50'
+                  : 'bg-slate-800/80 border-slate-700/50 text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              <FolderOpen size={14} className="mr-1.5" />
+              {lang === 'es' ? 'Biblioteca' : 'Library'}
+            </Button>
           </div>
 
           {/* Cursor Dropdown */}
@@ -840,12 +796,13 @@ export default function App() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col w-full min-h-0">
           <div className="flex justify-between items-center mb-1 shrink-0 overflow-x-auto">
             <TabsList className={`flex h-8 w-max shrink-0 ${theme === 'light' ? 'bg-[#f1ede3] border-[#dfd8ca]' : 'bg-slate-900/60 border-slate-800/80'} border backdrop-blur-md rounded-lg p-0.5 gap-1.5 shadow-sm`}>
-              <TabsTrigger value="inputs" className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.inputs}</TabsTrigger>
-              <TabsTrigger value="results" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.results}</TabsTrigger>
-              <TabsTrigger value="analysis" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.analysis || "Análisis"}</TabsTrigger>
-              <TabsTrigger value="mission_control" className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.mission_control || "Mission Control"}</TabsTrigger>
+              <TabsTrigger value="inputs" data-tour="tab-trigger-inputs" className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.inputs}</TabsTrigger>
+              <TabsTrigger value="results" data-tour="tab-trigger-results" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.results}</TabsTrigger>
+              <TabsTrigger value="analysis" data-tour="tab-trigger-analysis" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.analysis || "Análisis"}</TabsTrigger>
+              <TabsTrigger value="mission_control" data-tour="tab-trigger-mission-control" className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.mission_control || "Mission Control"}</TabsTrigger>
               <TabsTrigger 
                 value="smart_search" 
+                data-tour="smart-search-tab-trigger"
                 className={`font-bold text-xs transition-all flex items-center gap-1.5 px-3 py-1 rounded-md ${
                   activeTab === 'smart_search'
                     ? theme === 'light'
@@ -861,6 +818,7 @@ export default function App() {
               </TabsTrigger>
               <TabsTrigger 
                 value="agente_jesus" 
+                data-tour="tab-trigger-agente-jesus"
                 className={`font-bold text-xs transition-all flex items-center gap-1.5 px-3 py-1 rounded-md ${
                   activeTab === 'agente_jesus'
                     ? theme === 'light'
@@ -874,9 +832,9 @@ export default function App() {
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
                 Agente Jesús
               </TabsTrigger>
-              <TabsTrigger value="cfd" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.cfd || "CFD Animation"}</TabsTrigger>
+              <TabsTrigger value="cfd" data-tour="tab-trigger-cfd" disabled={!results} className={`font-bold text-xs ${theme === 'light' ? 'data-[state=active]:bg-[#faf9f6]/95 data-[state=active]:text-indigo-600' : 'data-[state=active]:bg-slate-950 data-[state=active]:text-purple-400'}`}>{t.cfd || "CFD Animation"}</TabsTrigger>
             </TabsList>
-            <Button onClick={simulate} className="bg-destructive hover:bg-destructive/80 text-slate-200 font-bold shadow-[0_0_15px_rgba(249,115,22,0.5)] whitespace-nowrap min-w-[150px] h-9 ml-4 shrink-0 transition-all">
+            <Button data-tour="simulate-btn" onClick={simulate} className="bg-destructive hover:bg-destructive/80 text-slate-200 font-bold shadow-[0_0_15px_rgba(249,115,22,0.5)] whitespace-nowrap min-w-[150px] h-9 ml-4 shrink-0 transition-all">
                {t.run}
             </Button>
           </div>
@@ -885,7 +843,7 @@ export default function App() {
               
             {/* TOP ROW: Motor & Nozzle Settings + Visualizations */}
             <div className="flex-none grid grid-cols-1 xl:grid-cols-3 gap-3 min-h-[170px] mb-1">
-                <Card className="bg-card border-border shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-purple-500">
+                <Card data-tour="chamber-card" className="bg-card border-border shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-purple-500">
                   <CardHeader className="py-2 px-3 bg-purple-500/10 dark:bg-indigo-950/30 border-b border-border flex-none"><CardTitle className="text-[11px] uppercase tracking-widest text-purple-700 dark:text-purple-400 font-bold">{t.motor}</CardTitle></CardHeader>
                   <CardContent className="flex-1 p-2 grid grid-cols-2 gap-x-2.5 sm:gap-x-3 gap-y-1">
                     <NumberInput label={t.chamber_d + " [mm]"} value={motor.Dc} onChange={(v:any) => setMotor({...motor, Dc: v})} tooltip={t.dc_desc} />
@@ -898,7 +856,7 @@ export default function App() {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-card border-border shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-blue-500">
+                <Card data-tour="nozzle-card" className="bg-card border-border shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-blue-500">
                   <CardHeader className="py-1.5 px-3 bg-blue-500/10 dark:bg-indigo-950/30 border-b border-border flex-none flex flex-row items-center justify-between">
                     <CardTitle className="text-[11px] uppercase tracking-widest text-blue-700 dark:text-blue-400 font-bold">{t.nozzle}</CardTitle>
                     <div className="flex items-center gap-1 text-blue-600/80 dark:text-blue-400/80 hover:text-blue-600 cursor-help" title={t.slag_tooltip}>
@@ -915,7 +873,7 @@ export default function App() {
                     </div>
 
                     {/* Escoria / Slag & Erosion Panel */}
-                    <div className={`p-1.5 rounded border ${theme === 'light' ? 'bg-blue-50/40 border-blue-200/80' : 'bg-slate-900/60 border-blue-900/40'} flex flex-col gap-1 mt-0.5`}>
+                    <div data-tour="slag-panel" className={`p-1.5 rounded border ${theme === 'light' ? 'bg-blue-50/40 border-blue-200/80' : 'bg-slate-900/60 border-blue-900/40'} flex flex-col gap-1 mt-0.5`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-tight">{t.slag_erosion_title}</span>
@@ -923,9 +881,9 @@ export default function App() {
                             <Info className="w-3 h-3" />
                           </span>
                         </div>
-                        {nozzle.e !== 0 && (
-                          <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${nozzle.e < 0 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30'}`}>
-                            {nozzle.e < 0 ? `Slag: Dt → ${(Math.max(0.5, nozzle.Dt0 + nozzle.e)).toFixed(2)} mm` : `Ero: Dt → ${(nozzle.Dt0 + nozzle.e).toFixed(2)} mm`}
+                        {!!nozzle.e && (
+                          <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${(nozzle.e || 0) < 0 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30'}`}>
+                            {(nozzle.e || 0) < 0 ? `Slag: Dt → ${(Math.max(0.5, (nozzle.Dt0 || 0) + (nozzle.e || 0))).toFixed(2)} mm` : `Ero: Dt → ${((nozzle.Dt0 || 0) + (nozzle.e || 0)).toFixed(2)} mm`}
                           </span>
                         )}
                       </div>
@@ -933,12 +891,12 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-1.5 items-center">
                         <div className="col-span-1">
                           <Select 
-                            value={nozzle.e < 0 ? 'slag' : nozzle.e > 0 ? 'erosion' : 'none'} 
+                            value={(nozzle.e || 0) < 0 ? 'slag' : (nozzle.e || 0) > 0 ? 'erosion' : 'none'} 
                             onValueChange={(v) => {
                               if (v === 'none') {
                                 setNozzle({ ...nozzle, e: 0 });
                               } else if (v === 'slag') {
-                                const mag = Math.abs(nozzle.e) || 0.8;
+                                const mag = Math.abs(nozzle.e || 0) || 0.8;
                                 const maxSafe = Math.max(0.1, nozzle.Dt0 - 0.5);
                                 setNozzle({ ...nozzle, e: -Math.min(mag, maxSafe), ero_model: nozzle.ero_model || 1 });
                               } else if (v === 'erosion') {
@@ -1048,7 +1006,7 @@ export default function App() {
                       <span className="hidden sm:inline">{lang === 'es' ? 'Química & Propulsantes' : 'Propellant Chemistry'}</span>
                       <span className="sm:hidden">{lang === 'es' ? 'Química' : 'Chemistry'}</span>
                     </Button>
-                    <Button onClick={addGrain} size="sm" className="h-7 text-[10px] px-3 sm:px-4 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-700 dark:text-purple-300 rounded font-bold shadow-[0_0_10px_rgba(168,85,247,0.15)] dark:shadow-[0_0_10px_rgba(168,85,247,0.2)] transition-all">
+                    <Button data-tour="new-grain-btn" onClick={addGrain} size="sm" className="h-7 text-[10px] px-3 sm:px-4 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-700 dark:text-purple-300 rounded font-bold shadow-[0_0_10px_rgba(168,85,247,0.15)] dark:shadow-[0_0_10px_rgba(168,85,247,0.2)] transition-all">
                       {t.new_grain}
                     </Button>
                   </div>
@@ -1056,7 +1014,7 @@ export default function App() {
                
                <CardContent className="flex-1 overflow-y-auto p-3 flex flex-col gap-4 no-scrollbar">
                   {grains.map((g, index) => (
-                    <div key={g.id} className={`w-full flex shrink-0 border border-border/80 dark:border-slate-700/50 ${theme === 'light' ? 'bg-white hover:border-purple-200' : 'bg-muted/10 hover:border-slate-600/80'} rounded-md shadow-sm min-h-[140px] overflow-hidden backdrop-blur-xs relative group/grain transition-colors`}>
+                    <div key={g.id} data-tour={index === 0 ? "grain-card-0" : undefined} className={`w-full flex shrink-0 border border-border/80 dark:border-slate-700/50 ${theme === 'light' ? 'bg-white hover:border-purple-200' : 'bg-muted/10 hover:border-slate-600/80'} rounded-md shadow-sm min-h-[140px] overflow-hidden backdrop-blur-xs relative group/grain transition-colors`}>
                         {/* 1. Index & Remove */}
                         <div className={`w-8 shrink-0 ${theme === 'light' ? 'bg-purple-50/50 text-purple-700' : 'bg-slate-900/60 text-purple-400'} flex flex-col items-center justify-center border-r border-border relative`}>
                            <span className="text-xs font-bold transform -rotate-90 whitespace-nowrap uppercase tracking-widest drop-shadow-[0_0_4px_rgba(168,85,247,0.2)]">{t.grains} {index + 1}</span>
@@ -1067,14 +1025,15 @@ export default function App() {
 
                         {/* 2. Inputs (Propellant/Shape & Main dimensions) */}
                         <div className="flex-1 p-2.5 grid grid-cols-2 gap-x-3.5 sm:gap-x-5 gap-y-1 min-w-[280px]">
-                            <div className="space-y-1.5">
-                                <div>
+                            <div className="space-y-1.5" data-tour={index === 0 ? "grain-dimensions-0" : undefined}>
+                                <div data-tour={index === 0 ? "grain-propellant-0" : undefined}>
                                   <div className="flex items-center justify-between mb-1">
                                     <UiLabel className="text-[10px] block px-0.5 uppercase tracking-wider text-slate-550 dark:text-slate-400 font-bold">{t.propellant}</UiLabel>
                                     <button 
                                       type="button" 
+                                      data-tour={index === 0 ? "manage-chemistry-btn-0" : undefined}
                                       onClick={() => { setTargetGrainForModal(g.id); setShowPropellantModal(true); }}
-                                      className="text-[9px] text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-0.5"
+                                      className="text-[9px] text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
                                     >
                                       <Beaker className="w-2.5 h-2.5" />
                                       {lang === 'es' ? 'Fórmula' : 'Formula'}
@@ -1128,7 +1087,7 @@ export default function App() {
                             </div>
 
                             <div className="space-y-1.5">
-                                <div>
+                                <div data-tour={index === 0 ? "grain-shape-select-0" : undefined}>
                                   <UiLabel className="text-[10px] mb-1 block px-0.5 uppercase tracking-wider text-slate-550 dark:text-slate-400 font-bold">{t.shape}</UiLabel>
                                   <Select value={String(g.shape)} onValueChange={v => setGrains(grains.map(x => x.id === g.id ? {...x, shape: +v as any} : x))}>
                                     <SelectTrigger className="bg-background border-input h-8 text-[11px] px-2 py-0 min-h-0 text-foreground flex items-center gap-2 cursor-pointer w-full justify-between">
@@ -1191,7 +1150,7 @@ export default function App() {
                                   </>
                                 )}
                                 
-                                <div className="border-t border-border pt-2 mt-2 flex justify-between items-center px-1">
+                                <div data-tour={index === 0 ? "grain-faces-0" : undefined} className="border-t border-border pt-2 mt-2 flex justify-between items-center px-1">
                                   <UiLabel className="text-[10px] text-[#2563eb] dark:text-blue-400/80 uppercase font-bold tracking-wider">{t.burn_faces}</UiLabel>
                                   <div className="flex gap-4">
                                   <div className="flex items-center space-x-1.5" title={t.external}><Checkbox className="w-4 h-4 rounded-sm border-slate-400 dark:border-slate-600 data-[state=checked]:bg-primary data-[state=checked]:border-primary" checked={g.osi===1} onCheckedChange={c => setGrains(grains.map(x => x.id === g.id ? {...x, osi: c ? 1 : 0} : x))} id={`osi-${g.id}`} /><UiLabel className="text-[11px] font-mono text-slate-700 dark:text-slate-350 font-bold cursor-pointer" htmlFor={`osi-${g.id}`}>EXT</UiLabel></div>
@@ -1203,7 +1162,7 @@ export default function App() {
                         </div>
 
                         {/* 3. Previews (Transversal & Longitudinal) */}
-                        <div className={`w-[350px] shrink-0 ${theme === 'light' ? 'bg-purple-50/15' : 'bg-slate-900/50'} border-l border-border flex flex-row overflow-hidden relative`}>
+                        <div data-tour={index === 0 ? "grain-previews-0" : undefined} className={`w-[350px] shrink-0 ${theme === 'light' ? 'bg-purple-50/15' : 'bg-slate-900/50'} border-l border-border flex flex-row overflow-hidden relative`}>
                             {/* Inner glow effect */}
                             <div className="absolute inset-0 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] z-0 pointer-events-none"></div>
                             
@@ -1232,9 +1191,17 @@ export default function App() {
               return (
                 <div className="flex flex-col gap-6 pb-20">
                   <div className="flex justify-end">
-                    <Button onClick={() => prepareExport(results)} variant="outline" size="sm" className="bg-card h-9 shadow-sm border-border text-primary">{t.export_csv}</Button>
+                    <Button 
+                      data-tour="export-csv-btn"
+                      onClick={() => prepareExport(results)} 
+                      variant="outline" 
+                      size="sm" 
+                      className="bg-card h-9 shadow-sm border-border text-primary"
+                    >
+                      {t.export_csv}
+                    </Button>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10 gap-3">
+                  <div data-tour="results-summary-cards" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10 gap-3">
                     <Card className="col-span-2 lg:col-span-1 bg-card border-border shadow-sm border-t-2 border-t-purple-500">
                       <CardContent className="p-3">
                         <p className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">{t.shape} (Motor)</p>
@@ -1299,7 +1266,7 @@ export default function App() {
                   </div>
                   
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 flex-1 min-h-0">
-                    <Card className="flex flex-col bg-card border-border shadow-sm">
+                    <Card data-tour="pressure-chart-card" className="flex flex-col bg-card border-border shadow-sm">
                       <CardHeader className="py-2 border-b border-border bg-muted/20"><CardTitle className="text-[13px] uppercase tracking-widest text-orange-600 dark:text-orange-400">{t.pressure_vs_time}</CardTitle></CardHeader>
                       <CardContent className="p-0 pt-4 h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -1366,7 +1333,7 @@ export default function App() {
                       </CardContent>
                     </Card>
 
-                    <Card className="flex flex-col bg-card border-border shadow-sm">
+                    <Card data-tour="thrust-chart-card" className="flex flex-col bg-card border-border shadow-sm">
                       <CardHeader className="py-2 border-b border-border bg-muted/20"><CardTitle className="text-[13px] uppercase tracking-widest text-[#00ccff]">{t.thrust_vs_time}</CardTitle></CardHeader>
                       <CardContent className="p-0 pt-4 h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -1440,7 +1407,7 @@ export default function App() {
             })()}
           </TabsContent>
 
-           <TabsContent value="analysis" className="flex-1 overflow-y-auto w-full no-scrollbar p-1">
+           <TabsContent value="analysis" data-tour="analysis-panel" className="flex-1 overflow-y-auto w-full no-scrollbar p-1">
              {results && (
                <DetailedAnalysisView 
                  results={results} 
@@ -1452,7 +1419,7 @@ export default function App() {
              )}
            </TabsContent>
 
-           <TabsContent value="cfd" className="flex-1 overflow-hidden w-full relative min-h-0 flex flex-col gap-2">
+           <TabsContent value="cfd" data-tour="cfd-panel" className="flex-1 overflow-hidden w-full relative min-h-0 flex flex-col gap-2">
              {results && (
               <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col xl:flex-row gap-4 pb-10">
                  <div className="flex-1 flex flex-col gap-4">
@@ -1476,7 +1443,7 @@ export default function App() {
               </div>
             )}
           </TabsContent>
-          <TabsContent value="mission_control" className="flex-1 flex flex-col min-h-0 gap-2 px-1 overflow-y-auto pt-2">
+          <TabsContent value="mission_control" data-tour="mission-control-panel" className="flex-1 flex flex-col min-h-0 gap-2 px-1 overflow-y-auto pt-2">
              <MissionControl 
                results={results} 
                lang={lang} 
@@ -1487,19 +1454,21 @@ export default function App() {
 
           {/* SMART SEARCH TAB CONTENT */}
           <TabsContent value="smart_search" className="flex-1 flex flex-col min-h-0 gap-4 p-2 md:p-4 overflow-y-auto">
-            <SmartSearchEngine
-              initialMotor={motor}
-              initialNozzle={nozzle}
-              initialGrains={grains}
-              customPropellants={customPropellants}
-              lang={lang}
-              theme={theme}
-              onApplyConfiguration={handleApplySmartSearchConfiguration}
-            />
+            <div data-tour="smart-search-wizard" className="w-full">
+              <SmartSearchEngine
+                initialMotor={motor}
+                initialNozzle={nozzle}
+                initialGrains={grains}
+                customPropellants={customPropellants}
+                lang={lang}
+                theme={theme}
+                onApplyConfiguration={handleApplySmartSearchConfiguration}
+              />
+            </div>
           </TabsContent>
 
           {/* AGENTE JESUS TAB CONTENT */}
-          <TabsContent value="agente_jesus" className="flex-1 flex flex-col min-h-0 gap-4 p-3 md:p-6 overflow-y-auto">
+          <TabsContent value="agente_jesus" data-tour="agente-jesus-panel" className="flex-1 flex flex-col min-h-0 gap-4 p-3 md:p-6 overflow-y-auto">
             <div className={`max-w-4xl mx-auto w-full rounded-2xl border-2 border-dashed p-6 md:p-8 transition-all shadow-md ${
               theme === 'light'
                 ? 'bg-amber-500/5 border-amber-500/40 text-stone-850'
@@ -1641,6 +1610,19 @@ export default function App() {
                  <HelpCircle className="w-3.5 h-3.5 text-orange-400" />
                  <span className="text-[10px] tracking-wide">{lang === 'es' ? 'Ayuda' : 'Feedback'}</span>
                </button>
+
+               <button 
+                 onClick={() => setShowAnalyticsModal(true)}
+                 className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-all font-semibold uppercase cursor-pointer ${
+                   theme === 'light'
+                     ? 'bg-white hover:bg-stone-50 border-[#e4dfd5] text-purple-700 hover:text-purple-900 shadow-xs'
+                     : 'bg-slate-800/80 hover:bg-slate-800 border-purple-500/40 hover:border-purple-400 text-purple-300 hover:text-purple-100'
+                 }`}
+                 title={lang === 'es' ? 'Ver mis estadísticas de uso acumuladas y mensuales' : 'View my cumulative and monthly usage statistics'}
+               >
+                 <BarChart3 className="w-3.5 h-3.5 text-purple-400" />
+                 <span className="text-[10px] tracking-wide">{lang === 'es' ? 'Estadísticas de Uso' : 'Usage Stats'}</span>
+               </button>
                
                <div className="relative">
                  <button 
@@ -1717,6 +1699,7 @@ export default function App() {
                     } else {
                       XLSX.writeFile(wb, `${exportFilename}.xlsx`, { bookType: 'xlsx' });
                     }
+                    trackEvent('export_data');
                     setShowExportModal(false);
                   }
                 }}>{lang === 'es' ? 'Descargar' : 'Download'}</Button>
@@ -1740,7 +1723,7 @@ export default function App() {
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowFeedbackModal(false)}>{lang === 'es' ? 'Cancelar' : 'Cancel'}</Button>
                 <Button onClick={() => {
-                  window.location.href = `mailto:miguel.tejera@coheteros.com?subject=Hermes%20App%20Feedback&body=${encodeURIComponent(feedbackMessage)}`;
+                  window.location.href = `mailto:info@coheteros.com?subject=Hermes%20App%20Feedback&body=${encodeURIComponent(feedbackMessage)}`;
                   setShowFeedbackModal(false);
                   setFeedbackMessage('');
                 }}>{lang === 'es' ? 'Enviar' : 'Send'}</Button>
@@ -1887,80 +1870,42 @@ export default function App() {
             </div>
           </div>
         )}
-        {showTutorial && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <div className="bg-card w-full max-w-lg max-h-[85vh] rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col">
-              <div className="bg-muted px-6 py-4 border-b border-border flex justify-between items-center shrink-0">
-                <h2 className="text-xl font-bold text-foreground">
-                  {(TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en'])[tutorialStep].title}
-                </h2>
-                
-                <div className="flex items-center gap-3">
-                  <Select value={lang} onValueChange={(v: any) => setLang(v)}>
-                    <SelectTrigger className={`w-[70px] h-7 text-[10px] font-bold border-2 ${
-                      theme === 'light' 
-                        ? 'bg-white text-slate-800 border-slate-200' 
-                        : 'bg-slate-900 text-slate-100 border-slate-700'
-                    }`}>
-                      <SelectValue placeholder="Lang" />
-                    </SelectTrigger>
-                    <SelectContent className={`min-w-[70px] ${
-                      theme === 'light' 
-                        ? 'bg-white text-slate-800 border-slate-200' 
-                        : 'bg-slate-900 text-slate-100 border-slate-700'
-                    }`}>
-                      <SelectItem value="en" className="text-xs cursor-pointer">ENG</SelectItem>
-                      <SelectItem value="es" className="text-xs cursor-pointer">ESP</SelectItem>
-                      <SelectItem value="fr" className="text-xs cursor-pointer">FRA</SelectItem>
-                      <SelectItem value="it" className="text-xs cursor-pointer">ITA</SelectItem>
-                    </SelectContent>
-                  </Select>
+        <GuideBookModal
+          isOpen={showGuideBook}
+          onClose={() => setShowGuideBook(false)}
+          onStartTour={handleStartTour}
+          onApplyPresetMotor={handleApplyPresetMotor}
+          lang={lang}
+          theme={theme}
+        />
 
-                  <span className="text-xs font-mono font-semibold text-muted-foreground bg-background px-2 py-1 rounded border border-border">
-                    {tutorialStep + 1} / {(TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en']).length}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="p-6 overflow-y-auto max-h-[55vh]">
-                <ul className="space-y-3">
-                  {(TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en'])[tutorialStep].content.map((bullet, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 shrink-0"></div>
-                      <p className="text-sm text-foreground leading-relaxed">{bullet}</p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="bg-muted/50 px-6 py-4 border-t border-border flex items-center justify-between shrink-0">
-                <Button variant="ghost" onClick={closeTutorial} className="text-muted-foreground hover:text-foreground">
-                  {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).skip}
-                </Button>
-                
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setTutorialStep(Math.max(0, tutorialStep - 1))}
-                    disabled={tutorialStep === 0}
-                  >
-                    {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).prev}
-                  </Button>
-                  
-                  {tutorialStep < (TUTORIAL_STEPS[lang] || TUTORIAL_STEPS['en']).length - 1 ? (
-                    <Button onClick={() => setTutorialStep(tutorialStep + 1)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                      {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).next}
-                    </Button>
-                  ) : (
-                    <Button onClick={closeTutorial} className="bg-green-600 hover:bg-green-700 text-white">
-                      {(TUTORIAL_BTN_TEXTS[lang] || TUTORIAL_BTN_TEXTS['en']).done}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <InteractiveTourOverlay
+          activeTour={activeTourSequence}
+          currentStepIndex={tourStepIndex}
+          onNextStep={() => {
+            if (activeTourSequence && tourStepIndex < activeTourSequence.steps.length - 1) {
+              setTourStepIndex(tourStepIndex + 1);
+            } else {
+              trackEvent('guide_completed');
+              setActiveTourSequence(null);
+            }
+          }}
+          onPrevStep={() => {
+            setTourStepIndex(Math.max(0, tourStepIndex - 1));
+          }}
+          onCloseTour={() => {
+            setActiveTourSequence(null);
+          }}
+          onOpenGuideBook={() => {
+            setActiveTourSequence(null);
+            setShowGuideBook(true);
+          }}
+          onSwitchTab={(tab) => {
+            setActiveTab(tab);
+          }}
+          lang={lang}
+          theme={theme}
+        />
 
         <VersionHistoryBook
           isOpen={showVersionHistory}
@@ -1982,6 +1927,12 @@ export default function App() {
           }}
           lang={lang}
           theme={theme}
+        />
+
+        <UsageAnalyticsModal
+          isOpen={showAnalyticsModal}
+          onClose={() => setShowAnalyticsModal(false)}
+          lang={lang}
         />
       </footer>
     </div>

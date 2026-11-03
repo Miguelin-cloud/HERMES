@@ -799,7 +799,7 @@ export function MissionControl({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex flex-col gap-4">
         {/* Rocket Parameters */}
-        <Card className="bg-card border-border shadow-sm">
+        <Card data-tour="mission-rocket-params-card" className="bg-card border-border shadow-sm">
           <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
             <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
               {t.rocket_params || "Rocket Parameters"}
@@ -843,7 +843,7 @@ export function MissionControl({
         </Card>
         
         {/* Aerodynamic Data */}
-        <Card className="bg-card border-border shadow-sm flex-1">
+        <Card data-tour="mission-aero-card" className="bg-card border-border shadow-sm flex-1">
           <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
             <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
               {lang === "es" ? "Datos Aerodinámicos (Mach vs Cd)" : "Aerodynamic Data (Mach vs Cd)"}
@@ -1003,7 +1003,7 @@ export function MissionControl({
         </div>
 
         {/* Experimental Data Upload */}
-        <Card className="bg-card border-border shadow-sm">
+        <Card data-tour="mission-exp-card" className="bg-card border-border shadow-sm">
           <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
             <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
               {t.exp_data || "Experimental Data Import"}
@@ -1354,7 +1354,7 @@ export function MissionControl({
               </div>
             )}
             {/* Altitude Chart */}
-            <Card className="bg-card border-border shadow-sm min-h-[300px] flex flex-col">
+            <Card data-tour="mission-charts-card" className="bg-card border-border shadow-sm min-h-[300px] flex flex-col">
               <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
                 <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
                   {t.flight_profile || "Altitude Profile"}

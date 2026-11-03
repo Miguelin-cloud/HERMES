@@ -27,7 +27,9 @@ import {
   SlidersHorizontal,
   Eye,
   Navigation,
-  Clock
+  Clock,
+  Rocket,
+  Cpu
 } from 'lucide-react';
 import { 
   Select, 
@@ -95,6 +97,16 @@ export function SmartSearchEngine({
   // Wizard Phase: 1 (Hardware), 2 (Grain Constraints), 3 (Mission Goal & Execute)
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
   const [showAlgorithmInfo, setShowAlgorithmInfo] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleSetStep = (e: any) => {
+      if (e.detail && (e.detail === 1 || e.detail === 2 || e.detail === 3)) {
+        setActiveStep(e.detail);
+      }
+    };
+    window.addEventListener('hermes-smart-search-set-step', handleSetStep);
+    return () => window.removeEventListener('hermes-smart-search-set-step', handleSetStep);
+  }, []);
 
   // Diagram tab in results: 'curves' | 'scatter' | 'convergence'
   const [diagramTab, setDiagramTab] = useState<'curves' | 'scatter' | 'convergence'>('curves');
@@ -447,6 +459,7 @@ export function SmartSearchEngine({
           <Button
             variant="outline"
             size="sm"
+            data-tour="smart-search-algorithm-btn"
             onClick={() => setShowAlgorithmInfo(!showAlgorithmInfo)}
             className="h-8 text-xs font-mono flex items-center gap-1.5 border-border"
           >
@@ -457,6 +470,7 @@ export function SmartSearchEngine({
           <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border">
             <button
               onClick={() => setActiveStep(1)}
+              data-tour="smart-search-phase-1-btn"
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeStep === 1 
                   ? 'bg-emerald-600 text-white shadow-xs' 
@@ -471,6 +485,7 @@ export function SmartSearchEngine({
 
             <button
               onClick={() => setActiveStep(2)}
+              data-tour="smart-search-phase-2-btn"
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeStep === 2 
                   ? 'bg-emerald-600 text-white shadow-xs' 
@@ -485,6 +500,7 @@ export function SmartSearchEngine({
 
             <button
               onClick={() => setActiveStep(3)}
+              data-tour="smart-search-phase-3-btn"
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeStep === 3 
                   ? 'bg-emerald-600 text-white shadow-xs' 
@@ -515,25 +531,35 @@ export function SmartSearchEngine({
               ✕
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <span className="font-bold text-foreground font-mono uppercase text-[11px] block">
-                {isSpanish ? '1. Motor de Simulación Balística Numérico 0D' : '1. Exact Numerical 0D Ballistic Solver'}
+                {isSpanish ? '1. Motor de Simulación Numérico 0D' : '1. Exact Numerical 0D Solver'}
               </span>
               <p>
                 {isSpanish
-                  ? 'El optimizador resuelve la misma integración balística transitoria exacta que la pestaña principal. En cada incremento de tiempo integra la ley de Saint-Robert / Vieille (r = a·Pⁿ), la ecuación de continuidad en cámara con flujo supersónico isentrópico en tobera de Laval y la regresión geométrica 3D de caras activas.'
-                  : 'The optimizer solves the exact same transient numerical ballistics as the main solver. At each time step it integrates Vieille burning law (r = a·Pⁿ), chamber continuity with isentropic Laval expansion, and 3D geometric regression of active burn surfaces.'}
+                  ? 'El optimizador resuelve la misma integración balística transitoria exacta que la pestaña principal: integra en cada paso de tiempo la ley de Vieille (r = a·Pⁿ), continuidad en cámara con tobera isentrópica Laval y regresión geométrica 3D de caras activas.'
+                  : 'The optimizer solves exact transient numerical ballistics: integrating Vieille burning law (r = a·Pⁿ), chamber continuity with Laval expansion, and 3D regression of active burn surfaces.'}
               </p>
             </div>
             <div className="space-y-1.5">
               <span className="font-bold text-foreground font-mono uppercase text-[11px] block">
-                {isSpanish ? '2. Algoritmo Evolutivo Adaptativo y Refinamiento Local' : '2. Evolutionary Search & Adaptive Local Gradient'}
+                {isSpanish ? '2. Espacio Mixto Entero y Filtrado Kn' : '2. Mixed-Integer Space & Kn Filtering'}
               </span>
               <p>
                 {isSpanish
-                  ? 'En lugar de un barrido ciego, el algoritmo explora el espacio continuo de variables (longitud L0, diámetro de núcleo d0 y holgura exterior D0) mediante evolución diferencial con selección probabilística. Las mejores configuraciones se pulen por gradiente local y se preservan las 5 mejores soluciones geométricamente diversas.'
-                  : 'Rather than a brute force grid, the engine explores continuous parameter domains (length L0, core d0, diameter D0) via differential evolution with niching selection. Top candidates undergo local gradient refinement to pinpoint the global Pareto optima.'}
+                  ? 'Calcula de antemano la relación de Klemmung segura (Kn_max, Kn_min) según el propelente y límites de cámara para descartar el 85% de configuraciones inviables antes de simular, explorando granos discretos N de forma natural sin atascarse.'
+                  : 'Pre-calculates analytical safe Klemmung limits (Kn_max, Kn_min) to eliminate 85% of infeasible geometries before simulation, exploring discrete segment counts N seamlessly.'}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <span className="font-bold text-foreground font-mono uppercase text-[11px] block text-purple-700 dark:text-purple-300">
+                {isSpanish ? '3. Modelo Híbrido vs fmincon (MATLAB)' : '3. Hybrid Aerospace Model vs fmincon'}
+              </span>
+              <p>
+                {isSpanish
+                  ? 'Algoritmos basados en gradientes (como fmincon SQP) fallan ante el ruido numérico y discontinuidades de tiempo de quemado en EDOs balísticas. El solver Híbrido implementado usa CMA-ES para detectar correlaciones multivariables y Nelder-Mead Simplex proyectado para afinar las variables continuas (L0, d0, D0) con precisión absoluta sin derivadas.'
+                  : 'Gradient algorithms (like fmincon SQP) suffer from numerical noise in ODE time-stepping. Our hybrid model pairs CMA-ES covariance learning with a projected Nelder-Mead Simplex solver to pinpoint continuous optima without noisy derivatives.'}
               </p>
             </div>
           </div>
@@ -544,7 +570,7 @@ export function SmartSearchEngine({
       
       {/* FASE 1: HARDWARE DEFINIDO (CÁMARA Y TOBERA) */}
       {activeStep === 1 && (
-        <Card className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
+        <Card data-tour="smart-search-phase1-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
           <CardHeader className="py-3 px-4 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
               <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
@@ -839,7 +865,7 @@ export function SmartSearchEngine({
 
       {/* FASE 2: GEOMETRÍA Y RESTRICCIONES DE GRANO */}
       {activeStep === 2 && (
-        <Card className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
+        <Card data-tour="smart-search-phase2-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
           <CardHeader className="py-3 px-4 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
               <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
@@ -1547,7 +1573,7 @@ export function SmartSearchEngine({
 
       {/* FASE 3: OBJETIVOS DE VUELO Y EJECUCIÓN DEL ALGORITMO */}
       {activeStep === 3 && (
-        <Card className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
+        <Card data-tour="smart-search-phase3-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
           <CardHeader className="py-3 px-4 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
               <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
@@ -1723,20 +1749,20 @@ export function SmartSearchEngine({
 
             </div>
 
-            {/* SEARCH PRECISION & MODEL SELECTOR: BASIC VS ADVANCED */}
-            <div className="space-y-3 pt-3 border-t border-border">
+            {/* SEARCH PRECISION & MODEL SELECTOR: BASIC VS ADVANCED VS HYBRID SIMPLEX */}
+            <div data-tour="smart-search-precision-card" className="space-y-3 pt-3 border-t border-border">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-1.5">
                   <SlidersHorizontal size={14} className="text-emerald-600 dark:text-emerald-400" />
-                  {isSpanish ? 'Tipo / Modelo de Búsqueda' : 'Search Mode / Precision Model'}
+                  {isSpanish ? 'Tipo / Algoritmo de Optimización' : 'Optimization Model & Algorithm'}
                 </span>
                 <span className="text-[11px] text-muted-foreground font-mono">
-                  {isSpanish ? 'Selecciona entre Búsqueda Básica (rápida) o Avanzada (profunda)' : 'Choose Basic (fast) or Advanced (deep) search'}
+                  {isSpanish ? 'Selecciona entre Búsqueda Básica, Avanzada u Optimizador Híbrido Aeroespacial' : 'Choose Basic, Advanced, or Hybrid Aerospace Optimizer'}
                 </span>
               </div>
 
-              {/* Mode Selection Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Mode Selection Cards: 3 Engine Models */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 
                 {/* Option 1: Basic / Standard Search */}
                 <div
@@ -1758,20 +1784,20 @@ export function SmartSearchEngine({
                           <Zap size={15} />
                         </div>
                         <span className="text-xs font-bold text-foreground">
-                          {isSpanish ? 'Búsqueda Estándar / Básica' : 'Standard / Basic Search'}
+                          {isSpanish ? 'Búsqueda Básica' : 'Basic Search'}
                         </span>
                       </div>
                       {searchPrecision === 'basic' && <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />}
                     </div>
                     <p className="text-[11px] text-muted-foreground pl-9">
                       {isSpanish
-                        ? 'Ejecuta el algoritmo evolutivo estándar. Entrega la solución óptima en ~1-2 segundos explorando el espacio balístico global.'
-                        : 'Runs the fast standard evolutionary algorithm. Delivers optimal solutions in ~1-2s across the global space.'}
+                        ? 'Algoritmo evolutivo estándar. Entrega la solución óptima en ~1-2 segundos explorando el espacio balístico global.'
+                        : 'Standard evolutionary algorithm. Delivers optimal solutions in ~1-2s across global parameter space.'}
                     </p>
                   </div>
                   
                   <div className="mt-3 pt-2 border-t border-border/40 pl-9 flex items-center gap-2 text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
-                    <span>⚡ {isSpanish ? 'Tiempo estimado: ~1 - 2 segundos' : 'Est. time: ~1 - 2 seconds'}</span>
+                    <span>⚡ {isSpanish ? 'Tiempo estimado: ~1 - 2s' : 'Est. time: ~1 - 2s'}</span>
                   </div>
                 </div>
 
@@ -1795,20 +1821,57 @@ export function SmartSearchEngine({
                           <Sparkles size={15} />
                         </div>
                         <span className="text-xs font-bold text-foreground">
-                          {isSpanish ? 'Búsqueda Avanzada (Ultra Precisa)' : 'Advanced Search (Deep Precision)'}
+                          {isSpanish ? 'Búsqueda Avanzada' : 'Advanced Search'}
                         </span>
                       </div>
                       {searchPrecision === 'advanced' && <CheckCircle2 size={18} className="text-amber-600 dark:text-amber-400" />}
                     </div>
                     <p className="text-[11px] text-muted-foreground pl-9">
                       {isSpanish
-                        ? 'Toma la solución óptima inicial y ejecuta un micro-muestreo exhaustivo alrededor del óptimo previo con cientos de simulaciones adicionales.'
-                        : 'Takes the optimal solution and performs deep high-resolution re-sampling and simulations around the previously optimal zone.'}
+                        ? 'Toma la solución óptima inicial y ejecuta un micro-muestreo exhaustivo alrededor del óptimo previo con cientos de simulaciones.'
+                        : 'Takes the initial optimal solution and conducts exhaustive multi-neighborhood micro-sampling.'}
                     </p>
                   </div>
 
                   <div className="mt-3 pt-2 border-t border-border/40 pl-9 flex items-center gap-2 text-[10px] font-mono text-amber-600 dark:text-amber-400 font-bold">
-                    <span>🔬 {isSpanish ? 'Exploración local profunda alrededor del óptimo' : 'Deep local exploration around the optimum'}</span>
+                    <span>🔬 {isSpanish ? 'Exploración local profunda (~3s)' : 'Deep local exploration (~3s)'}</span>
+                  </div>
+                </div>
+
+                {/* Option 3: Aerospace Hybrid Model (CMA-ES + Constrained Nelder-Mead Simplex) */}
+                <div
+                  onClick={() => setSearchPrecision('hybrid_simplex')}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                    searchPrecision === 'hybrid_simplex'
+                      ? 'border-purple-500 bg-purple-500/10 shadow-xs ring-1 ring-purple-500/40'
+                      : 'border-border bg-card/60 hover:bg-muted/40'
+                  }`}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold ${
+                          searchPrecision === 'hybrid_simplex' 
+                            ? 'bg-purple-600 text-white' 
+                            : 'bg-muted text-muted-foreground'
+                        }`}>
+                          <Rocket size={15} />
+                        </div>
+                        <span className="text-xs font-bold text-foreground">
+                          {isSpanish ? 'Híbrido CMA-ES + Simplex' : 'Hybrid CMA-ES + Simplex'}
+                        </span>
+                      </div>
+                      {searchPrecision === 'hybrid_simplex' && <CheckCircle2 size={18} className="text-purple-600 dark:text-purple-400" />}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground pl-9">
+                      {isSpanish
+                        ? 'Modelo de vanguardia: covarianza multivariable (CMA-ES) + Nelder-Mead Simplex continuo restringido. Máxima precisión sin ruido de gradientes.'
+                        : 'State-of-the-art: multivariable covariance adaptation (CMA-ES) + constrained Nelder-Mead Simplex solver.'}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 pt-2 border-t border-border/40 pl-9 flex items-center gap-2 text-[10px] font-mono text-purple-600 dark:text-purple-400 font-bold">
+                    <span>🚀 {isSpanish ? 'Máxima ingeniería aeroespacial (~3-5s)' : 'Highest aerospace precision (~3-5s)'}</span>
                   </div>
                 </div>
 
@@ -1830,32 +1893,72 @@ export function SmartSearchEngine({
                   </div>
                 </div>
               )}
+
+              {/* INFORMATIVE BANNER WHEN HYBRID SIMPLEX IS ACTIVE */}
+              {searchPrecision === 'hybrid_simplex' && (
+                <div className="p-3.5 rounded-xl border border-purple-500/40 bg-purple-500/10 dark:bg-purple-950/25 text-purple-900 dark:text-purple-200 flex items-start gap-3 animate-in fade-in duration-200">
+                  <Rocket size={18} className="text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h5 className="text-xs font-bold uppercase tracking-wider font-mono text-purple-800 dark:text-purple-300 flex items-center gap-2">
+                      <span>{isSpanish ? 'Modelo Aeroespacial Híbrido: CMA-ES + Nelder-Mead Simplex Restringido' : 'Aerospace Hybrid Model: CMA-ES + Constrained Nelder-Mead Simplex'}</span>
+                      <span className="text-[9px] bg-purple-600 text-white px-2 py-0.5 rounded font-bold uppercase">Pro Model</span>
+                    </h5>
+                    <p className="text-[11px] leading-relaxed text-purple-900/90 dark:text-purple-200/90">
+                      {isSpanish
+                        ? 'Diseñado específicamente para superar las limitaciones de algoritmos basados en gradiente como fmincon (MATLAB). El cálculo de gradientes por diferencias finitas en simulaciones balísticas falla debido al ruido numérico del integrador temporal y las esquinas de quemado del grano. Este modelo híbrido aprende la covarianza diagonal entre longitud y núcleo (CMA-ES) y contrae un símplex continuo (Nelder-Mead) ajustando las dimensiones geométricas (L0, d0, D0) al milímetro sobre el límite de presión admisible sin violar las normas de seguridad.'
+                        : 'Designed specifically to overcome the shortcomings of gradient-based optimizers like MATLAB fmincon on noisy ODE ballistics. It couples covariance matrix adaptation (CMA-ES) with a constrained downhill Nelder-Mead simplex solver to pinpoint the continuous optimum directly on the safe pressure boundary without derivatives.'}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* HIGH-TECH FUTURISTIC OPTIMIZATION PROGRESS HUD */}
             {isSearching && (
-              <div className="p-4 rounded-xl border border-emerald-500/40 bg-slate-950 text-white shadow-lg space-y-3 relative overflow-hidden animate-in fade-in duration-300">
+              <div className={`p-4 rounded-xl border bg-slate-950 text-white shadow-lg space-y-3 relative overflow-hidden animate-in fade-in duration-300 ${
+                searchPrecision === 'hybrid_simplex'
+                  ? 'border-purple-500/50'
+                  : searchPrecision === 'advanced'
+                    ? 'border-amber-500/40'
+                    : 'border-emerald-500/40'
+              }`}>
                 {/* Background ambient glow */}
-                <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div className={`absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl pointer-events-none ${
+                  searchPrecision === 'hybrid_simplex' ? 'bg-purple-500/15' : searchPrecision === 'advanced' ? 'bg-amber-500/10' : 'bg-emerald-500/10'
+                }`}></div>
                 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold animate-spin ${
-                      searchPrecision === 'advanced' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
+                      searchPrecision === 'hybrid_simplex'
+                        ? 'bg-purple-500/20 text-purple-400'
+                        : searchPrecision === 'advanced' 
+                          ? 'bg-amber-500/20 text-amber-400' 
+                          : 'bg-emerald-500/20 text-emerald-400'
                     }`}>
-                      <Sparkles size={14} />
+                      {searchPrecision === 'hybrid_simplex' ? <Rocket size={14} /> : <Sparkles size={14} />}
                     </div>
                     <div>
                       <div className={`text-xs font-bold font-mono flex items-center gap-2 ${
-                        searchPrecision === 'advanced' ? 'text-amber-400' : 'text-emerald-400'
+                        searchPrecision === 'hybrid_simplex'
+                          ? 'text-purple-400'
+                          : searchPrecision === 'advanced' 
+                            ? 'text-amber-400' 
+                            : 'text-emerald-400'
                       }`}>
                         <span>
-                          {searchPrecision === 'advanced'
-                            ? (isSpanish ? 'OPTIMIZADOR AVANZADO EN EJECUCIÓN' : 'ADVANCED DEEP OPTIMIZER RUNNING')
-                            : (isSpanish ? 'MOTOR DE OPTIMIZACIÓN ACTIVO' : 'OPTIMIZER ENGINE RUNNING')}
+                          {searchPrecision === 'hybrid_simplex'
+                            ? (isSpanish ? 'OPTIMIZADOR HÍBRIDO CMA-ES + SIMPLEX ACTIVO' : 'HYBRID CMA-ES + SIMPLEX RUNNING')
+                            : searchPrecision === 'advanced'
+                              ? (isSpanish ? 'OPTIMIZADOR AVANZADO EN EJECUCIÓN' : 'ADVANCED DEEP OPTIMIZER RUNNING')
+                              : (isSpanish ? 'MOTOR DE OPTIMIZACIÓN ACTIVO' : 'OPTIMIZER ENGINE RUNNING')}
                         </span>
                         <span className={`inline-block w-2 h-2 rounded-full animate-ping ${
-                          searchPrecision === 'advanced' ? 'bg-amber-400' : 'bg-emerald-400'
+                          searchPrecision === 'hybrid_simplex'
+                            ? 'bg-purple-400'
+                            : searchPrecision === 'advanced' 
+                              ? 'bg-amber-400' 
+                              : 'bg-emerald-400'
                         }`}></span>
                       </div>
                       <div className="text-[11px] text-slate-300 font-mono mt-0.5">
@@ -1866,7 +1969,11 @@ export function SmartSearchEngine({
 
                   <div className="text-right font-mono">
                     <div className={`text-base font-bold ${
-                      searchPrecision === 'advanced' ? 'text-amber-400' : 'text-emerald-400'
+                      searchPrecision === 'hybrid_simplex'
+                        ? 'text-purple-400'
+                        : searchPrecision === 'advanced' 
+                          ? 'text-amber-400' 
+                          : 'text-emerald-400'
                     }`}>
                       {searchProgress?.percent || 0}%
                     </div>
@@ -1880,9 +1987,11 @@ export function SmartSearchEngine({
                 <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5 relative">
                   <div 
                     className={`h-full rounded-full transition-all duration-150 relative ${
-                      searchPrecision === 'advanced'
-                        ? 'bg-gradient-to-r from-amber-500 via-orange-400 to-emerald-400 shadow-[0_0_12px_rgba(245,158,11,0.8)]'
-                        : 'bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]'
+                      searchPrecision === 'hybrid_simplex'
+                        ? 'bg-gradient-to-r from-purple-500 via-indigo-400 to-emerald-400 shadow-[0_0_12px_rgba(168,85,247,0.8)]'
+                        : searchPrecision === 'advanced'
+                          ? 'bg-gradient-to-r from-amber-500 via-orange-400 to-emerald-400 shadow-[0_0_12px_rgba(245,158,11,0.8)]'
+                          : 'bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]'
                     }`}
                     style={{ width: `${Math.min(100, Math.max(5, searchProgress?.percent || 5))}%` }}
                   >
@@ -1893,7 +2002,13 @@ export function SmartSearchEngine({
                 {/* Status Ticker */}
                 <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-800">
                   <div className="flex items-center gap-2">
-                    <Activity size={12} className={searchPrecision === 'advanced' ? 'text-amber-400' : 'text-emerald-400'} />
+                    <Activity size={12} className={
+                      searchPrecision === 'hybrid_simplex' 
+                        ? 'text-purple-400' 
+                        : searchPrecision === 'advanced' 
+                          ? 'text-amber-400' 
+                          : 'text-emerald-400'
+                    } />
                     <span>
                       {isSpanish ? 'Simulaciones Balísticas:' : 'Ballistic Simulations:'}{' '}
                       <strong className="text-white">{searchProgress?.currentEvaluations || 0}</strong>
@@ -1923,27 +2038,40 @@ export function SmartSearchEngine({
               </Button>
 
               <Button
+                data-tour="smart-search-run-btn"
                 onClick={handleExecuteSearch}
                 disabled={isSearching}
                 className={`font-bold h-11 px-8 shadow-md flex items-center justify-center gap-2 text-sm tracking-wide transition-all w-full sm:w-auto cursor-pointer text-white ${
-                  searchPrecision === 'advanced'
-                    ? 'bg-amber-600 hover:bg-amber-700'
-                    : 'bg-emerald-600 hover:bg-emerald-700'
+                  searchPrecision === 'hybrid_simplex'
+                    ? 'bg-purple-600 hover:bg-purple-700'
+                    : searchPrecision === 'advanced'
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
                 }`}
               >
                 {isSearching ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     {isSpanish 
-                      ? (searchPrecision === 'advanced' ? 'Ejecutando Búsqueda Avanzada Alrededor del Óptimo...' : 'Ejecutando Búsqueda Evolutiva...')
-                      : (searchPrecision === 'advanced' ? 'Running Deep Advanced Optimization...' : 'Running Evolutionary Optimizer...')}
+                      ? (searchPrecision === 'hybrid_simplex'
+                          ? 'Optimizando con CMA-ES y Nelder-Mead Simplex...'
+                          : searchPrecision === 'advanced' 
+                            ? 'Ejecutando Búsqueda Avanzada Alrededor del Óptimo...' 
+                            : 'Ejecutando Búsqueda Evolutiva...')
+                      : (searchPrecision === 'hybrid_simplex'
+                          ? 'Optimizing with CMA-ES & Nelder-Mead Simplex...'
+                          : searchPrecision === 'advanced' 
+                            ? 'Running Deep Advanced Optimization...' 
+                            : 'Running Evolutionary Optimizer...')}
                   </>
                 ) : (
                   <>
-                    {searchPrecision === 'advanced' ? <Sparkles size={18} /> : <Zap size={18} />}
-                    {searchPrecision === 'advanced'
-                      ? (isSpanish ? 'EJECUTAR BÚSQUEDA AVANZADA (ULTRA PRECISA)' : 'RUN ADVANCED DEEP SEARCH')
-                      : (isSpanish ? 'EJECUTAR BÚSQUEDA BÁSICA' : 'RUN BASIC SMART SEARCH')}
+                    {searchPrecision === 'hybrid_simplex' ? <Rocket size={18} /> : searchPrecision === 'advanced' ? <Sparkles size={18} /> : <Zap size={18} />}
+                    {searchPrecision === 'hybrid_simplex'
+                      ? (isSpanish ? 'EJECUTAR OPTIMIZADOR HÍBRIDO (CMA-ES + SIMPLEX)' : 'RUN HYBRID OPTIMIZER (CMA-ES + SIMPLEX)')
+                      : searchPrecision === 'advanced'
+                        ? (isSpanish ? 'EJECUTAR BÚSQUEDA AVANZADA (ULTRA PRECISA)' : 'RUN ADVANCED DEEP SEARCH')
+                        : (isSpanish ? 'EJECUTAR BÚSQUEDA BÁSICA' : 'RUN BASIC SMART SEARCH')}
                   </>
                 )}
               </Button>
@@ -1986,13 +2114,17 @@ export function SmartSearchEngine({
                     </span>
                   )}
                   <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                    searchPrecision === 'advanced'
-                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30'
-                      : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                    searchPrecision === 'hybrid_simplex'
+                      ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30'
+                      : searchPrecision === 'advanced'
+                        ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                        : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                   }`}>
-                    {searchPrecision === 'advanced'
-                      ? (isSpanish ? '🔬 Búsqueda Avanzada Alrededor del Óptimo' : '🔬 Advanced Deep Search')
-                      : (isSpanish ? '⚡ Búsqueda Estándar' : '⚡ Standard Search')}
+                    {searchPrecision === 'hybrid_simplex'
+                      ? (isSpanish ? '🚀 Híbrido: CMA-ES + Nelder-Mead Simplex' : '🚀 Hybrid: CMA-ES + Nelder-Mead Simplex')
+                      : searchPrecision === 'advanced'
+                        ? (isSpanish ? '🔬 Búsqueda Avanzada Alrededor del Óptimo' : '🔬 Advanced Deep Search')
+                        : (isSpanish ? '⚡ Búsqueda Básica' : '⚡ Basic Search')}
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
