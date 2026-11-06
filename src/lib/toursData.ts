@@ -792,134 +792,134 @@ export function getTourSequences(
       id: 'tour_smart_search',
       title: loc('Guía: Optimización Inversa con Smart Search', 'Guide: Smart Search Inverse Optimization', 'Guide : Optimisation Inverse Smart Search', 'Guida: Ottimizzazione Inversa Smart Search'),
       description: loc(
-        'Cómo diseñar automáticamente el motor óptimo fijando metas de presión y empuje con algoritmos aeroespaciales en 3 fases.',
+        'Cómo diseñar automáticamente el motor óptimo fijando metas de presión y empuje con algoritmos aeroespaciales.',
         'Automate optimal motor geometry design across 3 distinct phases using evolutionary aerospace solvers.',
-        'Concevez automatiquement le moteur optimal en 3 phases grâce aux algorithmes aérospatiaux.',
-        'Progetta automaticamente il motore ottimale in 3 fasi con algoritmi aerospaziali.'
+        'Concevez automatiquement le moteur optimal grâce aux algorithmes aérospatiaux.',
+        'Progetta automaticamente il motore ottimale con algoritmi aerospaziali.'
       ),
       steps: [
         {
+          id: 'smart_search_goal',
+          targetSelector: '[data-tour="smart-search-goal-card"]',
+          title: loc('Paso 1: Selección del Objetivo de Misión', 'Step 1: Mission Objective Selection', 'Étape 1 : Sélection de l\'objectif de mission', 'Passo 1: Selezione dell\'obiettivo di missione'),
+          category: loc('Paso 1: Objetivos', 'Step 1: Goals', 'Étape 1 : Objectifs', 'Passo 1: Obiettivi'),
+          tab: 'smart_search',
+          smartSearchStep: 0,
+          description: loc(
+            'En el primer paso, seleccionas el objetivo de propulsión primario en la bandeja inicial (en este caso, Máxima Altitud / Mayor Impulso Total It = ∫ F dt). Al pulsar ahí, accedes directamente al desarrollo de las fases de configuración.',
+            'In Step 1, select your primary propulsion objective in the initial tray (in this case, Maximum Altitude / Peak Total Impulse It = ∫ F dt). Clicking here automatically opens the phase configuration flow.',
+            'En Étape 1, sélectionnez votre objectif principal de propulsion dans le plateau initial (Impulsion Totale Maximale).',
+            'Nel Passo 1, seleziona l\'obiettivo di propulsione primario nel vassoio iniziale (Impulso Totale Massimo).'
+          )
+        },
+        {
           id: 'smart_search_phase1',
           targetSelector: '[data-tour="smart-search-phase1-card"]',
-          title: loc('Fase 1: Restricciones de Hardware Existente', 'Phase 1: Existing Hardware Constraints', 'Phase 1 : Contraintes Matérielles', 'Fase 1: Vincoli Hardware Esistente'),
-          category: loc('Fase 1', 'Phase 1', 'Phase 1', 'Fase 1'),
+          title: loc('Paso 2: Parámetros de Diseño (Fase 1: Cámara y Tobera)', 'Step 2: Design Parameters (Phase 1: Chamber & Nozzle)', 'Étape 2 : Paramètres de Conception (Phase 1 : Chambre et Tuyère)', 'Passo 2: Parametri di Progetto (Fase 1: Camera e Ugello)'),
+          category: loc('Paso 2: Parámetros', 'Step 2: Parameters', 'Étape 2 : Paramètres', 'Passo 2: Parametri'),
           tab: 'smart_search',
           smartSearchStep: 1,
           description: loc(
-            'En la Fase 1 introduces las cotas físicas inmutables de tu motor actual: diámetro interior de la carcasa (Dc), longitud disponible (Lc), garganta de tobera y el límite de presión segura (Pmax).',
-            'In Phase 1, enter your physical fixed motor limits: casing interior diameter (Dc), available length (Lc), throat diameter, and max safe casing pressure (Pmax).',
-            'En Phase 1, entrez le diamètre intérieur Dc, la longueur Lc et la pression maximale admissible.',
-            'Nella Fase 1 inserisci i limiti fissi: diametro interno Dc, lunghezza Lc e limite di pressione sicura.'
+            'En el segundo paso introduces las cotas físicas inmutables de tu motor actual: diámetro de cámara (Dc), longitud útil (Lc), límite de sobrepresión segura (Pmax) y la tobera fija (diámetro de garganta Dt, salida Ds y ángulo α). Revisa los avisos en vivo si una cota es físicamente incoherente.',
+            'In Step 2, define your fixed casing and nozzle dimensions: casing inner diameter (Dc), usable length (Lc), max pressure limit (Pmax), and fixed nozzle (throat Dt, exit Ds, and angle α). Live validation alerts highlight non-physical values immediately.',
+            'En Étape 2, entrez les dimensions physiques de la chambre (Dc, Lc), de la tuyère (Dt, Ds) et la pression maximale.',
+            'Nel Passo 2 inserisci le dimensioni fisse di camera (Dc, Lc), ugello (Dt, Ds) e il limite di pressione sicura.'
           )
         },
         {
           id: 'smart_search_phase2',
           targetSelector: '[data-tour="smart-search-phase2-card"]',
-          title: loc('Fase 2: Restricciones de Geometría de Grano', 'Phase 2: Grain Geometry & Invalidation Rules', 'Phase 2 : Géométrie des Grains', 'Fase 2: Geometria del Grano e Vincoli'),
-          category: loc('Fase 2', 'Phase 2', 'Phase 2', 'Fase 2'),
+          title: loc('Paso 3: Restricciones de los Granos (Fase 2: Granos)', 'Step 3: Grain Constraints (Phase 2: Grain Geometry)', 'Étape 3 : Contraintes des Grains (Phase 2 : Géométrie des Grains)', 'Passo 3: Vincoli dei Grani (Fase 2: Geometria dei Grani)'),
+          category: loc('Paso 3: Granos', 'Step 3: Grains', 'Étape 3 : Grains', 'Passo 3: Grani'),
           tab: 'smart_search',
           smartSearchStep: 2,
           description: loc(
-            'En la Fase 2 configuras qué variables geométricas puede explorar el optimizador: tipo de grano (BATES, Estrella, Macizo), caras que queman, y si deseas fijar o acotar D0, d0, L0 o el número de bloques N.',
-            'In Phase 2, define which geometric variables the solver can explore: shape (BATES, Star, Solid), active burn faces, and whether D0, d0, L0, or count N are free, fixed, or bounded.',
-            'En Phase 2, définissez la forme des grains et quelles dimensions sont libres ou fixées.',
-            'Nella Fase 2 imposti le variabili: forma del grano, facce attive e dimensioni libere o vincolate.'
+            'En el tercer paso configuras qué variables geométricas puede explorar el optimizador: forma del grano (BATES, Estrella, Macizo), cantidad de bloques N, modos Libre, Fijo o Rango para D0, d0, L0, superficies de quemado activas o inhibidas y la restricción de masa total de propelente Mprop.',
+            'In Step 3, configure which geometric variables the solver can explore: grain shape (BATES, Star, Solid), segment count N, Free/Fixed/Range modes for D0, d0, L0, active burn surfaces, and total propellant mass constraint Mprop.',
+            'En Étape 3, définissez la forme des grains, le nombre de blocs N, les modes de dimension et la masse totale.',
+            'Nel Passo 3 imposti la forma del grano, il numero di segmenti N, i modi dimensionali e la massa totale.'
           )
         },
         {
           id: 'smart_search_phase3',
           targetSelector: '[data-tour="smart-search-phase3-card"]',
-          title: loc('Fase 3: Objetivos de Misión y Altura', 'Phase 3: Mission Goals & Target Specs', 'Phase 3 : Objectifs de Mission', 'Fase 3: Obiettivi di Missione e Quota'),
-          category: loc('Fase 3', 'Phase 3', 'Phase 3', 'Fase 3'),
+          title: loc('Paso 4: Seleccionar el Algoritmo y Presupuesto (Fase 3)', 'Step 4: Select Algorithm & Budget (Phase 3)', 'Étape 4 : Sélectionner l\'Algorithme (Phase 3)', 'Passo 4: Selezionare l\'Algoritmo e Budget (Fase 3)'),
+          category: loc('Paso 4: Algoritmos', 'Step 4: Algorithms', 'Étape 4 : Algorithmes', 'Passo 4: Algoritmi'),
           tab: 'smart_search',
           smartSearchStep: 3,
           description: loc(
-            'En la Fase 3 fijas la meta propulsiva de tu diseño: ¿Máximo Impulso Total (mayor apogeo)?, ¿Velocidad rápida de salida?, o ¿Alcanzar una altitud exacta (ej. 1500 m)?',
-            'In Phase 3, select your propulsion goal: Maximum Total Impulse (peak apogee), High Liftoff Acceleration, or Exact Target Altitude (e.g. 1500 m).',
-            'En Phase 3, choisissez votre objectif : impulsion maximale, vitesse de décollage ou altitude cible.',
-            'Nella Fase 3 imposti l\'obiettivo: massimo impulso totale, velocità rapida o quota target.'
-          )
-        },
-        {
-          id: 'smart_search_precision',
-          targetSelector: '[data-tour="smart-search-precision-card"]',
-          title: loc('Comparativa de Modelos: Básico, Avanzado e Híbrido Aeroespacial', 'Model Comparison: Basic, Advanced & Aerospace Hybrid', 'Comparaison des Modèles : Basique, Avancé & Hybride', 'Confronto Modelli: Base, Avanzato e Ibrido Aerospaziale'),
-          category: loc('Algoritmos', 'Algorithms', 'Algorithmes', 'Algoritmi'),
-          tab: 'smart_search',
-          smartSearchStep: 3,
-          description: loc(
-            'Smart Search integra 3 estrategias de cálculo optimizadas para distintas necesidades de diseño y costo computacional:',
-            'Smart Search provides 3 mathematical solver tiers tailored to different design phases and computational requirements:',
-            'Smart Search propose 3 niveaux de solveurs adaptés aux différentes étapes de conception :',
-            'Smart Search offre 3 livelli di risolutori adatti alle diverse fasi di progettazione:'
+            'En el cuarto paso seleccionas el presupuesto y tipo de algoritmo de Búsqueda Evolutiva (Evolución Diferencial DE/rand/1/bin) para ejecutar el optimizador:',
+            'In Step 4, select your Differential Evolution algorithm budget and execution preset:',
+            'En Étape 4, choisissez votre budget de simulation et le mode d\'algorithme :',
+            'Nel Passo 4 seleziona il budget e il tipo di algoritmo di Evoluzione Differenziale:'
           ),
           bulletPoints: [
             loc(
-              '1. Búsqueda Básica (Bajo CPU / ~1s): Muestreo cuasi-aleatorio estratificado (Latin Hypercube / Sobol) de 100 candidatos. Recomendado para primeras aproximaciones ultra-rápidas cuando se explora una carcasa nueva.',
-              '1. Basic Search (Low CPU / ~1s): Quasi-random stratified sampling (Latin Hypercube / Sobol) across 100 candidate designs. Ideal for instant baseline checks on new casings.',
-              '1. Recherche Basique (CPU Faible / ~1s) : Échantillonnage quasi-aléatoire stratifié (100 candidats) pour validation rapide.',
-              '1. Ricerca Base (CPU Basso / ~1s): Campionamento quasi-casualistico stratificato (100 candidati) per verifiche rapide.'
+              '1. Búsqueda Rápida (500 simulaciones/N): Muestreo inicial con Latin Hypercube (LHS) y evolución ágil para tanteo rápido.',
+              '1. Fast Search (500 simulations/N): Initial Latin Hypercube (LHS) sampling and rapid evolution for quick exploration.',
+              '1. Recherche Rapide (500 simulations/N) : Échantillonnage LHS initial pour exploration rapide.',
+              '1. Ricerca Rapida (500 simulazioni/N): Campionamento LHS per esplorazione veloce.'
             ),
             loc(
-              '2. Búsqueda Avanzada (Medio CPU / ~3s): Muestreo estocástico denso (500 evaluaciones) enfocado en el vecindario del mejor candidato inicial. Perfecto para refinar geometrías cuando ya se conoce una solución base aproximada.',
-              '2. Advanced Search (Medium CPU / ~3s): Dense stochastic sampling (500 evaluations) centered around the top candidate neighborhood. Excellent for fine-tuning grain dimensions.',
-              '2. Recherche Avancée (CPU Moyen / ~3s) : Échantillonnage stochastique dense (500 évaluations) autour du meilleur candidat.',
-              '2. Ricerca Avanzata (CPU Medio / ~3s): Campionamento stocastico denso (500 valutazioni) attorno al candidato migliore.'
+              '2. Búsqueda Estándar (1.000 simulaciones/N - ¡RECOMENDADO!): Equilibrio ideal entre tiempo y convergencia balística de alta fidelidad.',
+              '2. Standard Search (1,000 simulations/N - RECOMMENDED!): Optimal balance between runtime and high-fidelity ballistic convergence.',
+              '2. Recherche Standard (1 000 simulations/N - RECOMMANDÉ !) : Équilibre idéal entre temps et convergence de haute fidélité.',
+              '2. Ricerca Standard (1.000 simulazioni/N - RACCOMANDATO!): Equilibrio ideale tra tempo e convergenza di alta fedeltà.'
             ),
             loc(
-              '3. Híbrido Aeroespacial (Alto CPU / ~5-8s - ¡RECOMENDADO!): Algoritmo evolutivo dual CMA-ES (Adaptación de Matriz de Covarianza) para exploración global sin gradientes + Polítopo Simplex Nelder-Mead para refinamiento local continuo. El método más preciso para optimización final.',
-              '3. Aerospace Hybrid (High CPU / ~5-8s - RECOMMENDED!): Evolutionary CMA-ES (Covariance Matrix Adaptation) for global derivative-free space exploration + Nelder-Mead Simplex polytope for continuous local convergence. The ultimate high-precision solver.',
-              '3. Hybride Aérospatial (CPU Élevé / ~5-8s - RECOMMANDÉ !) : Algorithme évolutif CMA-ES + Simplex Nelder-Mead pour la plus haute précision.',
-              '3. Ibrido Aerospaziale (CPU Elevato / ~5-8s - RACCOMANDATO!): Algoritmo evolutivo CMA-ES + Simplex Nelder-Mead per la massima precisione.'
+              '3. Búsqueda Profunda (2.000 simulaciones/N): Máxima exploración global para geometrías intrincadas o carcasas de alta esbeltez.',
+              '3. Deep Search (2,000 simulations/N): Maximum global exploration for complex geometries and slender motor casings.',
+              '3. Recherche Profonde (2 000 simulations/N) : Exploration globale maximale pour géométries complexes.',
+              '3. Ricerca Profonda (2.000 simulazioni/N): Massima esplorazione globale per geometrie complesse.'
             )
           ]
         },
         {
           id: 'smart_search_algo_btn',
           targetSelector: '[data-tour="smart-search-algorithm-btn"]',
-          title: loc('¿Por qué el Híbrido Aeroespacial supera a fmincon?', 'Why Aerospace Hybrid Outperforms fmincon', 'Pourquoi l\'Hybride Aérospatial surpasse fmincon', 'Perché l\'Ibrido Aerospaziale supera fmincon'),
-          category: loc('Formulación', 'Formulation', 'Formulation', 'Formulazione'),
+          title: loc('Paso 5: Información sobre Algoritmos y Formulación', 'Step 5: Information on Algorithms & Formulation', 'Étape 5 : Information sur les Algorithmes et Formulation', 'Passo 5: Informazioni su Algoritmi e Formulazione'),
+          category: loc('Paso 5: Formulación', 'Step 5: Formulation', 'Étape 5 : Formulation', 'Passo 5: Formulazione'),
           tab: 'smart_search',
           smartSearchStep: 3,
           description: loc(
-            'Al pulsar este botón despliegas los fundamentos matemáticos que explican la superioridad del solver híbrido frente a optimizadores clásicos por gradiente (ej. fmincon SQP de MATLAB):',
-            'Clicking here reveals the mathematical foundation explaining why our hybrid solver outperforms classical gradient-based optimizers (e.g., MATLAB fmincon SQP):',
-            'Cliquez pour afficher la formulation mathématique comparant le solveur hybride à fmincon SQP :',
-            'Clicca per visualizzare la formulazione matematica che confronta il risolutore ibrido con fmincon SQP:'
+            'Al pulsar en el botón "Algoritmo & Formulación" en la barra superior desplegarás la ficha informativa detallada sobre los algoritmos que se están siguiendo, la formulación física 0D intacta y las reglas de factibilidad de Deb.',
+            'Clicking "Algorithm & Formulation" in the top bar reveals detailed information explaining the optimization algorithms being executed, the intact 0D physical formulation, and Deb feasibility rules.',
+            'En cliquant sur ce bouton, vous affichez des informations détaillées sur les algorithmes utilisés et la formulation physique.',
+            'Cliccando questo pulsante visualizzi informazioni dettagliate sugli algoritmi utilizzati e la formulazione fisica.'
           ),
           bulletPoints: [
             loc(
-              'Discontinuidades Balísticas: Las ecuaciones de combustión presentan saltos abruptos cuando un grano agota su web o el flujo en la garganta conmuta de subsónico a sónico. En estos puntos, las derivadas ∂F/∂x explotan a infinito o caen a cero.',
-              'Ballistic Discontinuities: Rocket combustion equations exhibit abrupt step functions when grain web burns through or throat flow chokes to sonic. Gradient derivatives ∂F/∂x explode to infinity or vanish to zero.',
-              'Discontinuités balistiques : Les dérivées ∂F/∂x dérivent vers l\'infini ou s\'annulent lors de l\'épuisement du web ou du blocage du col.',
-              'Discontinuità balistiche: Le derivate ∂F/∂x esplodono all\'infinito o si annullano al consumo del web o al blocco della gola.'
+              '• Modus Operandi de Algoritmos: Población, generaciones y parámetros de mutación y cruce de Evolución Diferencial (DE/rand/1/bin).',
+              '• Algorithm Modus Operandi: Population, generation counts, and differential mutation/crossover parameters.',
+              '• Modus Operandi des Algorithmes : Population, générations et paramètres de mutation/croisement.',
+              '• Modus Operandi degli Algoritmi: Popolazione, generazioni e parametri di mutazione.'
             ),
             loc(
-              'Fallo de Métodos por Gradiente (fmincon): Los algoritmos clásicos como fmincon o Levenberg-Marquardt quedan atrapados instantáneamente en óptimos locales falsos o fallan en calcular la matriz Hessiana debido al ruido numérico.',
-              'Gradient Solver Failure (fmincon): Classical algorithms like MATLAB fmincon SQP fail or get trapped in local local minima because numerical noise prevents Hessian matrix evaluation.',
-              'Échec des méthodes à gradient (fmincon) : Bloqués dans des minima locaux en raison du bruit numérique.',
-              'Fallimento dei metodi a gradiente (fmincon): Bloccati in minimi locali a causa del rumore numerico.'
+              '• Física 0D Intacta: Integración balística de la ley de Vieille (r = a·Pⁿ), continuidad másica en cámara y flujo isentrópico en tobera sin aproximaciones ficticias.',
+              '• Intact 0D Physics: Complete numerical integration of Vieille burn law (r = a·Pⁿ), chamber mass continuity, and Laval nozzle flow without altering physical equations.',
+              '• Physique 0D Intacte : Intégration numérique complète de la loi de Vieille sans modification des équations.',
+              '• Fisica 0D Intatta: Integrazione numerica completa della legge di Vieille senza modificare le equazioni.'
             ),
             loc(
-              'Ventaja del Híbrido Aeroespacial: CMA-ES no utiliza derivadas; muestrea la distribución de probabilidad gaussiana mutante para escapar de cualquier trampa local, mientras Nelder-Mead ajusta las dimensiones continuas con precisión submillimétrica.',
-              'Aerospace Hybrid Advantage: CMA-ES requires zero derivatives; it samples mutated Gaussian probability distributions to bypass local traps, while Nelder-Mead tunes dimensions with sub-millimeter precision.',
-              'Avantage de l\'Hybride : CMA-ES explore sans dérivées et Nelder-Mead affine les dimensions avec une précision sous-millimétrique.',
-              'Vantaggio dell\'Ibrido: CMA-ES esplora senza derivate e Nelder-Mead affina les dimensions con precisione sub-millimetrica.'
+              '• Reglas de Factibilidad de Deb (1998): Selección rígida donde las soluciones factibles (Pmax ≤ Plim) dominan y gana el máximo impulso total puro (Max It).',
+              '• Deb Feasibility Rules (1998): Strict rank selection where feasible candidates (Pmax ≤ Plim) dominate and pure total impulse (Max It) wins.',
+              '• Règles de Faisabilité de Deb : Sélection stricte où les solutions réalisables dominent et le résultat de poussée maximale l\'emporte.',
+              '• Regole di Fattibilità di Deb: Selezione rigida in cui le soluzioni ammissibili dominano e vince il massimo impulso.'
             )
           ]
         },
         {
           id: 'smart_search_execute',
           targetSelector: '[data-tour="smart-search-run-btn"]',
-          title: loc('Lanzar la Búsqueda y Caso Práctico', 'Execute Search & Practical Case', 'Lancer la Recherche', 'Avvia la Ricerca e Caso Pratico'),
-          category: loc('Ejecución', 'Execution', 'Exécution', 'Esecuzione'),
+          title: loc('Paso 6: Ejecución y Cancelación de Simulación en Vivo', 'Step 6: Execution & Live Simulation Cancel', 'Étape 6 : Exécution et Annulation en Direct', 'Passo 6: Esecuzione e Annullamento in Tempo Reale'),
+          category: loc('Paso 6: Ejecución', 'Step 6: Execution', 'Étape 6 : Exécution', 'Passo 6: Esecuzione'),
           tab: 'smart_search',
           smartSearchStep: 3,
           description: loc(
-            'Pulsa "Iniciar Smart Search" para evaluar cientos de simulaciones en paralelo. Al finalizar, podrás comparar los mejores candidatos, ver el diagrama de dispersión y transferir la geometría ganadora a tus inputs.',
-            'Click "Start Smart Search" to evaluate hundreds of candidate motors. Once finished, inspect scatter plots, compare Pareto candidates, and inject the winning configuration.',
-            'Cliquez pour lancer les simulations et transférer la meilleure configuration.',
-            'Clicca per avviare la ricerca, confrontare i candidati e applicare la configurazione vincente.'
+            'Pulsa "Ejecutar Optimizador Global" para iniciar las simulaciones balísticas. Si la simulación tarda o necesitas cambiar algo, dispones de un botón de CANCELAR SIMULACIÓN en rojo que detiene la búsqueda y te devuelve los mejores resultados encontrados hasta la fecha.',
+            'Click "Run Global Optimizer" to execute candidate motor evaluations. If a deep search takes too long or you need to make changes, a red CANCEL SIMULATION button allows you to safely stop execution and instantly retrieve all best feasible results found up to that timestamp.',
+            'Cliquez pour lancer les simulations. Si la recherche est longue, le bouton rouge Annuler permet d\'arrêter et d\'obtenir les meilleurs résultats actuels.',
+            'Clicca per avviare la ricerca. Se la ricerca richiede tempo, il pulsante rosso Annulla consente di interrompere e recuperare i migliori risultati attuali.'
           )
         }
       ]
@@ -1049,7 +1049,7 @@ export function getTourSequences(
           ),
           bulletPoints: [
             loc('Diseño Inverso Inteligente: En vez de probar dimensiones a ciegas por ensayo y error, introduces las cotas fijas de tu casing (Dc, Lc, garganta, presión máxima) y tu meta de misión.', 'Intelligent Inverse Solver: Instead of trial and error, enter your fixed casing limits (Dc, Lc, throat, safe pressure limit) and your target flight goal.', 'Conception inverse : Définissez vos contraintes de carter et votre objectif de vol.', 'Progettazione inversa: Imposta i vincoli della carcassa e l\'obiettivo di missione.'),
-            loc('Estrategias de Búsqueda: Búsqueda Básica (~1-2s para solución inicial viable), Búsqueda Avanzada (~3-5s explorando el vecindario del óptimo), o Híbrido Aeroespacial (CMA-ES + Nelder-Mead Simplex).', 'Solver Strategies: Fast Basic Search (~1-2s for immediate viable motor), Advanced Neighborhood (~3-5s around the best candidate), or Aerospace Hybrid (CMA-ES + Simplex).', 'Stratégies : Recherche Basique (~1s), Avancée (~3s) ou Hybride Aérospatial CMA-ES + Simplex.', 'Strategie: Ricerca Base (~1s), Avanzata (~3s) o Ibrido Aerospaziale CMA-ES + Simplex.'),
+            loc('Motor de Optimización: Differential Evolution (DE/rand/1/bin) con muestreo Latino Hipercúbico (LHS), dither adaptativo y presupuesto de cálculo configurable.', 'Optimization Engine: Differential Evolution (DE/rand/1/bin) with Latin Hypercube Sampling (LHS), adaptive dithering, and configurable budget.', 'Moteur d\'optimisation : Differential Evolution (DE/rand/1/bin) avec échantillonnage LHS et budget configurable.', 'Motore di ottimizzazione: Differential Evolution (DE/rand/1/bin) con campionamento LHS e budget configurabile.'),
             loc('Aplicar con 1 Clic: Al terminar la búsqueda, transfiere instantáneamente la geometría ganadora a tus Inputs.', '1-Click Injection: Once optimized, transfer the winning geometry directly into your Inputs tab in one click.', 'Application en 1 clic : Transférez instantanément la configuration gagnante dans vos Entrées.', 'Applicazione in 1 clic: Trasferisci la geometria vincente direttamente nel pannello Dati.')
           ]
         },

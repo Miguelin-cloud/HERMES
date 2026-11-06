@@ -393,7 +393,7 @@ export const UsageAnalyticsModal: React.FC<UsageAnalyticsModalProps> = ({ isOpen
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-900/90 text-xs text-slate-400">
           <div className="flex items-center gap-3">
-            <span>HERMES Usage Analytics v1.0</span>
+            <span>HERMES Usage Analytics v2.0.0</span>
             <button
               onClick={handleDownloadJson}
               className="text-slate-400 hover:text-slate-200 underline flex items-center gap-1"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,8 @@ import {
   Navigation,
   Clock,
   Rocket,
-  Cpu
+  Cpu,
+  XCircle
 } from 'lucide-react';
 import { 
   Select, 
@@ -58,10 +59,9 @@ import {
   CandidateResult, 
   SmartSearchOutcome, 
   VariableConstraintMode,
-  SearchPrecisionMode,
+  OptimizationBudgetPreset,
   EvaluatedPoint,
   OptimizationProgress,
-  runSmartSearch,
   runSmartSearchAsync 
 } from '../lib/optimizer';
 import { 
@@ -94,14 +94,29 @@ export function SmartSearchEngine({
   const isSpanish = lang === 'es';
   const isLight = theme === 'light';
 
-  // Wizard Phase: 1 (Hardware), 2 (Grain Constraints), 3 (Mission Goal & Execute)
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
+  // Wizard Phase: 0 (Goal Inbox), 1 (Hardware), 2 (Grain Constraints), 3 (Algorithms & Execute)
+  const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const [showAlgorithmInfo, setShowAlgorithmInfo] = useState<boolean>(false);
+
+  // Cancellation controller reference
+  const abortControllerRef = useRef<boolean>(false);
+
+  const handleCancelSearch = () => {
+    abortControllerRef.current = true;
+    if (searchProgress) {
+      setSearchProgress(prev => prev ? {
+        ...prev,
+        stepDescription: isSpanish 
+          ? 'Cancelando simulación y recuperando candidatos evaluados...' 
+          : 'Cancelling simulation and gathering evaluated candidates...'
+      } : null);
+    }
+  };
 
   useEffect(() => {
     const handleSetStep = (e: any) => {
-      if (e.detail && (e.detail === 1 || e.detail === 2 || e.detail === 3)) {
-        setActiveStep(e.detail);
+      if (e.detail !== undefined && [0, 1, 2, 3].includes(e.detail)) {
+        setActiveStep(e.detail as 0 | 1 | 2 | 3);
       }
     };
     window.addEventListener('hermes-smart-search-set-step', handleSetStep);
@@ -172,7 +187,8 @@ export function SmartSearchEngine({
   const [endsBurn, setEndsBurn] = useState<boolean>(true);
 
   const [goal, setGoal] = useState<SmartSearchGoal>('max_impulse');
-  const [searchPrecision, setSearchPrecision] = useState<SearchPrecisionMode>('basic');
+  const [budgetPreset, setBudgetPreset] = useState<OptimizationBudgetPreset>('standard');
+  const [evaluationsPerN, setEvaluationsPerN] = useState<number>(1000);
 
   // Search execution & Results State
   const [isSearching, setIsSearching] = useState(false);
@@ -215,6 +231,45 @@ export function SmartSearchEngine({
   const isD0EmptyOrInvalid = modeD0 === 'fixed' && touched['valD0'] && (!inputValues.valD0.trim() || parseFloat(inputValues.valD0) <= 0);
   const isd0EmptyOrInvalid = moded0 === 'fixed' && touched['vald0'] && (!inputValues.vald0.trim() || parseFloat(inputValues.vald0) < 0);
   const isL0EmptyOrInvalid = modeL0 === 'fixed' && touched['valL0'] && (!inputValues.valL0.trim() || parseFloat(inputValues.valL0) <= 0);
+
+  // Geometric & Physical validation helpers for Phase 1 & 2
+  // Phase 1 (Chamber & Nozzle):
+  const isDt0GeDs = Dt0Val >= DsVal;
+  const isDt0GeDc = Dt0Val >= DcVal;
+
+  // Phase 2 (Grains):
+  const valD0Num = parseFloat(inputValues.valD0) || 0;
+  const minD0Num = parseFloat(inputValues.minD0) || 0;
+  const maxD0Num = parseFloat(inputValues.maxD0) || 0;
+
+  const vald0Num = parseFloat(inputValues.vald0) || 0;
+  const mind0Num = parseFloat(inputValues.mind0) || 0;
+  const maxd0Num = parseFloat(inputValues.maxd0) || 0;
+
+  const valL0Num = parseFloat(inputValues.valL0) || 0;
+  const minL0Num = parseFloat(inputValues.minL0) || 0;
+  const maxL0Num = parseFloat(inputValues.maxL0) || 0;
+
+  const fixedNNum = parseInt(inputValues.fixedGrainCount) || 1;
+
+  // D0 checks:
+  const isD0GeDc = modeD0 === 'fixed' && valD0Num >= DcVal && valD0Num > 0;
+  const isMaxD0GeDc = modeD0 === 'range' && maxD0Num >= DcVal && maxD0Num > 0;
+  const isD0RangeInverted = modeD0 === 'range' && minD0Num > 0 && maxD0Num > 0 && minD0Num >= maxD0Num;
+
+  // d0 checks:
+  const effectiveOuterD = modeD0 === 'fixed' && valD0Num > 0 ? valD0Num : DcVal;
+  const isd0GeD0 = shape !== 3 && moded0 === 'fixed' && vald0Num > 0 && vald0Num >= effectiveOuterD;
+  const isd0RangeInverted = shape !== 3 && moded0 === 'range' && mind0Num > 0 && maxd0Num > 0 && mind0Num >= maxd0Num;
+  const isMind0GeD0 = shape !== 3 && moded0 === 'range' && mind0Num > 0 && mind0Num >= effectiveOuterD;
+
+  // L0 checks:
+  const isL0ExceedsLc = modeL0 === 'fixed' && grainCountMode === 'fixed' && valL0Num > 0 && (valL0Num * fixedNNum) > LcVal;
+  const isL0RangeInverted = modeL0 === 'range' && minL0Num > 0 && maxL0Num > 0 && minL0Num >= maxL0Num;
+
+  // Critical geometric conflict preventing launch
+  const hasGeometricConflict = isDt0GeDs || isDt0GeDc || isD0GeDc || isMaxD0GeDc || isD0RangeInverted || isd0GeD0 || isd0RangeInverted || isMind0GeD0 || isL0ExceedsLc || isL0RangeInverted;
+
 
   // Available Propellants List
   const allPropellants = useMemo(() => {
@@ -309,6 +364,7 @@ export function SmartSearchEngine({
       rocketDryMassKg: true
     });
 
+    abortControllerRef.current = false;
     setIsSearching(true);
     setAppliedSuccess(false);
     setSearchProgress({
@@ -401,11 +457,13 @@ export function SmartSearchEngine({
         ci: coreBurns ? 1 : 0,
         ei: endsBurn ? 1 : 0,
         goal: goal,
-        searchPrecision: searchPrecision,
+        evaluationsPerN: evaluationsPerN,
+        budgetPreset: budgetPreset,
         targetImpulseVal: targetItNum,
         targetAltitudeVal: targetAltNum,
         rocketDryMassKg: dryMassNum,
-        customPropellants: customPropellants
+        customPropellants: customPropellants,
+        shouldStop: () => abortControllerRef.current
       }, (progress) => {
         setSearchProgress(progress);
       });
@@ -440,7 +498,7 @@ export function SmartSearchEngine({
             </div>
             <div>
               <h2 className="text-sm md:text-base font-bold text-foreground flex items-center gap-2 font-mono">
-                HERMES SMART SEARCH v1.4
+                HERMES SMART SEARCH v2.0.0
                 <span className="text-[10px] uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
                   {isSpanish ? 'Optimizador Balístico Inteligente' : 'Intelligent Ballistic Optimizer'}
                 </span>
@@ -469,9 +527,23 @@ export function SmartSearchEngine({
 
           <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border">
             <button
+              onClick={() => setActiveStep(0)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeStep === 0 
+                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              <Target size={13} />
+              {isSpanish ? 'Objetivo: Máx Altitud' : 'Goal: Max Altitude'}
+            </button>
+
+            <ChevronRight size={14} className="text-muted-foreground opacity-50" />
+
+            <button
               onClick={() => setActiveStep(1)}
               data-tour="smart-search-phase-1-btn"
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeStep === 1 
                   ? 'bg-emerald-600 text-white shadow-xs' 
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -486,7 +558,7 @@ export function SmartSearchEngine({
             <button
               onClick={() => setActiveStep(2)}
               data-tour="smart-search-phase-2-btn"
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeStep === 2 
                   ? 'bg-emerald-600 text-white shadow-xs' 
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -501,14 +573,14 @@ export function SmartSearchEngine({
             <button
               onClick={() => setActiveStep(3)}
               data-tour="smart-search-phase-3-btn"
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeStep === 3 
                   ? 'bg-emerald-600 text-white shadow-xs' 
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
             >
               <span className="w-4 h-4 rounded-full bg-black/20 flex items-center justify-center text-[10px]">3</span>
-              {isSpanish ? 'Fase 3: Objetivos' : 'Phase 3: Goals'}
+              {isSpanish ? 'Fase 3: Algoritmos' : 'Phase 3: Algorithms'}
             </button>
           </div>
         </div>
@@ -516,50 +588,174 @@ export function SmartSearchEngine({
 
       {/* ================= INFORMATIVE MODAL / BANNER: ALGORITHM & SIMULATION FORMULATION ================= */}
       {showAlgorithmInfo && (
-        <div className={`p-4 rounded-xl border space-y-3 text-xs leading-relaxed ${
-          isLight ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-emerald-950/20 border-emerald-800/60 text-emerald-100'
+        <div className={`p-5 rounded-xl border space-y-4 text-xs leading-relaxed transition-all shadow-md ${
+          isLight ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950' : 'bg-slate-900/95 border-emerald-600/50 text-emerald-100'
         }`}>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pb-3 border-b border-emerald-500/30">
             <h4 className="font-bold font-mono text-sm flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-              <Zap size={16} />
-              {isSpanish ? 'Formulación Física y Algoritmo de Optimización Inversa' : 'Physical Formulation & Evolutionary Inverse Optimization'}
+              <Zap size={18} className="text-emerald-500 animate-pulse" />
+              {isSpanish 
+                ? 'Guía Completa de Smart Search: Flujo de Misión, Algoritmos, Modus Operandi y Formulación' 
+                : 'Smart Search Complete Guide: Mission Workflow, Algorithms, Modus Operandi & Formulation'}
             </h4>
             <button 
               onClick={() => setShowAlgorithmInfo(false)}
-              className="text-xs font-bold px-2 py-1 rounded hover:bg-emerald-500/20 text-muted-foreground hover:text-foreground"
+              className="text-xs font-bold px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-800 dark:text-emerald-200 transition-colors cursor-pointer"
             >
-              ✕
+              ✕ {isSpanish ? 'Cerrar Guía' : 'Close Guide'}
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+          {/* Workflow Sequence: Goal -> Phase 1 -> Phase 2 -> Phase 3 */}
+          <div className="space-y-2 p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10">
+            <span className="font-bold font-mono uppercase text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+              <Target size={15} />
+              {isSpanish ? '1. Flujo Secuencial de Optimización (De Objetivo a Ejecución)' : '1. Sequential Optimization Workflow (Goal to Execution)'}
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px]">
+              <div className="p-2 rounded-lg bg-card/80 border border-emerald-500/40 space-y-0.5">
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">0. Objetivo Primario</span>
+                <p className="text-[10px] text-muted-foreground">
+                  {isSpanish 
+                    ? 'Bandeja inicial donde se selecciona Máxima Altitud (Mayor Impulso Total It = ∫ F dt) antes de configurar cotas.' 
+                    : 'Initial tray to select Maximum Altitude (Peak Total Impulse It = ∫ F dt) prior to configuring dimensions.'}
+                </p>
+              </div>
+              <div className="p-2 rounded-lg bg-card/80 border border-border space-y-0.5">
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">1. Fase 1: Hardware</span>
+                <p className="text-[10px] text-muted-foreground">
+                  {isSpanish 
+                    ? 'Cotado de cámara (Dc, Lc), límite de sobrepresión Pmax_lim, tobera fija (Dt, Ds, α) y avisos de expansión en vivo.' 
+                    : 'Fixed casing (Dc, Lc), MEOP pressure threshold, nozzle geometry (Dt, Ds, α), and real-time expansion alerts.'}
+                </p>
+              </div>
+              <div className="p-2 rounded-lg bg-card/80 border border-border space-y-0.5">
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">2. Fase 2: Granos</span>
+                <p className="text-[10px] text-muted-foreground">
+                  {isSpanish 
+                    ? 'Geometría (BATES, Estrella, Macizo), N granos, modos Libre/Fijo/Rango (D0, d0, L0), caras activas y restricción de masa.' 
+                    : 'Shape, segment count, Free/Fixed/Range modes for D0, d0, L0, active faces, and total propellant mass limits.'}
+                </p>
+              </div>
+              <div className="p-2 rounded-lg bg-card/80 border border-border space-y-0.5">
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">3. Fase 3: Algoritmos</span>
+                <p className="text-[10px] text-muted-foreground">
+                  {isSpanish 
+                    ? 'Elección del presupuesto DE, botón de Cancelar Simulación en vivo y monitoreo del HUD de evolución.' 
+                    : 'DE budget preset selection, live Cancel Simulation button, and real-time convergence HUD monitoring.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section A: The 3 Search Algorithms & Modus Operandi */}
+          <div className="space-y-2">
+            <span className="font-bold font-mono uppercase text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+              <Cpu size={15} />
+              {isSpanish ? '2. Los 3 Modos de Algoritmo de Búsqueda Evolutiva y su Modus Operandi' : '2. The 3 Evolutionary Search Algorithm Modes & Modus Operandi'}
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              
+              {/* Algorithm 1: Fast */}
+              <div className="p-3 rounded-xl border border-border bg-card/70 space-y-1.5">
+                <div className="flex items-center justify-between font-mono font-bold text-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Zap size={14} className="text-amber-500" />
+                    {isSpanish ? 'Búsqueda Rápida' : 'Fast Search'}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold">
+                    500 evals / N
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {isSpanish
+                    ? 'Modus Operandi: Población compacta NP = 15 con G = 33 generaciones de DE/rand/1/bin inicializadas mediante muestreo hipercubo latino (LHS). Emplea mutación adaptativa rápida con cruce binomial CR = 0.85.'
+                    : 'Modus Operandi: Compact population NP = 15 with G = 33 generations of DE/rand/1/bin seeded by Latin Hypercube Sampling (LHS). Uses fast adaptive mutation and binomial crossover CR = 0.85.'}
+                </p>
+                <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold pt-1 border-t border-border/40">
+                  {isSpanish ? '🎯 ~1 - 2s por N | Barrido veloz de viabilidad inicial.' : '🎯 ~1 - 2s per N | Fast initial feasibility sweep.'}
+                </div>
+              </div>
+
+              {/* Algorithm 2: Standard */}
+              <div className="p-3 rounded-xl border border-emerald-500/50 bg-card/90 space-y-1.5 shadow-2xs">
+                <div className="flex items-center justify-between font-mono font-bold text-foreground">
+                  <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                    <Sparkles size={14} />
+                    {isSpanish ? 'Búsqueda Estándar (Recomendado)' : 'Standard Search (Recommended)'}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">
+                    1.000 evals / N
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {isSpanish
+                    ? 'Modus Operandi: Población balanceada NP = 25 con G = 40 generaciones. Incorpora dither estocástico del factor de escala F ∈ [0.5, 0.9] por generación y vector, garantizando diversidad y evitando estancamientos en óptimos locales.'
+                    : 'Modus Operandi: Balanced population NP = 25 with G = 40 generations. Incorporates stochastic dithering of scale factor F ∈ [0.5, 0.9] per generation, preventing premature local minima convergence.'}
+                </p>
+                <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold pt-1 border-t border-border/40">
+                  {isSpanish ? '🎯 ~2 - 4s por N | Diseño balístico definitivo de alta fidelidad.' : '🎯 ~2 - 4s per N | Production high-fidelity motor design.'}
+                </div>
+              </div>
+
+              {/* Algorithm 3: Deep */}
+              <div className="p-3 rounded-xl border border-purple-500/40 bg-card/70 space-y-1.5">
+                <div className="flex items-center justify-between font-mono font-bold text-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Rocket size={14} className="text-purple-500" />
+                    {isSpanish ? 'Búsqueda Profunda' : 'Deep Search'}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold">
+                    2.000 evals / N
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {isSpanish
+                    ? 'Modus Operandi: Población expandida NP = 40 con G = 50 generaciones. Explora exhaustivamente hipervolúmenes restringidos donde el límite de sobrepresión Pmax está muy próximo a la frontera crítica de rotura.'
+                    : 'Modus Operandi: Expanded population NP = 40 with G = 50 generations. Exhaustively explores constrained hyperspaces where Pmax limit operates near critical burst boundaries.'}
+                </p>
+                <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold pt-1 border-t border-border/40">
+                  {isSpanish ? '🔬 ~5 - 8s por N | Geometrías estrella e hiperespacios complejos.' : '🔬 ~5 - 8s per N | Star geometries & complex hyperspaces.'}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Section B: Cancel Simulation & Preserving Partial Results */}
+          <div className="p-3.5 rounded-xl border border-red-500/40 bg-red-500/10 space-y-1 text-[11px]">
+            <span className="font-bold text-red-600 dark:text-red-400 font-mono uppercase flex items-center gap-1.5">
+              <XCircle size={15} />
+              {isSpanish ? '3. Cancelación de Simulación en Vivo y Retorno de Resultados Parciales' : '3. Live Simulation Cancellation & Partial Results Preservation'}
+            </span>
+            <p className="text-muted-foreground leading-relaxed">
+              {isSpanish
+                ? 'Durante la ejecución del optimizador (en búsquedas profundas o presupuestos elevados), aparece un botón rojo de CANCELAR SIMULACIÓN visible en el HUD de progreso y en la barra de lanzamiento. Al pulsarlo, el algoritmo detiene inmediatamente el bucle evolutivo de forma segura y devuelve todos los mejores candidatos factibles evaluados hasta ese momento, permitiendo corregir parámetros sin perder el trabajo cómputo previo.'
+                : 'During search execution, a prominent red CANCEL SIMULATION button is available inside the HUD and action bar. Clicking it safely aborts the evolution loop and returns the best feasible candidates found up to that timestamp, allowing instant configuration adjustments without losing evaluated data.'}
+            </p>
+          </div>
+
+          {/* Section C: Exact 0D Simulation & Deb Feasibility Rules */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-emerald-500/20">
             <div className="space-y-1.5">
               <span className="font-bold text-foreground font-mono uppercase text-[11px] block">
-                {isSpanish ? '1. Motor de Simulación Numérico 0D' : '1. Exact Numerical 0D Solver'}
+                {isSpanish ? '4. Motor de Simulación Numérico 0D Intacto' : '4. Untouched Exact Numerical 0D Solver'}
               </span>
               <p>
                 {isSpanish
-                  ? 'El optimizador resuelve la misma integración balística transitoria exacta que la pestaña principal: integra en cada paso de tiempo la ley de Vieille (r = a·Pⁿ), continuidad en cámara con tobera isentrópica Laval y regresión geométrica 3D de caras activas.'
-                  : 'The optimizer solves exact transient numerical ballistics: integrating Vieille burning law (r = a·Pⁿ), chamber continuity with Laval expansion, and 3D regression of active burn surfaces.'}
+                  ? 'El optimizador NO modifica ni aproxima las leyes físicas. Resuelve para cada vector [D0, d0, L0] la integración balística 0D completa con la ley de Vieille (r = a·Pⁿ), continuidad másica en cámara con tobera de Laval y regresión geométrica 3D de todas las caras de grano activas. El impulso total It = ∫ F dt devuelto es el valor físico exacto sin puntuaciones artificiales ni penalizaciones ficticias.'
+                  : 'The optimizer does NOT alter or approximate physical laws. It solves complete 0D transient ballistics with Vieille burn law (r = a·Pⁿ), chamber mass continuity with Laval nozzle, and 3D regression of active faces for each vector [D0, d0, L0]. The returned total impulse It = ∫ F dt is exact.'}
               </p>
             </div>
+
             <div className="space-y-1.5">
               <span className="font-bold text-foreground font-mono uppercase text-[11px] block">
-                {isSpanish ? '2. Espacio Mixto Entero y Filtrado Kn' : '2. Mixed-Integer Space & Kn Filtering'}
+                {isSpanish ? '5. Reglas de Factibilidad de Deb (1998) y Selección Rígida' : '5. Deb Feasibility Rules (1998) & Strict Selection'}
               </span>
               <p>
                 {isSpanish
-                  ? 'Calcula de antemano la relación de Klemmung segura (Kn_max, Kn_min) según el propelente y límites de cámara para descartar el 85% de configuraciones inviables antes de simular, explorando granos discretos N de forma natural sin atascarse.'
-                  : 'Pre-calculates analytical safe Klemmung limits (Kn_max, Kn_min) to eliminate 85% of infeasible geometries before simulation, exploring discrete segment counts N seamlessly.'}
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <span className="font-bold text-foreground font-mono uppercase text-[11px] block text-purple-700 dark:text-purple-300">
-                {isSpanish ? '3. Modelo Híbrido vs fmincon (MATLAB)' : '3. Hybrid Aerospace Model vs fmincon'}
-              </span>
-              <p>
-                {isSpanish
-                  ? 'Algoritmos basados en gradientes (como fmincon SQP) fallan ante el ruido numérico y discontinuidades de tiempo de quemado en EDOs balísticas. El solver Híbrido implementado usa CMA-ES para detectar correlaciones multivariables y Nelder-Mead Simplex proyectado para afinar las variables continuas (L0, d0, D0) con precisión absoluta sin derivadas.'
-                  : 'Gradient algorithms (like fmincon SQP) suffer from numerical noise in ODE time-stepping. Our hybrid model pairs CMA-ES covariance learning with a projected Nelder-Mead Simplex solver to pinpoint continuous optima without noisy derivatives.'}
+                  ? 'Los métodos continuos basados en gradiente fracasan en balística debido a las discontinuidades del quemado y censurado por sobrepresión. La Selección de Deb garantiza que: 1) Cualquier solución factible (Pmax ≤ Plim) vence a una inviable; 2) Entre factibles gana estrictamente el mayor impulso total puro (Max It); 3) Entre inviables gana la de menor sobrepresión sin penalizaciones arbitrarias.'
+                  : 'Gradient methods fail in ballistics due to burning sliver discontinuities and pressure censoring. Deb Selection guarantees: 1) Any feasible candidate dominates infeasible ones; 2) Among feasible candidates, strictly highest total impulse (Max It) wins; 3) Among infeasible candidates, lowest pressure violation wins without arbitrary weights.'}
               </p>
             </div>
           </div>
@@ -568,6 +764,112 @@ export function SmartSearchEngine({
 
       {/* ================= COMFORTABLE FULL-WIDTH CONFIGURATION WORKSPACE ================= */}
       
+      {/* STEP 0: BANDEJA DE OBJETIVOS DE MISIÓN */}
+      {activeStep === 0 && (
+        <Card data-tour="smart-search-goal-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500 animate-in fade-in duration-200">
+          <CardHeader className="py-4 px-5 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2 font-mono">
+                <Target size={16} />
+                {isSpanish ? 'Bandeja de Objetivos de Misión' : 'Mission Objectives Inbox'}
+              </CardTitle>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {isSpanish 
+                  ? 'Selecciona el objetivo propulsivo para iniciar la configuración de motor, restricciones de grano y algoritmos de optimización'
+                  : 'Select your propulsion mission goal to enter the hardware, grain constraints, and algorithm configuration flow'}
+              </p>
+            </div>
+            <div className="text-[11px] font-mono text-muted-foreground bg-muted/50 px-3 py-1 rounded-lg border border-border">
+              <span>{isSpanish ? 'Flujo:' : 'Workflow:'} <strong className="text-foreground">{isSpanish ? 'Objetivo → Fase 1 → Fase 2 → Fase 3' : 'Goal → Phase 1 → Phase 2 → Phase 3'}</strong></span>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-6 space-y-6">
+            <div className="space-y-2">
+              <span className="text-xs font-bold uppercase font-mono tracking-wider text-muted-foreground">
+                {isSpanish ? 'Objetivo Primario de Optimización' : 'Primary Optimization Objective'}
+              </span>
+              
+              {/* Objective Drawer / Tray: Max Altitude / Max Total Impulse */}
+              <div 
+                onClick={() => {
+                  setGoal('max_impulse');
+                  setActiveStep(1);
+                }}
+                className="group relative p-5 rounded-2xl border-2 border-emerald-500/60 bg-gradient-to-br from-emerald-500/10 via-card to-emerald-500/5 hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer space-y-4"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                      <Rocket size={24} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                          {isSpanish ? 'Bandeja Principal de Misión' : 'Main Mission Tray'}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
+                          {isSpanish ? 'Activo' : 'Active'}
+                        </span>
+                      </div>
+                      <h3 className="text-base sm:text-lg font-bold text-foreground mt-0.5 font-mono flex items-center gap-2">
+                        {isSpanish ? 'Máxima Altitud / Mayor Impulso Total (It)' : 'Maximum Altitude / Peak Total Impulse (It)'}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setGoal('max_impulse');
+                      setActiveStep(1);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-5 text-xs font-mono flex items-center gap-2 shadow-xs group-hover:shadow-md cursor-pointer self-start sm:self-auto shrink-0"
+                  >
+                    <span>{isSpanish ? 'Configurar Motor y Tobera (Fase 1)' : 'Configure Motor & Nozzle (Phase 1)'}</span>
+                    <ArrowRight size={16} />
+                  </Button>
+                </div>
+
+                {/* Mathematical Formulation & Objective Rules */}
+                <div className="p-3.5 rounded-xl bg-card/80 border border-border/80 space-y-2 text-xs font-mono">
+                  <div className="flex items-center justify-between flex-wrap gap-2 text-foreground">
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 size={15} />
+                      {isSpanish ? 'Criterio de Selección Estricto:' : 'Strict Selection Criterion:'}
+                    </span>
+                    <span className="px-2.5 py-1 rounded bg-muted text-foreground font-bold border border-border text-[11px]">
+                      Mejor Solución = max I_total &nbsp;[sujeto a P_max ≤ P_límite]
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed font-sans">
+                    {isSpanish
+                      ? 'Maximiza estrictamente la energía propulsiva total acumulada obtenida de la integración temporal completa del empuje (I_total = ∫ F dt) devuelta por el simulador físico. No premia artificialmente geometrías por planitud ni ocupación de cámara si entregan menor impulso total. La selección global de granos (N) y cotas geométricas se rige por factibilidad de Deb.'
+                      : 'Strictly maximizes total propulsive energy from complete physical thrust time integration (I_total = ∫ F dt) returned by the simulator. Does not artificially favor flat thrust or packing volume if total impulse is lower. Global grain count (N) and dimensions are governed by Deb feasibility selection.'}
+                  </p>
+                </div>
+
+                {/* Feature Highlights Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] font-mono">
+                  <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{isSpanish ? 'Cálculo Físico' : 'Physics Calculation'}</span>
+                    <span className="font-bold text-foreground">{isSpanish ? 'Impulso Total Puro (N·s)' : 'Pure Total Impulse (N·s)'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{isSpanish ? 'Manejo de Restricciones' : 'Constraint Handling'}</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{isSpanish ? 'Reglas de Deb (Sin penalizaciones ficticias)' : 'Deb Rules (No arbitrary penalty weights)'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{isSpanish ? 'Comparativa de Granos' : 'Grain Exploration'}</span>
+                    <span className="font-bold text-foreground">{isSpanish ? 'Automática N = 1 .. N_max' : 'Automatic N = 1 .. N_max'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* FASE 1: HARDWARE DEFINIDO (CÁMARA Y TOBERA) */}
       {activeStep === 1 && (
         <Card data-tour="smart-search-phase1-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
@@ -694,8 +996,9 @@ export function SmartSearchEngine({
                 </h4>
                 <div className="grid grid-cols-3 gap-2.5">
                   <div className="space-y-1">
-                    <UiLabel className="text-[10px] text-muted-foreground font-mono">
-                      {isSpanish ? 'Garganta (Dt) [mm]' : 'Throat (Dt) [mm]'}
+                    <UiLabel className="text-[10px] text-muted-foreground font-mono flex items-center justify-between">
+                      <span>{isSpanish ? 'Garganta (Dt) [mm]' : 'Throat (Dt) [mm]'}</span>
+                      {(isDt0GeDs || isDt0GeDc) && <AlertTriangle size={12} className="text-red-500 animate-pulse" />}
                     </UiLabel>
                     <Input
                       type="number"
@@ -704,13 +1007,14 @@ export function SmartSearchEngine({
                       onChange={(e) => handleInputChange('Dt0', e.target.value)}
                       onBlur={() => handleBlur('Dt0')}
                       placeholder="8.0"
-                      className={`h-8 text-xs font-mono font-bold ${isDt0EmptyOrInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
+                      className={`h-8 text-xs font-mono font-bold ${isDt0EmptyOrInvalid || isDt0GeDs || isDt0GeDc ? 'border-red-500 bg-red-500/10' : ''}`}
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <UiLabel className="text-[10px] text-muted-foreground font-mono">
-                      {isSpanish ? 'Salida (Ds) [mm]' : 'Exit (Ds) [mm]'}
+                    <UiLabel className="text-[10px] text-muted-foreground font-mono flex items-center justify-between">
+                      <span>{isSpanish ? 'Salida (Ds) [mm]' : 'Exit (Ds) [mm]'}</span>
+                      {isDt0GeDs && <AlertTriangle size={12} className="text-red-500 animate-pulse" />}
                     </UiLabel>
                     <Input
                       type="number"
@@ -719,7 +1023,7 @@ export function SmartSearchEngine({
                       onChange={(e) => handleInputChange('Ds', e.target.value)}
                       onBlur={() => handleBlur('Ds')}
                       placeholder="18.0"
-                      className={`h-8 text-xs font-mono font-bold ${isDsEmptyOrInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
+                      className={`h-8 text-xs font-mono font-bold ${isDsEmptyOrInvalid || isDt0GeDs ? 'border-red-500 bg-red-500/10' : ''}`}
                     />
                   </div>
 
@@ -736,6 +1040,22 @@ export function SmartSearchEngine({
                     />
                   </div>
                 </div>
+                {isDt0GeDs && (
+                  <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                    <AlertTriangle size={12} className="shrink-0" />
+                    {isSpanish 
+                      ? `⚠️ Dt (${Dt0Val} mm) ≥ Ds (${DsVal} mm). En toberas de Laval la garganta debe ser menor que la salida (ε > 1).` 
+                      : `⚠️ Dt (${Dt0Val} mm) ≥ Ds (${DsVal} mm). In de Laval nozzles throat must be smaller than exit (ε > 1).`}
+                  </p>
+                )}
+                {isDt0GeDc && (
+                  <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                    <AlertTriangle size={12} className="shrink-0" />
+                    {isSpanish 
+                      ? `⚠️ Dt (${Dt0Val} mm) ≥ Dc cámara (${DcVal} mm). La garganta no puede igualar o superar la cámara.` 
+                      : `⚠️ Dt (${Dt0Val} mm) ≥ chamber Dc (${DcVal} mm). Throat cannot equal or exceed chamber diameter.`}
+                  </p>
+                )}
                 <p className="text-[10px] text-muted-foreground font-mono">
                   {isSpanish 
                     ? `Área de garganta At = ${AtVal.toFixed(1)} mm² | Relación de expansión ε = ${expRatio.toFixed(2)}`
@@ -849,7 +1169,15 @@ export function SmartSearchEngine({
             </div>
 
             {/* Step 1 Footer Navigation */}
-            <div className="flex items-center justify-end pt-3 border-t border-border">
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <Button
+                variant="outline"
+                onClick={() => setActiveStep(0)}
+                className="h-10 px-5 text-xs font-bold flex items-center gap-2 cursor-pointer"
+              >
+                <ArrowLeft size={16} />
+                {isSpanish ? 'Volver a Bandeja de Objetivos' : 'Back to Goal Inbox'}
+              </Button>
               <Button
                 onClick={() => setActiveStep(2)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 flex items-center gap-2 shadow-xs cursor-pointer"
@@ -1075,12 +1403,21 @@ export function SmartSearchEngine({
                           onChange={(e) => handleInputChange('valD0', e.target.value)}
                           onBlur={() => handleBlur('valD0')}
                           placeholder="49.0"
-                          className={`h-8 text-xs font-mono font-bold flex-1 ${isD0EmptyOrInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
+                          className={`h-8 text-xs font-mono font-bold flex-1 ${isD0EmptyOrInvalid || isD0GeDc ? 'border-red-500 bg-red-500/10' : ''}`}
                         />
                         <span className="text-xs font-mono text-muted-foreground">mm</span>
+                        {isD0GeDc && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
                       </div>
                       {isD0EmptyOrInvalid && (
                         <p className="text-[10px] text-red-500 font-medium">{isSpanish ? '⚠️ Introduce D0' : '⚠️ Enter D0'}</p>
+                      )}
+                      {isD0GeDc && (
+                        <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                          <AlertTriangle size={12} className="shrink-0" />
+                          {isSpanish 
+                            ? `⚠️ D0 (${valD0Num} mm) ≥ Dc cámara (${DcVal} mm). El grano debe ser menor que la cámara.` 
+                            : `⚠️ D0 (${valD0Num} mm) ≥ chamber Dc (${DcVal} mm). Grain must fit inside casing.`}
+                        </p>
                       )}
                     </div>
                   )}
@@ -1096,7 +1433,7 @@ export function SmartSearchEngine({
                             value={inputValues.minD0}
                             onChange={(e) => handleInputChange('minD0', e.target.value)}
                             placeholder="47.5"
-                            className="h-8 text-xs font-mono font-bold"
+                            className={`h-8 text-xs font-mono font-bold ${isD0RangeInverted ? 'border-red-500 bg-red-500/10' : ''}`}
                           />
                         </div>
                         <div>
@@ -1107,10 +1444,26 @@ export function SmartSearchEngine({
                             value={inputValues.maxD0}
                             onChange={(e) => handleInputChange('maxD0', e.target.value)}
                             placeholder="49.2"
-                            className="h-8 text-xs font-mono font-bold"
+                            className={`h-8 text-xs font-mono font-bold ${isD0RangeInverted || isMaxD0GeDc ? 'border-red-500 bg-red-500/10' : ''}`}
                           />
                         </div>
                       </div>
+                      {isMaxD0GeDc && (
+                        <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                          <AlertTriangle size={12} className="shrink-0" />
+                          {isSpanish 
+                            ? `⚠️ Máx D0 (${maxD0Num} mm) ≥ Dc (${DcVal} mm).` 
+                            : `⚠️ Max D0 (${maxD0Num} mm) ≥ Chamber Dc (${DcVal} mm).`}
+                        </p>
+                      )}
+                      {isD0RangeInverted && (
+                        <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                          <AlertTriangle size={12} className="shrink-0" />
+                          {isSpanish 
+                            ? `⚠️ Mín D0 (${minD0Num} mm) ≥ Máx D0 (${maxD0Num} mm). Rango invertido.` 
+                            : `⚠️ Min D0 (${minD0Num} mm) ≥ Max D0 (${maxD0Num} mm). Inverted range.`}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1183,12 +1536,21 @@ export function SmartSearchEngine({
                             onChange={(e) => handleInputChange('vald0', e.target.value)}
                             onBlur={() => handleBlur('vald0')}
                             placeholder="10.0"
-                            className={`h-8 text-xs font-mono font-bold flex-1 ${isd0EmptyOrInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
+                            className={`h-8 text-xs font-mono font-bold flex-1 ${isd0EmptyOrInvalid || isd0GeD0 ? 'border-red-500 bg-red-500/10' : ''}`}
                           />
                           <span className="text-xs font-mono text-muted-foreground">mm</span>
+                          {isd0GeD0 && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
                         </div>
                         {isd0EmptyOrInvalid && (
                           <p className="text-[10px] text-red-500 font-medium">{isSpanish ? '⚠️ Introduce d0' : '⚠️ Enter d0'}</p>
+                        )}
+                        {isd0GeD0 && (
+                          <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                            <AlertTriangle size={12} className="shrink-0" />
+                            {isSpanish 
+                              ? `⚠️ d0 (${vald0Num} mm) ≥ D0 (${effectiveOuterD} mm). Espesor de quemado (web) nulo.` 
+                              : `⚠️ d0 (${vald0Num} mm) ≥ D0 (${effectiveOuterD} mm). Zero web thickness.`}
+                          </p>
                         )}
                       </div>
                     )}
@@ -1204,7 +1566,7 @@ export function SmartSearchEngine({
                               value={inputValues.mind0}
                               onChange={(e) => handleInputChange('mind0', e.target.value)}
                               placeholder="6.0"
-                              className="h-8 text-xs font-mono font-bold"
+                              className={`h-8 text-xs font-mono font-bold ${isd0RangeInverted || isMind0GeD0 ? 'border-red-500 bg-red-500/10' : ''}`}
                             />
                           </div>
                           <div>
@@ -1215,10 +1577,26 @@ export function SmartSearchEngine({
                               value={inputValues.maxd0}
                               onChange={(e) => handleInputChange('maxd0', e.target.value)}
                               placeholder="16.0"
-                              className="h-8 text-xs font-mono font-bold"
+                              className={`h-8 text-xs font-mono font-bold ${isd0RangeInverted ? 'border-red-500 bg-red-500/10' : ''}`}
                             />
                           </div>
                         </div>
+                        {isd0RangeInverted && (
+                          <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                            <AlertTriangle size={12} className="shrink-0" />
+                            {isSpanish 
+                              ? `⚠️ Mín d0 (${mind0Num} mm) ≥ Máx d0 (${maxd0Num} mm). Rango invertido.` 
+                              : `⚠️ Min d0 (${mind0Num} mm) ≥ Max d0 (${maxd0Num} mm). Inverted range.`}
+                          </p>
+                        )}
+                        {isMind0GeD0 && (
+                          <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                            <AlertTriangle size={12} className="shrink-0" />
+                            {isSpanish 
+                              ? `⚠️ Mín d0 (${mind0Num} mm) ≥ D0 (${effectiveOuterD} mm).` 
+                              : `⚠️ Min d0 (${mind0Num} mm) ≥ D0 (${effectiveOuterD} mm).`}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1296,12 +1674,21 @@ export function SmartSearchEngine({
                           onChange={(e) => handleInputChange('valL0', e.target.value)}
                           onBlur={() => handleBlur('valL0')}
                           placeholder="50.0"
-                          className={`h-8 text-xs font-mono font-bold flex-1 ${isL0EmptyOrInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
+                          className={`h-8 text-xs font-mono font-bold flex-1 ${isL0EmptyOrInvalid || isL0ExceedsLc ? 'border-red-500 bg-red-500/10' : ''}`}
                         />
                         <span className="text-xs font-mono text-muted-foreground">mm</span>
+                        {isL0ExceedsLc && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
                       </div>
                       {isL0EmptyOrInvalid && (
                         <p className="text-[10px] text-red-500 font-medium">{isSpanish ? '⚠️ Introduce L0' : '⚠️ Enter L0'}</p>
+                      )}
+                      {isL0ExceedsLc && (
+                        <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                          <AlertTriangle size={12} className="shrink-0" />
+                          {isSpanish 
+                            ? `⚠️ N×L0 (${fixedNNum} × ${valL0Num} = ${(fixedNNum * valL0Num).toFixed(1)} mm) supera Lc (${LcVal} mm).` 
+                            : `⚠️ N×L0 (${fixedNNum} × ${valL0Num} = ${(fixedNNum * valL0Num).toFixed(1)} mm) exceeds Lc (${LcVal} mm).`}
+                        </p>
                       )}
                     </div>
                   )}
@@ -1317,7 +1704,7 @@ export function SmartSearchEngine({
                             value={inputValues.minL0}
                             onChange={(e) => handleInputChange('minL0', e.target.value)}
                             placeholder="30.0"
-                            className="h-8 text-xs font-mono font-bold"
+                            className={`h-8 text-xs font-mono font-bold ${isL0RangeInverted ? 'border-red-500 bg-red-500/10' : ''}`}
                           />
                         </div>
                         <div>
@@ -1328,10 +1715,18 @@ export function SmartSearchEngine({
                             value={inputValues.maxL0}
                             onChange={(e) => handleInputChange('maxL0', e.target.value)}
                             placeholder="70.0"
-                            className="h-8 text-xs font-mono font-bold"
+                            className={`h-8 text-xs font-mono font-bold ${isL0RangeInverted ? 'border-red-500 bg-red-500/10' : ''}`}
                           />
                         </div>
                       </div>
+                      {isL0RangeInverted && (
+                        <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                          <AlertTriangle size={12} className="shrink-0" />
+                          {isSpanish 
+                            ? `⚠️ Mín L0 (${minL0Num} mm) ≥ Máx L0 (${maxL0Num} mm). Rango invertido.` 
+                            : `⚠️ Min L0 (${minL0Num} mm) ≥ Max L0 (${maxL0Num} mm). Inverted range.`}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1562,7 +1957,7 @@ export function SmartSearchEngine({
                 onClick={() => setActiveStep(3)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 flex items-center gap-2 shadow-xs cursor-pointer"
               >
-                {isSpanish ? 'Continuar a Fase 3: Objetivos' : 'Continue to Phase 3: Goals'}
+                {isSpanish ? 'Continuar a Fase 3: Algoritmos' : 'Continue to Phase 3: Algorithms'}
                 <ArrowRight size={16} />
               </Button>
             </div>
@@ -1571,17 +1966,17 @@ export function SmartSearchEngine({
         </Card>
       )}
 
-      {/* FASE 3: OBJETIVOS DE VUELO Y EJECUCIÓN DEL ALGORITMO */}
+      {/* FASE 3: ALGORITMOS Y EJECUCIÓN DEL OPTIMIZADOR */}
       {activeStep === 3 && (
         <Card data-tour="smart-search-phase3-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
           <CardHeader className="py-3 px-4 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
               <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
-                <Target size={16} />
-                {isSpanish ? 'Fase 3: Objetivo de Vuelo y Lanzamiento del Optimizador' : 'Phase 3: Flight Goal & Optimizer Execution'}
+                <Cpu size={16} />
+                {isSpanish ? 'Fase 3: Algoritmos y Lanzamiento del Optimizador' : 'Phase 3: Algorithms & Optimizer Execution'}
               </CardTitle>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {isSpanish ? 'Selecciona qué perfil de empuje deseas conseguir y lanza la optimización balística' : 'Select flight thrust goal and trigger the ballistic optimizer'}
+                {isSpanish ? 'Configura el presupuesto de simulación y lanza la optimización balística global' : 'Configure simulation budget and launch global ballistic optimization'}
               </p>
             </div>
             <div className="text-[11px] font-mono text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg border border-border">
@@ -1591,408 +1986,301 @@ export function SmartSearchEngine({
 
           <CardContent className="p-5 space-y-4">
             
-            {/* Goal Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              
-              {/* Goal 1: Max Total Impulse / Max Altitude */}
-              <div
-                onClick={() => setGoal('max_impulse')}
-                className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
-                  goal === 'max_impulse'
-                    ? 'border-emerald-500 bg-emerald-500/15 shadow-xs'
-                    : 'border-border hover:bg-muted/40'
-                }`}
-              >
+            {/* Active Objective Summary Card (Pre-selected in Step 0 Inbox) */}
+            <div className="p-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                  <Rocket size={20} />
+                </div>
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🚀</span>
-                      <span className="text-xs font-bold text-foreground">
-                        {isSpanish ? 'Máxima Altitud / Mayor Impulso Total (It)' : 'Maximum Altitude / Peak Total Impulse'}
-                      </span>
-                    </div>
-                    {goal === 'max_impulse' && <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 font-mono">
+                      {isSpanish ? 'Objetivo Activo de Misión' : 'Active Mission Objective'}
+                    </span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">
+                      {isSpanish ? 'Fijado en Bandeja' : 'Set in Inbox'}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1 pl-7">
-                    {isSpanish
-                      ? 'Maximiza la energía propulsiva total y volumen útil de grano operando a la presión óptima segura.'
-                      : 'Maximizes delivered impulse and propellant loading operating near safe chamber pressure.'}
+                  <h3 className="text-sm font-bold text-foreground mt-0.5 font-mono">
+                    {isSpanish ? 'Máxima Altitud / Mayor Impulso Total Real (It)' : 'Maximum Altitude / Peak Total Real Impulse (It)'}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    {isSpanish 
+                      ? 'Maximización matemática estricta de It = ∫ F dt garantizando Pmax ≤ P_límite con reglas de Deb sin funciones de penalización arbitrarias.' 
+                      : 'Strict mathematical maximization of It = ∫ F dt guaranteeing Pmax ≤ P_limit with Deb rules without arbitrary penalty weights.'}
                   </p>
                 </div>
               </div>
 
-              {/* Goal 2: Fast Speed / Rapid Exit / Cómo va más rápido el cohete */}
-              <div
-                onClick={() => setGoal('fast_speed')}
-                className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
-                  goal === 'fast_speed'
-                    ? 'border-emerald-500 bg-emerald-500/15 shadow-xs'
-                    : 'border-border hover:bg-muted/40'
-                }`}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveStep(0)}
+                className="h-8 text-xs font-mono border-emerald-500/40 hover:bg-emerald-500/20 shrink-0 cursor-pointer"
               >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">⚡</span>
-                      <span className="text-xs font-bold text-foreground">
-                        {isSpanish ? 'Cómo va más rápido el cohete (Salida Rápida / Pico Inicial Regresivo)' : 'Fastest Rocket Flight (Rapid Rail Exit / Early Regressive Peak)'}
-                      </span>
-                    </div>
-                    {goal === 'fast_speed' && <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1 pl-7">
-                    {isSpanish
-                      ? 'Busca una curva con subida rápida de fuerza al inicio (pico inicial temprano) y descenso progresivo a partir de ese momento para maximizar la aceleración en rampa y velocidad del cohete.'
-                      : 'Finds a thrust curve with a steep initial force spike that progressively regresses thereafter to maximize rail exit speed and vehicle velocity.'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Goal 3: Flat Thrust */}
-              <div
-                onClick={() => setGoal('flat_thrust')}
-                className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
-                  goal === 'flat_thrust'
-                    ? 'border-emerald-500 bg-emerald-500/15 shadow-xs'
-                    : 'border-border hover:bg-muted/40'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">⚖️</span>
-                      <span className="text-xs font-bold text-foreground">
-                        {isSpanish ? 'Empuje Neutro / Perfil BATES Constante' : 'Flat Thrust / Neutral Burn'}
-                      </span>
-                    </div>
-                    {goal === 'flat_thrust' && <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1 pl-7">
-                    {isSpanish
-                      ? 'Optimiza la relación geométrica L/D y núcleo para mantener empuje y presión lo más constantes posibles.'
-                      : 'Optimizes L/D ratio and core geometry to deliver constant, neutral thrust profile.'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Goal 4: Progressive Burn */}
-              <div
-                onClick={() => setGoal('progressive')}
-                className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
-                  goal === 'progressive'
-                    ? 'border-emerald-500 bg-emerald-500/15 shadow-xs'
-                    : 'border-border hover:bg-muted/40'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📈</span>
-                      <span className="text-xs font-bold text-foreground">
-                        {isSpanish ? 'Quemado Progresivo (Aceleración Creciente)' : 'Progressive Thrust'}
-                      </span>
-                    </div>
-                    {goal === 'progressive' && <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1 pl-7">
-                    {isSpanish
-                      ? 'Despegue suave con empuje creciente a medida que el cohete aligera su masa en vuelo.'
-                      : 'Gentle launch acceleration increasing as rocket vehicle mass decreases.'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Goal 5: Target Specific Impulse */}
-              <div
-                onClick={() => setGoal('target_impulse')}
-                className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between md:col-span-2 ${
-                  goal === 'target_impulse'
-                    ? 'border-emerald-500 bg-emerald-500/15 shadow-xs'
-                    : 'border-border hover:bg-muted/40'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🎯</span>
-                      <span className="text-xs font-bold text-foreground">
-                        {isSpanish ? 'Impulso Total Objetivo (It específico)' : 'Target Total Impulse (Specified It)'}
-                      </span>
-                    </div>
-                    {goal === 'target_impulse' && <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1 pl-7">
-                    {isSpanish
-                      ? 'Ajusta exactamente la masa de propelente y empuje para coincidir con un valor específico de Impulso Total (N·s).'
-                      : 'Tunes grain mass and chamber pressure to hit a specific requested Total Impulse in N·s.'}
-                  </p>
-                </div>
-
-                {goal === 'target_impulse' && (
-                  <div className="mt-3 pt-2.5 border-t border-border/60 pl-7 space-y-2" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-2 max-w-xs">
-                      <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
-                        {isSpanish ? 'Impulso Objetivo:' : 'Target Impulse:'}
-                      </span>
-                      <Input
-                        type="number"
-                        value={inputValues.targetImpulseVal}
-                        onChange={(e) => handleInputChange('targetImpulseVal', e.target.value)}
-                        placeholder="250"
-                        className="h-8 text-xs font-mono font-bold"
-                      />
-                      <span className="text-xs font-mono text-muted-foreground font-bold">N·s</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
+                <ArrowLeft size={13} className="mr-1" />
+                {isSpanish ? 'Cambiar Objetivo' : 'Change Objective'}
+              </Button>
             </div>
 
-            {/* SEARCH PRECISION & MODEL SELECTOR: BASIC VS ADVANCED VS HYBRID SIMPLEX */}
-            <div data-tour="smart-search-precision-card" className="space-y-3 pt-3 border-t border-border">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-1.5">
-                  <SlidersHorizontal size={14} className="text-emerald-600 dark:text-emerald-400" />
-                  {isSpanish ? 'Tipo / Algoritmo de Optimización' : 'Optimization Model & Algorithm'}
-                </span>
-                <span className="text-[11px] text-muted-foreground font-mono">
-                  {isSpanish ? 'Selecciona entre Búsqueda Básica, Avanzada u Optimizador Híbrido Aeroespacial' : 'Choose Basic, Advanced, or Hybrid Aerospace Optimizer'}
-                </span>
+            {/* UNIFIED DIFFERENTIAL EVOLUTION ARCHITECTURE & BUDGET SELECTOR */}
+            <div data-tour="smart-search-precision-card" className="space-y-4 pt-3 border-t border-border">
+              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                      <Cpu size={17} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-2">
+                        <span>{isSpanish ? 'Motor Unificado: Differential Evolution (DE/rand/1/bin)' : 'Unified Engine: Differential Evolution (DE/rand/1/bin)'}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-bold">
+                          {isSpanish ? 'Canónico' : 'Canonical'}
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {isSpanish
+                          ? 'Optimización estocástica global sin derivadas con muestreo Latino Hipercúbico (LHS), dither adaptativo y selección estricta de factibilidad de Deb.'
+                          : 'Derivative-free global stochastic optimizer with Latin Hypercube Sampling (LHS), adaptive dithering, and Deb feasibility selection.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] font-mono px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-semibold">
+                      {isSpanish ? 'Objetivo: Max It (Impulso Total)' : 'Objective: Max It (Total Impulse)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4 Architectural Spec Badges */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-emerald-500/20 text-[11px] font-mono">
+                  <div className="p-2 rounded-lg bg-card border border-border/60">
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{isSpanish ? 'Estrategia' : 'Strategy'}</div>
+                    <div className="font-bold text-foreground mt-0.5">DE/rand/1/bin (LHS)</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-card border border-border/60">
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{isSpanish ? 'Variables Activas' : 'Active Variables'}</div>
+                    <div className="font-bold text-foreground mt-0.5">
+                      {modeD0 !== 'fixed' ? 'D0 ' : ''}{moded0 !== 'fixed' && shape !== 3 ? 'd0 ' : ''}{modeL0 !== 'fixed' ? 'L0' : ''}
+                      {modeD0 === 'fixed' && (moded0 === 'fixed' || shape === 3) && modeL0 === 'fixed' ? (isSpanish ? 'Ninguna (Fijadas)' : 'None (Fixed)') : ''}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-card border border-border/60">
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{isSpanish ? 'Modo de Granos' : 'Grain Mode'}</div>
+                    <div className="font-bold text-foreground mt-0.5">
+                      {grainCountMode === 'range' ? `Auto (N = 1 .. ${inputValues.maxGrainCount || 5})` : `Fijo (N = ${inputValues.fixedGrainCount || 3})`}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-card border border-border/60">
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{isSpanish ? 'Restricción Pmax' : 'Pmax Constraint'}</div>
+                    <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">≤ {inputValues.Pmax_lim || '6.0'} MPa (Deb)</div>
+                  </div>
+                </div>
               </div>
 
-              {/* Mode Selection Cards: 3 Engine Models */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                
-                {/* Option 1: Basic / Standard Search */}
-                <div
-                  onClick={() => setSearchPrecision('basic')}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
-                    searchPrecision === 'basic'
-                      ? 'border-emerald-500 bg-emerald-500/10 shadow-xs ring-1 ring-emerald-500/30'
-                      : 'border-border bg-card/60 hover:bg-muted/40'
-                  }`}
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold ${
-                          searchPrecision === 'basic' 
-                            ? 'bg-emerald-500 text-white' 
-                            : 'bg-muted text-muted-foreground'
-                        }`}>
-                          <Zap size={15} />
-                        </div>
-                        <span className="text-xs font-bold text-foreground">
-                          {isSpanish ? 'Búsqueda Básica' : 'Basic Search'}
+              {/* Simulation Budget Configuration */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-1.5">
+                    <SlidersHorizontal size={14} className="text-emerald-600 dark:text-emerald-400" />
+                    {isSpanish ? 'Presupuesto de Simulaciones por Valor de N' : 'Simulation Budget per Grain Count N'}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    {isSpanish ? 'Configura la profundidad de la búsqueda global' : 'Configure global search evaluation depth'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Preset 1: Fast (500) */}
+                  <div
+                    onClick={() => {
+                      setBudgetPreset('fast');
+                      setEvaluationsPerN(500);
+                    }}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      budgetPreset === 'fast' && evaluationsPerN === 500
+                        ? 'border-emerald-500 bg-emerald-500/10 shadow-xs ring-1 ring-emerald-500/30'
+                        : 'border-border bg-card/60 hover:bg-muted/40'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Zap size={14} className="text-amber-500" />
+                          {isSpanish ? 'Búsqueda Rápida' : 'Fast Search'}
                         </span>
+                        {budgetPreset === 'fast' && evaluationsPerN === 500 && (
+                          <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
+                        )}
                       </div>
-                      {searchPrecision === 'basic' && <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />}
+                      <p className="text-[11px] text-muted-foreground">
+                        {isSpanish ? '500 simulaciones / N. Exploración ágil para dimensionado preliminar.' : '500 simulations / N. Fast exploration for preliminary sizing.'}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-muted-foreground pl-9">
-                      {isSpanish
-                        ? 'Algoritmo evolutivo estándar. Entrega la solución óptima en ~1-2 segundos explorando el espacio balístico global.'
-                        : 'Standard evolutionary algorithm. Delivers optimal solutions in ~1-2s across global parameter space.'}
-                    </p>
+                    <div className="mt-2 pt-1.5 border-t border-border/40 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      ⚡ ~1 - 2s {isSpanish ? 'por grano' : 'per grain'}
+                    </div>
                   </div>
-                  
-                  <div className="mt-3 pt-2 border-t border-border/40 pl-9 flex items-center gap-2 text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
-                    <span>⚡ {isSpanish ? 'Tiempo estimado: ~1 - 2s' : 'Est. time: ~1 - 2s'}</span>
+
+                  {/* Preset 2: Standard (1000) [Recommended] */}
+                  <div
+                    onClick={() => {
+                      setBudgetPreset('standard');
+                      setEvaluationsPerN(1000);
+                    }}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      budgetPreset === 'standard' && evaluationsPerN === 1000
+                        ? 'border-emerald-500 bg-emerald-500/15 shadow-xs ring-2 ring-emerald-500/30'
+                        : 'border-border bg-card/60 hover:bg-muted/40'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Sparkles size={14} className="text-emerald-500" />
+                          {isSpanish ? 'Estándar (Recomendado)' : 'Standard (Recommended)'}
+                        </span>
+                        {budgetPreset === 'standard' && evaluationsPerN === 1000 && (
+                          <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {isSpanish ? '1.000 simulaciones / N. Convergencia balística sólida de alta fidelidad.' : '1,000 simulations / N. Robust high-fidelity ballistic convergence.'}
+                      </p>
+                    </div>
+                    <div className="mt-2 pt-1.5 border-t border-border/40 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      🎯 ~2 - 4s {isSpanish ? 'por grano' : 'per grain'}
+                    </div>
+                  </div>
+
+                  {/* Preset 3: Deep (2000) */}
+                  <div
+                    onClick={() => {
+                      setBudgetPreset('deep');
+                      setEvaluationsPerN(2000);
+                    }}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      budgetPreset === 'deep' && evaluationsPerN === 2000
+                        ? 'border-emerald-500 bg-emerald-500/10 shadow-xs ring-1 ring-emerald-500/30'
+                        : 'border-border bg-card/60 hover:bg-muted/40'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Rocket size={14} className="text-purple-500" />
+                          {isSpanish ? 'Búsqueda Profunda' : 'Deep Search'}
+                        </span>
+                        {budgetPreset === 'deep' && evaluationsPerN === 2000 && (
+                          <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {isSpanish ? '2.000 simulaciones / N. Máxima exploración global para geometrías complejas.' : '2,000 simulations / N. Exhaustive global exploration for complex geometries.'}
+                      </p>
+                    </div>
+                    <div className="mt-2 pt-1.5 border-t border-border/40 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      🔬 ~5 - 8s {isSpanish ? 'por grano' : 'per grain'}
+                    </div>
                   </div>
                 </div>
 
-                {/* Option 2: Advanced Search (Deep Neighborhood Exploration) */}
-                <div
-                  onClick={() => setSearchPrecision('advanced')}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
-                    searchPrecision === 'advanced'
-                      ? 'border-amber-500 bg-amber-500/10 shadow-xs ring-1 ring-amber-500/30'
-                      : 'border-border bg-card/60 hover:bg-muted/40'
-                  }`}
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold ${
-                          searchPrecision === 'advanced' 
-                            ? 'bg-amber-500 text-white' 
-                            : 'bg-muted text-muted-foreground'
-                        }`}>
-                          <Sparkles size={15} />
-                        </div>
-                        <span className="text-xs font-bold text-foreground">
-                          {isSpanish ? 'Búsqueda Avanzada' : 'Advanced Search'}
-                        </span>
-                      </div>
-                      {searchPrecision === 'advanced' && <CheckCircle2 size={18} className="text-amber-600 dark:text-amber-400" />}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground pl-9">
-                      {isSpanish
-                        ? 'Toma la solución óptima inicial y ejecuta un micro-muestreo exhaustivo alrededor del óptimo previo con cientos de simulaciones.'
-                        : 'Takes the initial optimal solution and conducts exhaustive multi-neighborhood micro-sampling.'}
-                    </p>
+                {/* Transparent Budget Summary Banner */}
+                <div className="p-3 rounded-xl border border-border bg-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+                  <div className="flex items-center gap-2 text-foreground">
+                    <Activity size={15} className="text-emerald-500 shrink-0" />
+                    <span>
+                      {grainCountMode === 'range' ? (
+                        isSpanish ? (
+                          <>Presupuesto: <strong>{evaluationsPerN.toLocaleString()}</strong> evals / grano × <strong>{inputValues.maxGrainCount || 5}</strong> valores de N = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulaciones totales</strong></>
+                        ) : (
+                          <>Budget: <strong>{evaluationsPerN.toLocaleString()}</strong> evals / grain × <strong>{inputValues.maxGrainCount || 5}</strong> N values = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} total simulations</strong></>
+                        )
+                      ) : (
+                        isSpanish ? (
+                          <>Presupuesto: <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} simulaciones balísticas</strong> para N = {inputValues.fixedGrainCount || 3} granos fijos</>
+                        ) : (
+                          <>Budget: <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} ballistic simulations</strong> for fixed N = {inputValues.fixedGrainCount || 3}</>
+                        )
+                      )}
+                    </span>
                   </div>
 
-                  <div className="mt-3 pt-2 border-t border-border/40 pl-9 flex items-center gap-2 text-[10px] font-mono text-amber-600 dark:text-amber-400 font-bold">
-                    <span>🔬 {isSpanish ? 'Exploración local profunda (~3s)' : 'Deep local exploration (~3s)'}</span>
-                  </div>
-                </div>
-
-                {/* Option 3: Aerospace Hybrid Model (CMA-ES + Constrained Nelder-Mead Simplex) */}
-                <div
-                  onClick={() => setSearchPrecision('hybrid_simplex')}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
-                    searchPrecision === 'hybrid_simplex'
-                      ? 'border-purple-500 bg-purple-500/10 shadow-xs ring-1 ring-purple-500/40'
-                      : 'border-border bg-card/60 hover:bg-muted/40'
-                  }`}
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold ${
-                          searchPrecision === 'hybrid_simplex' 
-                            ? 'bg-purple-600 text-white' 
-                            : 'bg-muted text-muted-foreground'
-                        }`}>
-                          <Rocket size={15} />
-                        </div>
-                        <span className="text-xs font-bold text-foreground">
-                          {isSpanish ? 'Híbrido CMA-ES + Simplex' : 'Hybrid CMA-ES + Simplex'}
-                        </span>
-                      </div>
-                      {searchPrecision === 'hybrid_simplex' && <CheckCircle2 size={18} className="text-purple-600 dark:text-purple-400" />}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground pl-9">
-                      {isSpanish
-                        ? 'Modelo de vanguardia: covarianza multivariable (CMA-ES) + Nelder-Mead Simplex continuo restringido. Máxima precisión sin ruido de gradientes.'
-                        : 'State-of-the-art: multivariable covariance adaptation (CMA-ES) + constrained Nelder-Mead Simplex solver.'}
-                    </p>
-                  </div>
-
-                  <div className="mt-3 pt-2 border-t border-border/40 pl-9 flex items-center gap-2 text-[10px] font-mono text-purple-600 dark:text-purple-400 font-bold">
-                    <span>🚀 {isSpanish ? 'Máxima ingeniería aeroespacial (~3-5s)' : 'Highest aerospace precision (~3-5s)'}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-muted-foreground">{isSpanish ? 'Personalizar:' : 'Custom:'}</span>
+                    <input
+                      type="number"
+                      min={100}
+                      max={10000}
+                      step={100}
+                      value={evaluationsPerN}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 500;
+                        setEvaluationsPerN(val);
+                        if (val === 500) setBudgetPreset('fast');
+                        else if (val === 1000) setBudgetPreset('standard');
+                        else if (val === 2000) setBudgetPreset('deep');
+                        else setBudgetPreset('standard');
+                      }}
+                      className="w-20 h-7 px-2 text-xs font-mono font-bold rounded-md border border-border bg-background text-foreground text-center"
+                    />
                   </div>
                 </div>
-
               </div>
-
-              {/* WARNING / NOTICE BANNER WHEN ADVANCED SEARCH IS ACTIVE */}
-              {searchPrecision === 'advanced' && (
-                <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200 flex items-start gap-3 animate-in fade-in duration-200">
-                  <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h5 className="text-xs font-bold uppercase tracking-wider font-mono text-amber-800 dark:text-amber-300">
-                      {isSpanish ? 'Aviso de Tiempo de Cómputo (Búsqueda Avanzada)' : 'Computation Time Notice (Advanced Search)'}
-                    </h5>
-                    <p className="text-[11px] leading-relaxed text-amber-900/90 dark:text-amber-200/90">
-                      {isSpanish
-                        ? 'La Búsqueda Avanzada tomará unos segundos adicionales en completarse debido a que ejecuta una exploración en profundidad alrededor del óptimo hallado en la búsqueda básica, evaluando un gran número de simulaciones adicionales para encontrar la mejor solución posible.'
-                        : 'Advanced Search will take a little more time to compute because it conducts an in-depth exploration around the optimal solution found by the basic search, executing a large number of extra simulations to find the highest-performing configuration.'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* INFORMATIVE BANNER WHEN HYBRID SIMPLEX IS ACTIVE */}
-              {searchPrecision === 'hybrid_simplex' && (
-                <div className="p-3.5 rounded-xl border border-purple-500/40 bg-purple-500/10 dark:bg-purple-950/25 text-purple-900 dark:text-purple-200 flex items-start gap-3 animate-in fade-in duration-200">
-                  <Rocket size={18} className="text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h5 className="text-xs font-bold uppercase tracking-wider font-mono text-purple-800 dark:text-purple-300 flex items-center gap-2">
-                      <span>{isSpanish ? 'Modelo Aeroespacial Híbrido: CMA-ES + Nelder-Mead Simplex Restringido' : 'Aerospace Hybrid Model: CMA-ES + Constrained Nelder-Mead Simplex'}</span>
-                      <span className="text-[9px] bg-purple-600 text-white px-2 py-0.5 rounded font-bold uppercase">Pro Model</span>
-                    </h5>
-                    <p className="text-[11px] leading-relaxed text-purple-900/90 dark:text-purple-200/90">
-                      {isSpanish
-                        ? 'Diseñado específicamente para superar las limitaciones de algoritmos basados en gradiente como fmincon (MATLAB). El cálculo de gradientes por diferencias finitas en simulaciones balísticas falla debido al ruido numérico del integrador temporal y las esquinas de quemado del grano. Este modelo híbrido aprende la covarianza diagonal entre longitud y núcleo (CMA-ES) y contrae un símplex continuo (Nelder-Mead) ajustando las dimensiones geométricas (L0, d0, D0) al milímetro sobre el límite de presión admisible sin violar las normas de seguridad.'
-                        : 'Designed specifically to overcome the shortcomings of gradient-based optimizers like MATLAB fmincon on noisy ODE ballistics. It couples covariance matrix adaptation (CMA-ES) with a constrained downhill Nelder-Mead simplex solver to pinpoint the continuous optimum directly on the safe pressure boundary without derivatives.'}
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* HIGH-TECH FUTURISTIC OPTIMIZATION PROGRESS HUD */}
             {isSearching && (
-              <div className={`p-4 rounded-xl border bg-slate-950 text-white shadow-lg space-y-3 relative overflow-hidden animate-in fade-in duration-300 ${
-                searchPrecision === 'hybrid_simplex'
-                  ? 'border-purple-500/50'
-                  : searchPrecision === 'advanced'
-                    ? 'border-amber-500/40'
-                    : 'border-emerald-500/40'
-              }`}>
+              <div className="p-4 rounded-xl border border-emerald-500/50 bg-slate-950 text-white shadow-lg space-y-3 relative overflow-hidden animate-in fade-in duration-300">
                 {/* Background ambient glow */}
-                <div className={`absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl pointer-events-none ${
-                  searchPrecision === 'hybrid_simplex' ? 'bg-purple-500/15' : searchPrecision === 'advanced' ? 'bg-amber-500/10' : 'bg-emerald-500/10'
-                }`}></div>
+                <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl pointer-events-none bg-emerald-500/15"></div>
                 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold animate-spin ${
-                      searchPrecision === 'hybrid_simplex'
-                        ? 'bg-purple-500/20 text-purple-400'
-                        : searchPrecision === 'advanced' 
-                          ? 'bg-amber-500/20 text-amber-400' 
-                          : 'bg-emerald-500/20 text-emerald-400'
-                    }`}>
-                      {searchPrecision === 'hybrid_simplex' ? <Rocket size={14} /> : <Sparkles size={14} />}
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center font-bold animate-spin bg-emerald-500/20 text-emerald-400 shrink-0">
+                      <Cpu size={15} />
                     </div>
                     <div>
-                      <div className={`text-xs font-bold font-mono flex items-center gap-2 ${
-                        searchPrecision === 'hybrid_simplex'
-                          ? 'text-purple-400'
-                          : searchPrecision === 'advanced' 
-                            ? 'text-amber-400' 
-                            : 'text-emerald-400'
-                      }`}>
+                      <div className="text-xs font-bold font-mono flex items-center gap-2 text-emerald-400">
                         <span>
-                          {searchPrecision === 'hybrid_simplex'
-                            ? (isSpanish ? 'OPTIMIZADOR HÍBRIDO CMA-ES + SIMPLEX ACTIVO' : 'HYBRID CMA-ES + SIMPLEX RUNNING')
-                            : searchPrecision === 'advanced'
-                              ? (isSpanish ? 'OPTIMIZADOR AVANZADO EN EJECUCIÓN' : 'ADVANCED DEEP OPTIMIZER RUNNING')
-                              : (isSpanish ? 'MOTOR DE OPTIMIZACIÓN ACTIVO' : 'OPTIMIZER ENGINE RUNNING')}
+                          {isSpanish ? 'EVOLUCIÓN DIFERENCIAL ACTIVA (DE/rand/1/bin)' : 'DIFFERENTIAL EVOLUTION RUNNING (DE/rand/1/bin)'}
                         </span>
-                        <span className={`inline-block w-2 h-2 rounded-full animate-ping ${
-                          searchPrecision === 'hybrid_simplex'
-                            ? 'bg-purple-400'
-                            : searchPrecision === 'advanced' 
-                              ? 'bg-amber-400' 
-                              : 'bg-emerald-400'
-                        }`}></span>
+                        <span className="inline-block w-2 h-2 rounded-full animate-ping bg-emerald-400"></span>
                       </div>
                       <div className="text-[11px] text-slate-300 font-mono mt-0.5">
-                        {searchProgress?.stepDescription || (isSpanish ? 'Explorando espacio paramétrico...' : 'Exploring parameter space...')}
+                        {searchProgress?.stepDescription || (isSpanish ? 'Evaluando candidatos balísticos...' : 'Evaluating ballistic candidates...')}
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-right font-mono">
-                    <div className={`text-base font-bold ${
-                      searchPrecision === 'hybrid_simplex'
-                        ? 'text-purple-400'
-                        : searchPrecision === 'advanced' 
-                          ? 'text-amber-400' 
-                          : 'text-emerald-400'
-                    }`}>
-                      {searchProgress?.percent || 0}%
+                  <div className="flex items-center gap-3">
+                    <div className="text-right font-mono">
+                      <div className="text-base font-bold text-emerald-400">
+                        {searchProgress?.percent || 0}%
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        ⏱️ {searchProgress?.elapsedSeconds !== undefined ? searchProgress.elapsedSeconds : (searchProgress?.elapsedMs ? (searchProgress.elapsedMs / 1000).toFixed(1) : '0.0')}s
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-400">
-                      ⏱️ {searchProgress?.elapsedMs ? (searchProgress.elapsedMs / 1000).toFixed(1) : '0.0'}s
-                    </div>
+
+                    {/* Prominent Red Cancel Button inside HUD */}
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={handleCancelSearch}
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold h-9 px-4 text-xs font-mono flex items-center gap-1.5 shadow-md border border-red-500 cursor-pointer shrink-0"
+                    >
+                      <XCircle size={15} />
+                      {isSpanish ? 'CANCELAR SIMULACIÓN' : 'CANCEL SIMULATION'}
+                    </Button>
                   </div>
                 </div>
 
                 {/* Glowing Animated Progress Bar */}
                 <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5 relative">
                   <div 
-                    className={`h-full rounded-full transition-all duration-150 relative ${
-                      searchPrecision === 'hybrid_simplex'
-                        ? 'bg-gradient-to-r from-purple-500 via-indigo-400 to-emerald-400 shadow-[0_0_12px_rgba(168,85,247,0.8)]'
-                        : searchPrecision === 'advanced'
-                          ? 'bg-gradient-to-r from-amber-500 via-orange-400 to-emerald-400 shadow-[0_0_12px_rgba(245,158,11,0.8)]'
-                          : 'bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]'
-                    }`}
+                    className="h-full rounded-full transition-all duration-150 relative bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]"
                     style={{ width: `${Math.min(100, Math.max(5, searchProgress?.percent || 5))}%` }}
                   >
                     <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
@@ -2002,13 +2290,7 @@ export function SmartSearchEngine({
                 {/* Status Ticker */}
                 <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-800">
                   <div className="flex items-center gap-2">
-                    <Activity size={12} className={
-                      searchPrecision === 'hybrid_simplex' 
-                        ? 'text-purple-400' 
-                        : searchPrecision === 'advanced' 
-                          ? 'text-amber-400' 
-                          : 'text-emerald-400'
-                    } />
+                    <Activity size={12} className="text-emerald-400" />
                     <span>
                       {isSpanish ? 'Simulaciones Balísticas:' : 'Ballistic Simulations:'}{' '}
                       <strong className="text-white">{searchProgress?.currentEvaluations || 0}</strong>
@@ -2025,6 +2307,55 @@ export function SmartSearchEngine({
               </div>
             )}
 
+            {/* Geometric Conflict Warning Banner */}
+            {hasGeometricConflict && (
+              <div className="p-3.5 rounded-xl border border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300 flex items-start gap-3 text-xs font-mono shadow-xs">
+                <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5 animate-pulse" />
+                <div className="space-y-1">
+                  <div className="font-bold text-sm">
+                    {isSpanish ? '⚠️ Restricción Geométrica No Física Detectada' : '⚠️ Non-Physical Geometric Constraint Detected'}
+                  </div>
+                  <div className="text-[11px] leading-relaxed">
+                    {isDt0GeDs && (
+                      <span className="block">• {isSpanish ? `Garganta tobera Dt (${Dt0Val} mm) ≥ Salida Ds (${DsVal} mm). En toberas de Laval la salida debe ser mayor.` : `Nozzle throat Dt (${Dt0Val} mm) ≥ Exit Ds (${DsVal} mm). Exit must be larger.`}</span>
+                    )}
+                    {isDt0GeDc && (
+                      <span className="block">• {isSpanish ? `Garganta tobera Dt (${Dt0Val} mm) ≥ Cámara Dc (${DcVal} mm). La garganta no cabe en la cámara.` : `Nozzle throat Dt (${Dt0Val} mm) ≥ Chamber Dc (${DcVal} mm).`}</span>
+                    )}
+                    {isD0GeDc && (
+                      <span className="block">• {isSpanish ? `Diámetro exterior D0 (${valD0Num} mm) ≥ Cámara Dc (${DcVal} mm). El grano no cabe en la cámara.` : `Grain outer D0 (${valD0Num} mm) ≥ Chamber Dc (${DcVal} mm). Grain does not fit.`}</span>
+                    )}
+                    {isMaxD0GeDc && (
+                      <span className="block">• {isSpanish ? `Máximo D0 (${maxD0Num} mm) ≥ Cámara Dc (${DcVal} mm). Rango excede el diámetro de cámara.` : `Max D0 (${maxD0Num} mm) ≥ Chamber Dc (${DcVal} mm).`}</span>
+                    )}
+                    {isD0RangeInverted && (
+                      <span className="block">• {isSpanish ? `Rango D0 invertido: Mín (${minD0Num} mm) ≥ Máx (${maxD0Num} mm).` : `Inverted D0 range: Min (${minD0Num} mm) ≥ Max (${maxD0Num} mm).`}</span>
+                    )}
+                    {isd0GeD0 && (
+                      <span className="block">• {isSpanish ? `Núcleo interior d0 (${vald0Num} mm) ≥ Diámetro D0 (${effectiveOuterD} mm). Espesor de pared (web) nulo o negativo.` : `Inner core d0 (${vald0Num} mm) ≥ Outer D0 (${effectiveOuterD} mm). Zero or negative web.`}</span>
+                    )}
+                    {isd0RangeInverted && (
+                      <span className="block">• {isSpanish ? `Rango d0 invertido: Mín (${mind0Num} mm) ≥ Máx (${maxd0Num} mm).` : `Inverted d0 range: Min (${mind0Num} mm) ≥ Max (${maxd0Num} mm).`}</span>
+                    )}
+                    {isMind0GeD0 && (
+                      <span className="block">• {isSpanish ? `Mínimo d0 (${mind0Num} mm) ≥ Diámetro D0 (${effectiveOuterD} mm).` : `Min d0 (${mind0Num} mm) ≥ Outer D0 (${effectiveOuterD} mm).`}</span>
+                    )}
+                    {isL0ExceedsLc && (
+                      <span className="block">• {isSpanish ? `Longitud total N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) supera longitud útil de cámara Lc (${LcVal} mm).` : `Total length N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) exceeds chamber Lc (${LcVal} mm).`}</span>
+                    )}
+                    {isL0RangeInverted && (
+                      <span className="block">• {isSpanish ? `Rango L0 invertido: Mín (${minL0Num} mm) ≥ Máx (${maxL0Num} mm).` : `Inverted L0 range: Min (${minL0Num} mm) ≥ Max (${maxL0Num} mm).`}</span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-red-600 dark:text-red-400 font-bold pt-0.5">
+                    {isSpanish 
+                      ? 'Por favor, retrocede a la Fase 1 o Fase 2 y ajusta las dimensiones antes de iniciar la optimización.'
+                      : 'Please return to Phase 1 or Phase 2 and adjust dimensions before starting optimization.'}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Launch Action Bar */}
             <div className="pt-3 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3">
               <Button
@@ -2037,44 +2368,49 @@ export function SmartSearchEngine({
                 {isSpanish ? 'Atrás (Fase 2)' : 'Back (Phase 2)'}
               </Button>
 
-              <Button
-                data-tour="smart-search-run-btn"
-                onClick={handleExecuteSearch}
-                disabled={isSearching}
-                className={`font-bold h-11 px-8 shadow-md flex items-center justify-center gap-2 text-sm tracking-wide transition-all w-full sm:w-auto cursor-pointer text-white ${
-                  searchPrecision === 'hybrid_simplex'
-                    ? 'bg-purple-600 hover:bg-purple-700'
-                    : searchPrecision === 'advanced'
-                      ? 'bg-amber-600 hover:bg-amber-700'
-                      : 'bg-emerald-600 hover:bg-emerald-700'
-                }`}
-              >
-                {isSearching ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    {isSpanish 
-                      ? (searchPrecision === 'hybrid_simplex'
-                          ? 'Optimizando con CMA-ES y Nelder-Mead Simplex...'
-                          : searchPrecision === 'advanced' 
-                            ? 'Ejecutando Búsqueda Avanzada Alrededor del Óptimo...' 
-                            : 'Ejecutando Búsqueda Evolutiva...')
-                      : (searchPrecision === 'hybrid_simplex'
-                          ? 'Optimizing with CMA-ES & Nelder-Mead Simplex...'
-                          : searchPrecision === 'advanced' 
-                            ? 'Running Deep Advanced Optimization...' 
-                            : 'Running Evolutionary Optimizer...')}
-                  </>
-                ) : (
-                  <>
-                    {searchPrecision === 'hybrid_simplex' ? <Rocket size={18} /> : searchPrecision === 'advanced' ? <Sparkles size={18} /> : <Zap size={18} />}
-                    {searchPrecision === 'hybrid_simplex'
-                      ? (isSpanish ? 'EJECUTAR OPTIMIZADOR HÍBRIDO (CMA-ES + SIMPLEX)' : 'RUN HYBRID OPTIMIZER (CMA-ES + SIMPLEX)')
-                      : searchPrecision === 'advanced'
-                        ? (isSpanish ? 'EJECUTAR BÚSQUEDA AVANZADA (ULTRA PRECISA)' : 'RUN ADVANCED DEEP SEARCH')
-                        : (isSpanish ? 'EJECUTAR BÚSQUEDA BÁSICA' : 'RUN BASIC SMART SEARCH')}
-                  </>
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                {isSearching && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleCancelSearch}
+                    className="font-bold h-11 px-6 shadow-md flex items-center justify-center gap-2 text-sm tracking-wide transition-all w-full sm:w-auto cursor-pointer bg-red-600 hover:bg-red-700 text-white border border-red-500"
+                  >
+                    <XCircle size={18} />
+                    {isSpanish ? 'CANCELAR SIMULACIÓN' : 'CANCEL SIMULATION'}
+                  </Button>
                 )}
-              </Button>
+
+                <Button
+                  data-tour="smart-search-run-btn"
+                  onClick={handleExecuteSearch}
+                  disabled={isSearching || hasGeometricConflict}
+                  className={`font-bold h-11 px-8 shadow-md flex items-center justify-center gap-2 text-sm tracking-wide transition-all w-full sm:w-auto cursor-pointer text-white ${
+                    hasGeometricConflict 
+                      ? 'bg-slate-400 dark:bg-slate-700 cursor-not-allowed opacity-60' 
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {isSearching ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      {isSpanish 
+                        ? 'Optimizando con Differential Evolution (DE/rand/1/bin)...' 
+                        : 'Optimizing with Differential Evolution...'}
+                    </>
+                  ) : hasGeometricConflict ? (
+                    <>
+                      <AlertTriangle size={18} />
+                      {isSpanish ? 'CORREGIR COTAS GEOMÉTRICAS' : 'FIX GEOMETRIC CONSTRAINTS'}
+                    </>
+                  ) : (
+                    <>
+                      <Cpu size={18} />
+                      {isSpanish ? 'EJECUTAR OPTIMIZADOR GLOBAL (DIFFERENTIAL EVOLUTION)' : 'RUN GLOBAL OPTIMIZER (DIFFERENTIAL EVOLUTION)'}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
           </CardContent>
@@ -2084,6 +2420,28 @@ export function SmartSearchEngine({
       {/* ================= RESULTS DASHBOARD (VISIBLE ONCE SEARCH HAS RUN) ================= */}
       {searchOutcome && (
         <div className="space-y-4 pt-2">
+          
+          {/* CANCELLATION NOTICE IF ABORTED EARLY */}
+          {searchOutcome.isCancelled && (
+            <div className="p-4 rounded-xl border border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300 flex items-center justify-between gap-3 text-xs font-mono shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <XCircle size={20} className="text-red-600 dark:text-red-400 shrink-0" />
+                <div>
+                  <strong className="font-bold block text-sm">
+                    {isSpanish ? 'Simulación cancelada por el usuario' : 'Simulation stopped by user'}
+                  </strong>
+                  <span className="text-[11px] text-muted-foreground">
+                    {isSpanish
+                      ? 'La optimización se interrumpió anticipadamente. Se conservan y muestran los mejores candidatos factibles evaluados hasta ese momento.'
+                      : 'Optimization was stopped early. Preserving and displaying the best feasible candidates found up to that point.'}
+                  </span>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded bg-red-500/20 text-red-700 dark:text-red-300 font-bold text-[10px] uppercase tracking-wider shrink-0 border border-red-500/30">
+                {isSpanish ? 'Cancelada' : 'Cancelled'}
+              </span>
+            </div>
+          )}
           
           {/* HIGHLY VISIBLE SOLUTIONS FOUND STATS BANNER */}
           <div className={`p-4 rounded-xl border shadow-xs flex flex-wrap items-center justify-between gap-3 ${
@@ -2113,18 +2471,8 @@ export function SmartSearchEngine({
                       {searchOutcome.safeCount} {isSpanish ? '100% Seguras (P ≤ Pmax)' : 'Safe (P ≤ Pmax)'}
                     </span>
                   )}
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                    searchPrecision === 'hybrid_simplex'
-                      ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30'
-                      : searchPrecision === 'advanced'
-                        ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30'
-                        : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                  }`}>
-                    {searchPrecision === 'hybrid_simplex'
-                      ? (isSpanish ? '🚀 Híbrido: CMA-ES + Nelder-Mead Simplex' : '🚀 Hybrid: CMA-ES + Nelder-Mead Simplex')
-                      : searchPrecision === 'advanced'
-                        ? (isSpanish ? '🔬 Búsqueda Avanzada Alrededor del Óptimo' : '🔬 Advanced Deep Search')
-                        : (isSpanish ? '⚡ Búsqueda Básica' : '⚡ Basic Search')}
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
+                    🧬 Differential Evolution (DE/rand/1/bin)
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
@@ -2143,6 +2491,70 @@ export function SmartSearchEngine({
               </span>
             )}
           </div>
+
+          {/* GRAIN COUNT N COMPARISON BREAKDOWN (MODE B: AUTOMATIC N=1..X) */}
+          {searchOutcome.grainSummaries && searchOutcome.grainSummaries.length > 1 && (
+            <div className="p-4 rounded-xl border border-border bg-card shadow-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sliders className="text-emerald-600 dark:text-emerald-400" size={16} />
+                  <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
+                    {isSpanish
+                      ? `Comparativa de Impulso por Número de Granos (N = 1 .. ${searchOutcome.grainSummaries.length})`
+                      : `Impulse Comparison by Grain Count (N = 1 .. ${searchOutcome.grainSummaries.length})`}
+                  </span>
+                </div>
+                <span className="text-[11px] text-muted-foreground font-mono">
+                  {isSpanish ? 'Selección estricta del mejor impulso factible' : 'Strict selection of highest feasible impulse'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
+                {searchOutcome.grainSummaries.map((g) => {
+                  const isWinner = searchOutcome.bestCandidates[0]?.config.grainCount === g.N;
+                  return (
+                    <div
+                      key={g.N}
+                      className={`p-3 rounded-xl border flex flex-col justify-between transition-all ${
+                        isWinner
+                          ? 'border-emerald-500 bg-emerald-500/15 ring-2 ring-emerald-500/30 shadow-xs'
+                          : 'border-border bg-muted/20'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold font-mono text-foreground">
+                            N = {g.N} {g.N === 1 ? (isSpanish ? 'grano' : 'grain') : (isSpanish ? 'granos' : 'grains')}
+                          </span>
+                          {isWinner && (
+                            <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-emerald-600 text-white">
+                              ★ {isSpanish ? 'GANADOR' : 'WINNER'}
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-sm font-extrabold font-mono ${isWinner ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
+                          {g.bestFeasibleImpulse !== null ? `${g.bestFeasibleImpulse} N·s` : (isSpanish ? 'No factible' : 'Infeasible')}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">
+                          {g.bestConfigLabel}
+                        </div>
+                      </div>
+                      <div className="mt-2 pt-1.5 border-t border-border/40 text-[9px] font-mono text-muted-foreground flex justify-between">
+                        <span>{g.evaluations} evals</span>
+                        <span>{g.isFeasible ? '✓ Factible' : '✗ Violación'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-[11px] text-muted-foreground leading-relaxed pt-1 border-t border-border/50">
+                {isSpanish
+                  ? `Configuración seleccionada: ${searchOutcome.bestCandidates[0]?.config.grainCount} granos (${searchOutcome.bestCandidates[0]?.metrics.totalImpulse} N·s) por ser la mejor solución encontrada entre todas las configuraciones factibles de N exploradas.`
+                  : `Selected configuration: ${searchOutcome.bestCandidates[0]?.config.grainCount} grains (${searchOutcome.bestCandidates[0]?.metrics.totalImpulse} N·s) strictly yielding the highest feasible total impulse across all evaluated grain counts.`}
+              </p>
+            </div>
+          )}
 
           {/* DETAILED DIAGNOSTIC FEEDBACK WHEN NO SOLUTION OR WARNING */}
           {searchOutcome.diagnostics && searchOutcome.diagnostics.length > 0 && (

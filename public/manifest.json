@@ -1,7 +1,7 @@
 {
-  "name": "HERMES",
-  "short_name": "HERMES",
-  "description": "Professional tool for solid propellant rocket engine simulation and design.",
+  "name": "HERMES V2.0.0",
+  "short_name": "HERMES v2.0",
+  "description": "Professional solid propellant rocket motor simulator with Smart Search Optimization Engine v2.0.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
@@ -9,9 +9,9 @@
   "theme_color": "#0f172a",
   "icons": [
     {
-      "src": "/hermes_icon.jpg",
-      "sizes": "1024x1024",
-      "type": "image/jpeg",
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

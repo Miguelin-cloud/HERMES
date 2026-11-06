@@ -14,7 +14,7 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: false // Necessary if local files are loaded via file:// protocol restrictions sometimes
     },
-    title: "HERMES Rocket Simulator",
+    title: "HERMES V2.0.0",
     icon: path.join(__dirname, '../public/icon.png')
   });
 

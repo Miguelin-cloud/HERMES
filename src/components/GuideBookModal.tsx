@@ -367,21 +367,21 @@ export function GuideBookModal({
       estimatedMinutes: 5,
       icon: Cpu,
       color: 'from-violet-500 to-purple-700',
-      summaryEs: 'Diseño automático inverso: especifica límites de cámara y metas de empuje, y deja que los algoritmos Básico, Avanzado o Híbrido Aeroespacial encuentren la solución.',
-      summaryEn: 'Inverse automated motor design: set casing limits and flight goals, and let Basic, Advanced, or Aerospace Hybrid solvers find optimal geometries.',
-      summaryFr: 'Conception inverse automatique guidée en 3 phases par solveurs aérospatiaux.',
-      summaryIt: 'Progettazione inversa automatica guidata in 3 fasi con algoritmi evolutivi.',
+      summaryEs: 'Diseño automático inverso: especifica límites de cámara y metas de empuje, y deja que el optimizador global unificado Differential Evolution encuentre la mejor geometría.',
+      summaryEn: 'Inverse automated motor design: set casing limits and flight goals, and let the unified Differential Evolution global engine find optimal geometries.',
+      summaryFr: 'Conception inverse automatique guidée en 3 phases par Differential Evolution.',
+      summaryIt: 'Progettazione inversa automatica guidata in 3 fasi con Differential Evolution.',
       bulletPointsEs: [
         'Fase 1: Restricciones de hardware (diámetro y longitud de cámara, garganta, Pmax segura).',
         'Fase 2: Geometría de grano, número de segmentos y variables acotadas o libres.',
-        'Fase 3: Selección de objetivo (máximo impulso, velocidad rápida o altura fija).',
-        'Modelos de optimización: Búsqueda Básica (~1s), Búsqueda Avanzada (~3s) e Híbrido CMA-ES + Simplex.'
+        'Fase 3: Selección de objetivo (máximo impulso total real, velocidad rápida o impulso objetivo).',
+        'Motor unificado: Differential Evolution (DE/rand/1/bin) con muestreo LHS y presupuesto configurable.'
       ],
       bulletPointsEn: [
         'Phase 1: Hardware constraints (casing diameter and length, throat, safe Pmax limit).',
         'Phase 2: Grain geometry, segment count, and locked/free variables.',
-        'Phase 3: Mission goal selection (max impulse, fast liftoff, or exact altitude).',
-        'Solvers: Basic Search (~1s), Advanced Neighborhood (~3s), and Hybrid CMA-ES + Simplex.'
+        'Phase 3: Mission goal selection (pure total impulse, fast liftoff, or target impulse).',
+        'Unified solver: Differential Evolution (DE/rand/1/bin) with LHS sampling and configurable budget.'
       ]
     },
     {

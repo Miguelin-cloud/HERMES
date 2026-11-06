@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 
 export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
   const [inhibitorThickness, setInhibitorThickness] = useState(2);
+  const [inhibitorStr, setInhibitorStr] = useState('2');
 
   const drawWidth = 400;
   const drawHeight = 160;
@@ -36,9 +37,26 @@ export function MotorPreview({ motor, grains }: { motor: any, grains: any[] }) {
         <label className="text-[10px] font-bold uppercase text-muted-foreground whitespace-nowrap">Inhibitor (mm)</label>
         <Input 
           type="number" 
-          value={inhibitorThickness} 
-          onChange={e => setInhibitorThickness(Number(e.target.value) || 0)} 
-          className="w-12 h-5 text-[10px] px-1 py-0 text-center"
+          value={inhibitorStr} 
+          onChange={e => {
+            setInhibitorStr(e.target.value);
+            const num = parseFloat(e.target.value);
+            if (!isNaN(num) && num >= 0) {
+              setInhibitorThickness(num);
+            }
+          }}
+          onBlur={() => {
+            const num = parseFloat(inhibitorStr);
+            if (isNaN(num) || num < 0) {
+              setInhibitorStr('2');
+              setInhibitorThickness(2);
+            } else {
+              setInhibitorStr(num.toString());
+              setInhibitorThickness(num);
+            }
+          }}
+          onFocus={e => e.target.select()}
+          className="w-12 h-5 text-[10px] px-1 py-0 text-center font-mono font-bold"
         />
       </div>
       

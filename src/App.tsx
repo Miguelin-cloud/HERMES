@@ -40,7 +40,9 @@ function NumberInput({
   step = "1",
   tooltip,
   decimals,
-  inputWidth
+  inputWidth,
+  warning,
+  error
 }: { 
   value?: number | null, 
   onChange: (v: number) => void, 
@@ -48,7 +50,9 @@ function NumberInput({
   step?: string,
   tooltip?: string,
   decimals?: number,
-  inputWidth?: string
+  inputWidth?: string,
+  warning?: string | null,
+  error?: string | null
 }) {
   const safeValue = (typeof value === 'number' && !isNaN(value)) ? value : 0;
   const formatVal = (v: number) => (decimals !== undefined ? v.toFixed(decimals) : v.toString());
@@ -63,37 +67,61 @@ function NumberInput({
     }
   }, [value, decimals, safeValue]);
 
+  const hasAlert = Boolean(error || warning);
+  const alertMsg = error || warning || '';
+  const alertColor = error ? 'text-red-500' : 'text-amber-500';
+  const borderAlert = error 
+    ? 'border-red-500 bg-red-500/10 text-red-600 dark:text-red-400 focus-visible:ring-red-500 focus-visible:border-red-500 ring-1 ring-red-500/30' 
+    : warning 
+      ? 'border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400 focus-visible:ring-amber-500 focus-visible:border-amber-500 ring-1 ring-amber-500/30'
+      : '';
+
   return (
-    <div 
-      className="group relative flex items-center justify-between gap-1.5 w-full min-w-0 border-b border-border/80 pb-1 mb-1 hover:bg-muted/40 px-1 py-0.5 rounded transition-all focus-within:bg-purple-500/10 focus-within:border-purple-500/50" 
-      title={tooltip || label}
-    >
-      <div className="absolute bottom-[-1px] left-0 right-0 h-[1.5px] bg-gradient-to-r from-purple-500 via-purple-300 to-blue-500 opacity-0 group-focus-within:opacity-100 transition-all duration-300"></div>
-      <UiLabel className="text-[10px] sm:text-[11px] text-muted-foreground font-medium flex-1 min-w-0 group-focus-within:text-foreground transition-colors z-10 cursor-help select-none leading-tight py-0.5 whitespace-normal break-words">
-        {label}
-      </UiLabel>
-      <Input
-        type="number"
-        step={step}
-        value={internal}
-        className={`${inputWidth ? inputWidth : 'w-[52px] sm:w-[62px]'} min-w-[48px] h-6 min-h-0 text-[11px] sm:text-xs py-0 px-1 text-right bg-background/90 border border-border/40 text-foreground font-mono font-semibold shadow-2xs rounded outline-none ring-0 focus-visible:ring-1 focus-visible:ring-purple-500 focus-visible:border-purple-500 focus-within:text-purple-600 dark:focus-within:text-purple-300 transition-all shrink-0 z-10`}
-        onChange={(e) => {
-          setInternal(e.target.value);
-          if (e.target.value !== '' && e.target.value !== '-' && e.target.value !== '.') {
-             const parsed = parseFloat(e.target.value);
-             if (!isNaN(parsed)) {
-               lastPushedValue.current = parsed;
-               onChange(parsed);
-             }
-          }
-        }}
-        onBlur={() => {
-          const formatted = formatVal(safeValue);
-          setInternal(formatted);
-          lastPushedValue.current = safeValue;
-        }}
-        onFocus={e => e.target.select()}
-      />
+    <div className="flex flex-col w-full min-w-0">
+      <div 
+        className={`group relative flex items-center justify-between gap-1.5 w-full min-w-0 border-b ${hasAlert ? (error ? 'border-red-500/60 bg-red-500/5' : 'border-amber-500/60 bg-amber-500/5') : 'border-border/80'} pb-1 mb-1 hover:bg-muted/40 px-1 py-0.5 rounded transition-all focus-within:bg-purple-500/10 focus-within:border-purple-500/50`} 
+        title={alertMsg ? `${tooltip ? tooltip + ' — ' : ''}⚠️ ${alertMsg}` : (tooltip || label)}
+      >
+        <div className={`absolute bottom-[-1px] left-0 right-0 h-[1.5px] ${hasAlert ? (error ? 'bg-red-500' : 'bg-amber-500') : 'bg-gradient-to-r from-purple-500 via-purple-300 to-blue-500'} opacity-0 group-focus-within:opacity-100 transition-all duration-300`}></div>
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          <UiLabel className={`text-[10px] sm:text-[11px] ${hasAlert ? (error ? 'text-red-500 font-bold' : 'text-amber-600 dark:text-amber-400 font-bold') : 'text-muted-foreground'} font-medium flex-1 min-w-0 group-focus-within:text-foreground transition-colors z-10 cursor-help select-none leading-tight py-0.5 whitespace-normal break-words`}>
+            {label}
+          </UiLabel>
+          {hasAlert && (
+            <span title={alertMsg} className={`cursor-help ${alertColor} shrink-0 animate-pulse`}>
+              <AlertTriangle size={13} />
+            </span>
+          )}
+        </div>
+        <Input
+          type="number"
+          step={step}
+          value={internal}
+          className={`${inputWidth ? inputWidth : 'w-[52px] sm:w-[62px]'} min-w-[48px] h-6 min-h-0 text-[11px] sm:text-xs py-0 px-1 text-right bg-background/90 ${borderAlert || 'border border-border/40 text-foreground'} font-mono font-semibold shadow-2xs rounded outline-none ring-0 focus-visible:ring-1 focus-visible:ring-purple-500 focus-visible:border-purple-500 focus-within:text-purple-600 dark:focus-within:text-purple-300 transition-all shrink-0 z-10`}
+          onChange={(e) => {
+            setInternal(e.target.value);
+            if (e.target.value !== '' && e.target.value !== '-' && e.target.value !== '.') {
+               const parsed = parseFloat(e.target.value);
+               if (!isNaN(parsed)) {
+                 lastPushedValue.current = parsed;
+                 onChange(parsed);
+               }
+            }
+          }}
+          onBlur={() => {
+            const formatted = formatVal(safeValue);
+            setInternal(formatted);
+            lastPushedValue.current = safeValue;
+          }}
+          onFocus={e => e.target.select()}
+        />
+      </div>
+      {hasAlert && (
+        <div className={`px-1 text-[9px] font-mono flex items-start gap-1 pb-1 -mt-0.5 ${alertColor} leading-tight`}>
+          <span className="shrink-0">⚠️</span>
+          <span className="break-words">{alertMsg}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -337,6 +365,24 @@ export default function App() {
     localStorage.setItem('hermes_nozzle', JSON.stringify(nozzle));
   }, [nozzle]);
 
+  // Decoupled Slag & Erosion mode and input string to allow comfortable editing (prevent snapping to 'none')
+  const [slagMode, setSlagMode] = useState<'none' | 'slag' | 'erosion'>(() => {
+    return (nozzle.e || 0) < 0 ? 'slag' : (nozzle.e || 0) > 0 ? 'erosion' : 'none';
+  });
+  const [slagMagnitudeStr, setSlagMagnitudeStr] = useState<string>(() => {
+    return Math.abs(nozzle.e || 0.8).toString();
+  });
+  const isEditingSlagRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (isEditingSlagRef.current) return;
+    const currentMode = (nozzle.e || 0) < 0 ? 'slag' : (nozzle.e || 0) > 0 ? 'erosion' : 'none';
+    setSlagMode(currentMode);
+    if (nozzle.e !== 0) {
+      setSlagMagnitudeStr(Math.abs(nozzle.e).toString());
+    }
+  }, [nozzle.e]);
+
   const [customPropellants, setCustomPropellants] = useState<CustomPropellant[]>(() => {
     return loadCustomPropellantsFromStorage();
   });
@@ -415,6 +461,15 @@ export default function App() {
     });
     return mass.toFixed(3);
   }, [grains, customPropellants]);
+
+  // Real-time geometric validation metrics for Inputs Tab
+  const totalGrainsLength = React.useMemo(() => {
+    return grains.reduce((acc, g) => acc + (Number(g.L0) || 0) * (Number(g.N) || 0), 0);
+  }, [grains]);
+
+  const maxGrainD0 = React.useMemo(() => {
+    return Math.max(0, ...grains.map(g => Number(g.D0) || 0));
+  }, [grains]);
 
   const simulate = () => {
     try {
@@ -866,8 +921,22 @@ export default function App() {
                 <Card data-tour="chamber-card" className="bg-card border-border shadow-sm flex flex-col rounded-md overflow-hidden border-t-2 border-t-purple-500">
                   <CardHeader className="py-2 px-3 bg-purple-500/10 dark:bg-indigo-950/30 border-b border-border flex-none"><CardTitle className="text-[11px] uppercase tracking-widest text-purple-700 dark:text-purple-400 font-bold">{t.motor}</CardTitle></CardHeader>
                   <CardContent className="flex-1 p-2 grid grid-cols-2 gap-x-2.5 sm:gap-x-3 gap-y-1">
-                    <NumberInput label={t.chamber_d + " [mm]"} value={motor.Dc} onChange={(v:any) => setMotor({...motor, Dc: v})} tooltip={t.dc_desc} />
-                    <NumberInput label={t.chamber_l + " [mm]"} value={motor.Lc} onChange={(v:any) => setMotor({...motor, Lc: v})} tooltip={t.lc_desc} />
+                    <NumberInput 
+                      label={t.chamber_d + " [mm]"} 
+                      value={motor.Dc} 
+                      onChange={(v:any) => setMotor({...motor, Dc: v})} 
+                      tooltip={t.dc_desc} 
+                      error={motor.Dc <= 0 ? (lang === 'es' ? 'Dc debe ser > 0 mm' : 'Dc must be > 0 mm') : null}
+                      warning={maxGrainD0 >= motor.Dc ? (lang === 'es' ? `Dc (${motor.Dc} mm) debe superar D0 (${maxGrainD0} mm)` : `Dc (${motor.Dc} mm) must exceed D0 (${maxGrainD0} mm)`) : null}
+                    />
+                    <NumberInput 
+                      label={t.chamber_l + " [mm]"} 
+                      value={motor.Lc} 
+                      onChange={(v:any) => setMotor({...motor, Lc: v})} 
+                      tooltip={t.lc_desc} 
+                      error={motor.Lc <= 0 ? (lang === 'es' ? 'Lc debe ser > 0 mm' : 'Lc must be > 0 mm') : null}
+                      warning={totalGrainsLength > motor.Lc ? (lang === 'es' ? `Granos (${totalGrainsLength.toFixed(1)} mm) superan Lc (${motor.Lc} mm)` : `Grains (${totalGrainsLength.toFixed(1)} mm) exceed Lc (${motor.Lc} mm)`) : null}
+                    />
                     <NumberInput label={t.gstar} step="0.1" value={motor.Gstar} onChange={(v:any) => setMotor({...motor, Gstar: v})} tooltip={t.gstar_desc} />
                     <NumberInput label={t.kv} step="0.1" value={motor.kv} onChange={(v:any) => setMotor({...motor, kv: v})} tooltip={t.kv_desc} />
                     <NumberInput label={t.eff_c} step="0.01" value={motor.etac} onChange={(v:any) => setMotor({...motor, etac: v})} tooltip={t.etac_desc} />
@@ -886,8 +955,22 @@ export default function App() {
                   </CardHeader>
                   <CardContent className="flex-1 p-2 flex flex-col gap-1 overflow-y-auto no-scrollbar">
                     <div className="grid grid-cols-2 gap-x-2.5 sm:gap-x-3 gap-y-1">
-                      <NumberInput label={t.throat_d + " [mm]"} value={nozzle.Dt0} onChange={(v:any) => setNozzle({...nozzle, Dt0: v})} tooltip={t.dt0_desc} />
-                      <NumberInput label={t.exit_d + " [mm]"} value={nozzle.Ds} onChange={(v:any) => setNozzle({...nozzle, Ds: v})} tooltip={t.ds_desc} />
+                      <NumberInput 
+                        label={t.throat_d + " [mm]"} 
+                        value={nozzle.Dt0} 
+                        onChange={(v:any) => setNozzle({...nozzle, Dt0: v})} 
+                        tooltip={t.dt0_desc} 
+                        error={nozzle.Dt0 <= 0 ? (lang === 'es' ? 'Dt0 debe ser > 0 mm' : 'Dt0 must be > 0 mm') : null}
+                        warning={nozzle.Dt0 >= nozzle.Ds ? (lang === 'es' ? `Garganta Dt0 (${nozzle.Dt0} mm) ≥ Salida Ds (${nozzle.Ds} mm)` : `Throat Dt0 (${nozzle.Dt0} mm) ≥ Exit Ds (${nozzle.Ds} mm)`) : (nozzle.Dt0 >= motor.Dc ? (lang === 'es' ? `Dt0 (${nozzle.Dt0} mm) ≥ Cámara Dc (${motor.Dc} mm)` : `Dt0 (${nozzle.Dt0} mm) ≥ Chamber Dc (${motor.Dc} mm)`) : null)}
+                      />
+                      <NumberInput 
+                        label={t.exit_d + " [mm]"} 
+                        value={nozzle.Ds} 
+                        onChange={(v:any) => setNozzle({...nozzle, Ds: v})} 
+                        tooltip={t.ds_desc} 
+                        error={nozzle.Ds <= 0 ? (lang === 'es' ? 'Ds debe ser > 0 mm' : 'Ds must be > 0 mm') : null}
+                        warning={nozzle.Ds <= nozzle.Dt0 ? (lang === 'es' ? `Salida Ds (${nozzle.Ds} mm) ≤ Garganta Dt0 (${nozzle.Dt0} mm)` : `Exit Ds (${nozzle.Ds} mm) ≤ Throat Dt0 (${nozzle.Dt0} mm)`) : null}
+                      />
                       <NumberInput label={t.div_angle + " [º]"} step="1" value={nozzle.alpha} onChange={(v:any) => setNozzle({...nozzle, alpha: v})} tooltip={t.alpha_desc} />
                       <NumberInput label={t.eff_n} step="0.01" value={nozzle.etanoz} onChange={(v:any) => setNozzle({...nozzle, etanoz: v})} tooltip={t.etanoz_desc} />
                     </div>
@@ -901,9 +984,11 @@ export default function App() {
                             <Info className="w-3 h-3" />
                           </span>
                         </div>
-                        {!!nozzle.e && (
-                          <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${(nozzle.e || 0) < 0 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30'}`}>
-                            {(nozzle.e || 0) < 0 ? `Slag: Dt → ${(Math.max(0.5, (nozzle.Dt0 || 0) + (nozzle.e || 0))).toFixed(2)} mm` : `Ero: Dt → ${((nozzle.Dt0 || 0) + (nozzle.e || 0)).toFixed(2)} mm`}
+                        {slagMode !== 'none' && (
+                          <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${slagMode === 'slag' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30'}`}>
+                            {slagMode === 'slag' 
+                              ? `Slag: Dt → ${(Math.max(0.1, (nozzle.Dt0 || 0) - (parseFloat(slagMagnitudeStr) || 0))).toFixed(2)} mm` 
+                              : `Ero: Dt → ${((nozzle.Dt0 || 0) + (parseFloat(slagMagnitudeStr) || 0)).toFixed(2)} mm`}
                           </span>
                         )}
                       </div>
@@ -911,17 +996,19 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-1.5 items-center">
                         <div className="col-span-1">
                           <Select 
-                            value={(nozzle.e || 0) < 0 ? 'slag' : (nozzle.e || 0) > 0 ? 'erosion' : 'none'} 
-                            onValueChange={(v) => {
+                            value={slagMode} 
+                            onValueChange={(v: 'none' | 'slag' | 'erosion') => {
+                              setSlagMode(v);
                               if (v === 'none') {
-                                setNozzle({ ...nozzle, e: 0 });
+                                setNozzle(prev => ({ ...prev, e: 0 }));
                               } else if (v === 'slag') {
-                                const mag = Math.abs(nozzle.e || 0) || 0.8;
+                                const mag = Math.abs(parseFloat(slagMagnitudeStr)) || 0.8;
                                 const maxSafe = Math.max(0.1, nozzle.Dt0 - 0.5);
-                                setNozzle({ ...nozzle, e: -Math.min(mag, maxSafe), ero_model: nozzle.ero_model || 1 });
+                                const clamped = Math.min(mag, maxSafe);
+                                setNozzle(prev => ({ ...prev, e: -clamped, ero_model: prev.ero_model || 1 }));
                               } else if (v === 'erosion') {
-                                const mag = Math.abs(nozzle.e) || 0.8;
-                                setNozzle({ ...nozzle, e: mag, ero_model: nozzle.ero_model || 1 });
+                                const mag = Math.abs(parseFloat(slagMagnitudeStr)) || 0.8;
+                                setNozzle(prev => ({ ...prev, e: mag, ero_model: prev.ero_model || 1 }));
                               }
                             }}
                           >
@@ -937,23 +1024,49 @@ export default function App() {
                         </div>
 
                         <div className="col-span-1">
-                          {nozzle.e !== 0 ? (
+                          {slagMode !== 'none' ? (
                             <div className="flex items-center gap-1">
                               <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">|ΔDt| [mm]:</span>
                               <Input
                                 type="number"
                                 step="0.1"
                                 min="0.01"
-                                max={nozzle.e < 0 ? String(Math.max(0.1, nozzle.Dt0 - 0.5)) : "15"}
-                                value={Math.abs(nozzle.e) || 0}
-                                onChange={(e) => {
-                                  const rawVal = parseFloat(e.target.value) || 0;
-                                  const sign = nozzle.e < 0 ? -1 : 1;
-                                  const maxSafe = nozzle.e < 0 ? Math.max(0.1, nozzle.Dt0 - 0.5) : 50;
-                                  const clamped = Math.min(rawVal, maxSafe);
-                                  setNozzle({ ...nozzle, e: sign * clamped });
+                                max={slagMode === 'slag' ? String(Math.max(0.1, nozzle.Dt0 - 0.5)) : "15"}
+                                value={slagMagnitudeStr}
+                                onFocus={(e) => {
+                                  isEditingSlagRef.current = true;
+                                  e.target.select();
                                 }}
-                                className="h-6 w-full text-[10px] font-mono px-1 py-0 bg-background border-input text-right font-bold"
+                                onChange={(e) => {
+                                  const text = e.target.value;
+                                  setSlagMagnitudeStr(text);
+                                  if (text !== '' && text !== '-' && text !== '.') {
+                                    const parsed = parseFloat(text);
+                                    if (!isNaN(parsed) && parsed >= 0) {
+                                      const sign = slagMode === 'slag' ? -1 : 1;
+                                      const maxSafe = slagMode === 'slag' ? Math.max(0.1, nozzle.Dt0 - 0.5) : 50;
+                                      const clamped = Math.min(parsed, maxSafe);
+                                      setNozzle(prev => ({ ...prev, e: sign * clamped }));
+                                    }
+                                  }
+                                }}
+                                onBlur={() => {
+                                  isEditingSlagRef.current = false;
+                                  const parsed = parseFloat(slagMagnitudeStr);
+                                  if (isNaN(parsed) || parsed <= 0) {
+                                    const fallback = 0.8;
+                                    setSlagMagnitudeStr(fallback.toString());
+                                    const sign = slagMode === 'slag' ? -1 : 1;
+                                    setNozzle(prev => ({ ...prev, e: sign * fallback }));
+                                  } else {
+                                    const sign = slagMode === 'slag' ? -1 : 1;
+                                    const maxSafe = slagMode === 'slag' ? Math.max(0.1, nozzle.Dt0 - 0.5) : 50;
+                                    const clamped = Math.min(parsed, maxSafe);
+                                    setSlagMagnitudeStr(clamped.toString());
+                                    setNozzle(prev => ({ ...prev, e: sign * clamped }));
+                                  }
+                                }}
+                                className={`h-6 w-full text-[10px] font-mono px-1 py-0 bg-background border-input text-right font-bold ${(slagMode === 'slag' && (parseFloat(slagMagnitudeStr) || 0) >= nozzle.Dt0) ? 'border-red-500 bg-red-500/10 text-red-500' : ''}`}
                               />
                             </div>
                           ) : (
@@ -962,12 +1075,12 @@ export default function App() {
                         </div>
                       </div>
 
-                      {nozzle.e !== 0 && (
+                      {slagMode !== 'none' && (
                         <div className="mt-0.5">
                           <UiLabel className="text-[9px] text-muted-foreground font-mono mb-0.5 block">{t.slag_model_label}</UiLabel>
                           <Select 
                             value={String(nozzle.ero_model || 1)} 
-                            onValueChange={(v) => setNozzle({ ...nozzle, ero_model: (+v as any) })}
+                            onValueChange={(v) => setNozzle(prev => ({ ...prev, ero_model: (+v as any) }))}
                           >
                             <SelectTrigger className="h-6 text-[10px] px-1.5 py-0 bg-background border-input font-medium cursor-pointer">
                               <SelectValue />
@@ -1014,6 +1127,20 @@ export default function App() {
                         {totalPropellantMass} kg
                       </span>
                     </div>
+
+                    {totalGrainsLength > motor.Lc && (
+                      <div 
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono shadow-xs bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300 text-[11px] font-semibold animate-pulse"
+                        title={lang === 'es' ? `Longitud total acumulada de los granos (${totalGrainsLength.toFixed(1)} mm) supera la longitud útil de la cámara Lc (${motor.Lc} mm)` : `Total grain length (${totalGrainsLength.toFixed(1)} mm) exceeds chamber length Lc (${motor.Lc} mm)`}
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span>
+                          {lang === 'es' 
+                            ? `Σ L0×N (${totalGrainsLength.toFixed(1)} mm) > Lc (${motor.Lc} mm)` 
+                            : `Σ L0×N (${totalGrainsLength.toFixed(1)} mm) > Lc (${motor.Lc} mm)`}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button 
@@ -1100,10 +1227,42 @@ export default function App() {
                                     </SelectContent>
                                   </Select>
                                 </div>
-                                <NumberInput label={t.outer_d0 + " [mm]"} value={g.D0} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, D0: v} : x))} tooltip={t.outer_d0_desc} />
-                                <NumberInput label={t.length_l0 + " [mm]"} value={g.L0} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, L0: v} : x))} tooltip={t.length_l0_desc} />
-                                <NumberInput label={t.n_blocks} value={g.N} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, N: v} : x))} tooltip={t.n_blocks_desc} />
-                                <NumberInput label={t.rho_rat} step="0.01" value={g.rhorat} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, rhorat: v} : x))} tooltip={t.rho_rat_desc} />
+                                {(() => {
+                                  const isD0ExceedsDc = g.D0 >= motor.Dc;
+                                  const isD0Invalid = g.D0 <= 0;
+                                  const isL0Invalid = g.L0 <= 0;
+                                  const isGrainL0ExceedsLc = (g.L0 * g.N) > motor.Lc;
+                                  const isNInvalid = g.N < 1;
+                                  return (
+                                    <>
+                                      <NumberInput 
+                                        label={t.outer_d0 + " [mm]"} 
+                                        value={g.D0} 
+                                        onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, D0: v} : x))} 
+                                        tooltip={t.outer_d0_desc}
+                                        error={isD0Invalid ? (lang === 'es' ? 'D0 debe ser > 0' : 'D0 must be > 0') : null}
+                                        warning={!isD0Invalid && isD0ExceedsDc ? (lang === 'es' ? `D0 (${g.D0} mm) ≥ Dc cámara (${motor.Dc} mm)` : `D0 (${g.D0} mm) ≥ chamber Dc (${motor.Dc} mm)`) : null}
+                                      />
+                                      <NumberInput 
+                                        label={t.length_l0 + " [mm]"} 
+                                        value={g.L0} 
+                                        onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, L0: v} : x))} 
+                                        tooltip={t.length_l0_desc}
+                                        error={isL0Invalid ? (lang === 'es' ? 'L0 debe ser > 0' : 'L0 must be > 0') : null}
+                                        warning={!isL0Invalid && isGrainL0ExceedsLc ? (lang === 'es' ? `Longitud (${(g.L0 * g.N).toFixed(1)} mm) supera Lc (${motor.Lc} mm)` : `Length (${(g.L0 * g.N).toFixed(1)} mm) exceeds Lc (${motor.Lc} mm)`) : null}
+                                      />
+                                      <NumberInput 
+                                        label={t.n_blocks} 
+                                        value={g.N} 
+                                        onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, N: v} : x))} 
+                                        tooltip={t.n_blocks_desc}
+                                        error={isNInvalid ? (lang === 'es' ? 'N debe ser ≥ 1' : 'N must be ≥ 1') : null}
+                                        warning={!isNInvalid && isGrainL0ExceedsLc ? (lang === 'es' ? `N×L0 supera Lc (${motor.Lc} mm)` : `N×L0 exceeds Lc (${motor.Lc} mm)`) : null}
+                                      />
+                                      <NumberInput label={t.rho_rat} step="0.01" value={g.rhorat} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, rhorat: v} : x))} tooltip={t.rho_rat_desc} />
+                                    </>
+                                  );
+                                })()}
                             </div>
 
                             <div className="space-y-1.5">
@@ -1147,28 +1306,61 @@ export default function App() {
                                     </SelectContent>
                                   </Select>
                                 </div>
-                                {g.shape !== 3 && <NumberInput label={t.inner_d0 + " [mm]"} value={g.d0} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, d0: v} : x))} tooltip={t.inner_d0_desc} />}
-                                {g.shape === 2 && (
-                                  <>
-                                    <NumberInput label={t.valley_d0 + " [mm]"} value={g.d0mayor} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, d0mayor: v} : x))} tooltip={t.valley_d0_desc} />
-                                    <NumberInput label={t.star_points} value={g.Np} onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, Np: v} : x))} tooltip={t.star_points_desc} />
-                                    {(() => {
-                                      const minD0mayor = g.d0 / Math.cos(Math.PI / Math.max(3, g.Np));
-                                      const isInvalid = g.d0mayor <= minD0mayor || g.d0mayor >= g.D0 || g.Np < 3;
-                                      if (isInvalid) {
-                                        return (
-                                          <div className="col-span-2 bg-destructive/10 border border-destructive/30 p-1.5 rounded-sm flex flex-col gap-0.5 mt-1 backdrop-blur-sm">
-                                            <span className="text-[9px] font-bold text-destructive uppercase tracking-widest leading-none drop-shadow-md">Star Configuration Alert</span>
-                                            {g.Np < 3 && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Need &gt;= 3 points</span>}
-                                            {g.d0mayor <= minD0mayor && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Valley (Dp) &gt; {(minD0mayor).toFixed(1)}mm</span>}
-                                            {g.d0mayor >= g.D0 && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Valley (Dp) &lt; Outer D0</span>}
-                                          </div>
-                                        );
-                                      }
-                                      return null;
-                                    })()}
-                                  </>
-                                )}
+                                {(() => {
+                                  const isd0Invalid = g.shape !== 3 && g.d0 <= 0;
+                                  const isd0ExceedsD0 = g.shape !== 3 && g.d0 >= g.D0;
+                                  const isd0ExceedsDc = g.shape !== 3 && g.d0 >= motor.Dc;
+                                  const minD0mayor = g.shape === 2 ? g.d0 / Math.cos(Math.PI / Math.max(3, g.Np || 3)) : 0;
+                                  const isStarPointsInvalid = g.shape === 2 && (g.Np < 3);
+
+                                  return (
+                                    <>
+                                      {g.shape !== 3 && (
+                                        <NumberInput 
+                                          label={t.inner_d0 + " [mm]"} 
+                                          value={g.d0} 
+                                          onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, d0: v} : x))} 
+                                          tooltip={t.inner_d0_desc}
+                                          error={isd0Invalid ? (lang === 'es' ? 'd0 debe ser > 0' : 'd0 must be > 0') : null}
+                                          warning={!isd0Invalid && isd0ExceedsD0 ? (lang === 'es' ? `d0 (${g.d0} mm) ≥ D0 (${g.D0} mm). Espesor nulo` : `d0 (${g.d0} mm) ≥ D0 (${g.D0} mm). Zero web`) : (!isd0Invalid && isd0ExceedsDc ? (lang === 'es' ? `d0 (${g.d0} mm) ≥ Dc (${motor.Dc} mm)` : `d0 (${g.d0} mm) ≥ Dc (${motor.Dc} mm)`) : null)}
+                                        />
+                                      )}
+                                      {g.shape === 2 && (
+                                        <>
+                                          <NumberInput 
+                                            label={t.valley_d0 + " [mm]"} 
+                                            value={g.d0mayor} 
+                                            onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, d0mayor: v} : x))} 
+                                            tooltip={t.valley_d0_desc}
+                                            error={g.d0mayor <= 0 ? (lang === 'es' ? 'Dp debe ser > 0' : 'Dp must be > 0') : null}
+                                            warning={g.d0mayor <= minD0mayor ? (lang === 'es' ? `Dp ≤ mín. geom. (${minD0mayor.toFixed(1)} mm)` : `Dp ≤ geometric min (${minD0mayor.toFixed(1)} mm)`) : (g.d0mayor >= g.D0 ? (lang === 'es' ? `Dp (${g.d0mayor} mm) ≥ D0 (${g.D0} mm)` : `Dp (${g.d0mayor} mm) ≥ D0 (${g.D0} mm)`) : null)}
+                                          />
+                                          <NumberInput 
+                                            label={t.star_points} 
+                                            value={g.Np} 
+                                            onChange={(v:any) => setGrains(grains.map(x => x.id === g.id ? {...x, Np: v} : x))} 
+                                            tooltip={t.star_points_desc}
+                                            error={isStarPointsInvalid ? (lang === 'es' ? 'Mínimo 3 puntas' : 'Minimum 3 points') : null}
+                                          />
+                                          {(() => {
+                                            const isInvalid = g.d0mayor <= minD0mayor || g.d0mayor >= g.D0 || g.Np < 3;
+                                            if (isInvalid) {
+                                              return (
+                                                <div className="col-span-2 bg-destructive/10 border border-destructive/30 p-1.5 rounded-sm flex flex-col gap-0.5 mt-1 backdrop-blur-sm">
+                                                  <span className="text-[9px] font-bold text-destructive uppercase tracking-widest leading-none drop-shadow-md">Star Configuration Alert</span>
+                                                  {g.Np < 3 && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Need &gt;= 3 points</span>}
+                                                  {g.d0mayor <= minD0mayor && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Valley (Dp) &gt; {(minD0mayor).toFixed(1)}mm</span>}
+                                                  {g.d0mayor >= g.D0 && <span className="text-[9px] text-destructive/80 font-mono line-clamp-1 italic">• Valley (Dp) &lt; Outer D0</span>}
+                                                </div>
+                                              );
+                                            }
+                                            return null;
+                                          })()}
+                                        </>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                                 
                                 <div data-tour={index === 0 ? "grain-faces-0" : undefined} className="border-t border-border pt-2 mt-2 flex justify-between items-center px-1">
                                   <UiLabel className="text-[10px] text-[#2563eb] dark:text-blue-400/80 uppercase font-bold tracking-wider">{t.burn_faces}</UiLabel>

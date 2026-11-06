@@ -38,7 +38,7 @@ export const translations = {
       "Erosive Coefficient. Proportionality constant determining the increase in burn rate relative to internal flow velocity.",
     ro_desc:
       "Throat Curvature Radius. Influences the discharge efficiency (C* efficiency) and flow transition at the nozzle throat.",
-    cfd_solver_title: "HERMES FLOW SOLVER V1.0",
+    cfd_solver_title: "HERMES FLOW SOLVER V2.0.0",
     cfd_solver_desc:
       "Semi-empirical 1D internal flow solver. Utilizes isentropic flow equations for area-ratio expansion and calculates real-time plume adjustment based on ambient pressure differential.",
     class_vs_time: "Motor Class vs Time",
@@ -285,7 +285,7 @@ export const translations = {
       "Coeficiente de Erosión. Constante de proporcionalidad que define el aumento de la velocidad de quemado respecto al flujo interno.",
     ro_desc:
       "Radio de Curvatura de Garganta. Afecta a la eficiencia de descarga y a la transición del flujo en el punto más estrecho.",
-    cfd_solver_title: "HERMES FLOW SOLVER V1.0",
+    cfd_solver_title: "HERMES FLOW SOLVER V2.0.0",
     cfd_solver_desc:
       "Solucionador de flujo interno 1D semi-empírico. Utiliza ecuaciones de flujo isentrópico para expansión por relación de áreas y calcula el ajuste del penacho en tiempo real.",
     class_vs_time: "Clase del Motor vs Tiempo",
@@ -533,7 +533,7 @@ export const translations = {
       "Coefficient d'Érosion. Constante de proportionnalité déterminant l'augmentation de la vitesse de combustion.",
     ro_desc:
       "Rayon de Courbure du Col. Influence l'efficacité de décharge et la transition du flux au col de la tuyère.",
-    cfd_solver_title: "HERMES FLOW SOLVER V1.0",
+    cfd_solver_title: "HERMES FLOW SOLVER V2.0.0",
     cfd_solver_desc:
       "Solveur de flux interne 1D. Utilise les équations de flux isentropique et calcule l'ajustement du panache en temps réel.",
     class_vs_time: "Classe du Moteur vs Temps",
@@ -779,7 +779,7 @@ export const translations = {
       "Coefficiente di Erosione. Constante di proporzionalità che definisce l'aumento della velocità di combustione.",
     ro_desc:
       "Raggio di Curvatura della Gola. Influenza l'efficienza di scarico e la transizione del flusso.",
-    cfd_solver_title: "HERMES FLOW SOLVER V1.0",
+    cfd_solver_title: "HERMES FLOW SOLVER V2.0.0",
     cfd_solver_desc:
       "Solutore di flusso interno 1D. Utilizza equazioni di flusso isentropico e calcola l'ajustamento del pennacchio in tempo reale.",
     class_vs_time: "Classe Motore vs Tempo",

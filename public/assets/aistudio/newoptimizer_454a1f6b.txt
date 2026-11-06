@@ -1,0 +1,868 @@
+# HERMES — COMPLETE OPTIMIZATION ENGINE REFACTOR
+## Migration to a unified Differential Evolution global optimization architecture
+
+Act as a senior numerical optimization engineer and software architect specialized in computational engineering, numerical simulation, and derivative-free global optimization.
+
+We are going to refactor the current HERMES optimization system. The objective is to replace the existing collection of custom search algorithms, optimization modes, and local refinement procedures with **one unified, robust, global optimization engine based on Differential Evolution (DE).**
+
+This must be an architectural improvement, not simply a replacement of one algorithm call with another.
+
+The new system must be mathematically coherent, computationally efficient, reproducible, maintainable, and fully integrated with the existing HERMES application.
+
+IMPORTANT: Before modifying anything, inspect the complete repository, the supplied optimizer implementation, SmartSearchEngine component, simulator, types, and every relevant dependency or caller.
+
+Do not assume that the supplied files represent the entire application.
+
+---
+
+# 1. PROJECT CONTEXT
+
+HERMES is a solid rocket motor performance simulator.
+
+The application already contains a numerical simulator that accepts motor, nozzle, grain, and propellant inputs and returns the transient motor performance.
+
+The optimization engine must use this existing simulator as its evaluation function.
+
+The simulator is the physics engine. The optimizer must never replace, approximate, or independently reproduce its internal physical calculations.
+
+The general workflow is:
+
+1. The user defines the motor hardware and operating conditions.
+2. The user defines the grain configuration and its permitted geometrical parameters.
+3. The optimization engine generates candidate geometries.
+4. Each candidate is evaluated using the actual HERMES simulator.
+5. The simulator returns the performance metrics.
+6. The optimizer evaluates feasibility and objective quality.
+7. The process evolves towards better solutions.
+8. The application displays the best feasible configurations and their simulation results.
+
+The main objective for this refactoring is:
+
+**Find the feasible grain geometry that maximizes total motor impulse, subject to the specified physical, geometric, and operational constraints.**
+
+The primary objective must be the actual total impulse returned by the simulator, not an artificial weighted score.
+
+---
+
+# 2. UNIFIED ALGORITHM: DIFFERENTIAL EVOLUTION
+
+Implement one canonical Differential Evolution algorithm.
+
+Use a well-established strategy such as DE/rand/1/bin, with suitable parameter adaptation or dithering.
+
+Do not retain the current custom evolutionary procedures, artificial swarm mechanisms, approximate CMA-ES implementation, or manually constructed Nelder-Mead refinement stages.
+
+The new engine must follow the actual Differential Evolution procedure.
+
+### 2.1. Population initialization
+
+Generate an initial population distributed across the entire feasible search domain.
+
+Prefer:
+
+- Latin Hypercube Sampling (LHS).
+- Sobol low-discrepancy sampling, provided a reliable existing implementation or dependency is available.
+
+Otherwise, use a seeded uniform random generator.
+
+The initialization must cover the entire permitted variable ranges rather than concentrating candidates around a few predefined geometries.
+
+Normalize the optimization variables internally to a common interval such as [0,1]. Map the normalized values back to their physical units before evaluating the simulator.
+
+This is important because D0, d0, and L0 have different physical scales.
+
+### 2.2. Differential mutation
+
+Use the canonical differential mutation:
+
+v = x_r1 + F * (x_r2 - x_r3)
+
+Where:
+
+- x_r1, x_r2 and x_r3 are three distinct population members.
+- F is the differential mutation factor.
+
+Use an appropriate initial F, approximately 0.5–0.9, optionally with generation-level dithering.
+
+### 2.3. Binomial crossover
+
+Implement binomial crossover using a crossover probability CR, initially around 0.7–0.9.
+
+Ensure that at least one coordinate is inherited from the mutant vector.
+
+### 2.4. Selection
+
+Evaluate the trial vector and compare it with its parent.
+
+Keep the better solution.
+
+The population size must remain controlled and must not grow indefinitely between generations.
+
+Use an initial population size proportional to the active number of dimensions. A reasonable starting point for testing is:
+
+P = max(30, 15 × D_active)
+
+Where D_active is the number of variables that are actually free.
+
+These are initial tuning values, not immutable mathematical constants.
+
+### 2.5. Boundary handling
+
+Implement appropriate boundary handling for all variables.
+
+Do not allow mutation or crossover to produce candidates outside their permitted ranges.
+
+Prefer a principled repair or reflection mechanism over indiscriminate clipping, which can artificially concentrate solutions at the boundaries.
+
+### 2.6. Elitism
+
+Always preserve the best feasible solutions.
+
+The best solution found must never be lost during population evolution.
+
+The algorithm must operate correctly with one, two, or three active continuous variables. If all variables are fixed, skip the evolutionary procedure and execute the simulator once.
+
+---
+
+# 3. OPTIMIZATION VARIABLES
+
+The continuous design variables are:
+
+| Variable | Description | Unit |
+|---|---|---|
+| D0 | External grain diameter | mm |
+| d0 | Internal grain/core diameter | mm |
+| L0 | Length of each identical grain | mm |
+
+The optimizer must support between one and three active continuous variables.
+
+The existing user interface already supports three constraint modes:
+
+- FREE: The optimizer selects a value automatically within physically valid bounds.
+- FIXED: The user specifies an exact value.
+- RANGE: The user defines the minimum and maximum permitted values.
+
+Preserve these three modes.
+
+### 3.1. FREE mode
+
+Calculate the physically valid optimization interval from the actual motor dimensions, shape, and other configuration constraints.
+
+The variable must be searched continuously throughout this interval.
+
+Do not use the current implementation's small collection of predefined D0 values as a substitute for continuous optimization.
+
+### 3.2. FIXED mode
+
+Remove the variable from the active optimization vector and use the supplied value exactly.
+
+Do not waste evaluations generating candidates for a variable that cannot change.
+
+### 3.3. RANGE mode
+
+Use the exact user-provided minimum and maximum as the optimization bounds.
+
+Validate that the ranges are physically compatible.
+
+Never silently modify the user's permitted range without reporting the reason.
+
+### 3.4. Shape-dependent variables
+
+Respect the existing supported grain configurations:
+
+- Shape 1: Cylindrical/BATES.
+- Shape 2: Star.
+- Shape 3: Solid grain.
+
+For solid grains, d0 is not an active optimization variable and must be treated according to the existing simulator convention.
+
+Preserve the existing star-grain geometry handling, including the appropriate d0mayor calculation.
+
+Do not introduce new grain geometry models or modify the physics of the existing ones.
+
+---
+
+# 4. GRAIN COUNT N: DISCRETE OPTIMIZATION
+
+This is an important part of the new architecture.
+
+The application must support two operating modes.
+
+### MODE A — FIXED GRAIN COUNT
+
+The user specifies:
+
+N = N_fixed
+
+The optimizer executes one Differential Evolution search for the specified grain count.
+
+### MODE B — AUTOMATIC GRAIN COUNT
+
+The user specifies a maximum grain count X.
+
+The engine evaluates:
+
+N ∈ {1, 2, 3, ..., X}
+
+For each integer N:
+
+1. Recalculate the geometrically feasible ranges of D0, d0 and L0.
+2. Account for the effect of N on the total axial grain length.
+3. Account for the effect of N on propellant mass and the simulated motor performance.
+4. Initialize a Differential Evolution population for that N.
+5. Execute the same optimization algorithm.
+6. Record the best feasible configuration found.
+
+After evaluating the permitted grain counts, compare all their best feasible solutions.
+
+Return the configuration with the highest total impulse.
+
+IMPORTANT DESIGN DECISION:
+
+Do not implement N as an ordinary continuous variable and simply round its value during simulation.
+
+Since N is an integer with a relatively small finite range, exact enumeration of its permitted values is preferable.
+
+This is still one unified optimization engine using one algorithm. Only the fixed integer parameter changes between optimization runs.
+
+The total number of evaluations must be configurable and transparently reported. Prefer a configurable evaluation budget per N, with a clearly displayed estimated total when automatic grain-count exploration is enabled.
+
+Do not impose an arbitrary maximum of eight grains in the algorithm. Respect the user's X, subject to actual geometric feasibility and application validation.
+
+If a genuinely large grain-count range is introduced in the future, the architecture should allow an integer-aware Differential Evolution implementation to be considered without redesigning the simulator interface.
+
+---
+
+# 5. OBJECTIVE FUNCTION: MAXIMUM TOTAL IMPULSE
+
+The primary objective is:
+
+MAXIMIZE:
+
+I_total = It_total_N_s
+
+Where the value comes directly from the existing simulator output:
+
+simulation.summary.It_total_N_s
+
+The algorithm must rank candidates according to their actual total impulse.
+
+IMPORTANT:
+
+The current max_impulse scoring formula combines several quantities:
+
+- Total impulse.
+- Thrust flatness.
+- Chamber filling fraction.
+- Pressure efficiency.
+- Penalties for overpressure and other conditions.
+
+This is not a pure maximum-impulse objective.
+
+Replace this weighted formulation for the max_impulse optimization mode.
+
+Do not reward an inferior impulse merely because the configuration has a flatter thrust curve or a larger chamber filling fraction.
+
+Do not introduce arbitrary weighting coefficients into the primary objective.
+
+The optimization engine should keep all additional simulation metrics available for candidate analysis and display, but they must not influence the maximum-impulse ranking unless explicitly defined as constraints.
+
+If the other existing mission objectives (fast_speed, flat_thrust, progressive and target_impulse) are retained, they must use the same Differential Evolution engine with independently defined objective functions. Do not maintain separate optimization algorithms for them.
+
+For this implementation, maximum total impulse is the priority.
+
+---
+
+# 6. CONSTRAINT HANDLING
+
+Implement a proper feasibility-first constraint-handling strategy.
+
+The optimizer must distinguish between:
+
+1. Valid and feasible candidates.
+2. Valid simulations that violate one or more constraints.
+3. Invalid geometries that must not be simulated.
+4. Failed or physically invalid simulation results.
+
+Do not rely on arbitrary large negative penalties as the primary constraint mechanism.
+
+Use the following selection hierarchy:
+
+1. A feasible candidate always ranks above an infeasible candidate.
+2. Among feasible candidates, the one with the highest total impulse wins.
+3. Among infeasible candidates, use normalized constraint violation to guide the population towards feasibility.
+
+This is a feasibility-first constraint-handling strategy.
+
+### 6.1. Maximum chamber pressure
+
+The principal operating constraint is:
+
+Pmax <= Pmax_lim
+
+Obtain Pmax from the actual simulation result:
+
+simulation.summary.Pmax_MPa
+
+Any candidate exceeding the permitted pressure must be classified as infeasible.
+
+Do not allow a high-impulse overpressure configuration to become the winning candidate.
+
+The pressure limit must remain an actual hard constraint, not merely a score penalty.
+
+An optional engineering safety margin may be supported as a separately configured parameter, but never silently change the user's specified limit.
+
+### 6.2. Geometrical constraints
+
+Validate all relevant geometric conditions before simulation.
+
+Include:
+
+- External grain diameter compatible with chamber internal diameter.
+- Internal core diameter compatible with external diameter and minimum required wall thickness.
+- Grain length compatible with usable chamber length.
+- Total grain stack length compatible with chamber geometry.
+- Any required spacing or mechanical clearance already represented by the existing model.
+
+IMPORTANT:
+
+Inspect the simulator to establish the actual convention for grain stacking and spacing.
+
+The optimizer must use one consistent geometric feasibility function.
+
+Do not maintain different or contradictory chamber-length equations in different stages of the optimization.
+
+### 6.3. Propellant mass constraints
+
+Preserve the existing mass constraint configuration:
+
+- FREE.
+- FIXED.
+- RANGE.
+
+For FIXED, enforce the specified target mass within a clearly defined and documented tolerance.
+
+For RANGE, enforce the specified minimum and maximum propellant masses.
+
+Obtain propellant mass from the actual simulator output whenever available.
+
+Do not use mass-related score bonuses or penalties as a substitute for actual constraint enforcement.
+
+### 6.4. Other physical constraints
+
+Inspect the current simulator and optimizer to identify additional existing validity conditions.
+
+Preserve physically justified conditions.
+
+Do not introduce arbitrary minimum pressure requirements or other restrictions that the user has not specified, unless required by an existing, validated physical model.
+
+If a simulation fails, returns invalid values, or does not complete combustion correctly according to the simulator's validity criteria, classify it as invalid.
+
+Never treat an invalid simulation as a competitive candidate.
+
+### 6.5. Analytical Kn screening
+
+The existing code includes analytical calculations intended to estimate safe Kn limits before simulation.
+
+Inspect these calculations carefully.
+
+They may be retained as inexpensive preliminary screening or sampling guidance only if their assumptions and conservatism are verified against the actual simulator.
+
+They must never silently eliminate physically valid solutions or override user-defined ranges.
+
+The final feasibility decision must use the actual simulated pressure and the real physical constraints.
+
+---
+
+# 7. SIMULATION EVALUATION FUNCTION
+
+Create one centralized candidate-evaluation function.
+
+Suggested conceptual interface:
+
+evaluateCandidate(parameters, fixedMotorConfiguration)
+
+It must:
+
+1. Receive N, D0, d0 and L0.
+2. Validate the geometry.
+3. Construct the correct existing MotorInput.
+4. Construct the correct GrainInput.
+5. Construct the correct NozzleInput.
+6. Include the selected default or custom propellant.
+7. Call the original runSimulation function.
+8. Extract all relevant performance metrics.
+9. Evaluate the constraints.
+10. Return a structured evaluation result.
+
+Preserve all existing simulator conventions, including:
+
+- Grain shape.
+- Propellant identification.
+- Grain count N.
+- d0mayor for star grains.
+- Np.
+- Burn-surface flags osi, ci and ei.
+- rhorat.
+- Chamber inputs and efficiencies.
+- Nozzle geometry and efficiencies.
+- Ambient pressure.
+- Time-step configuration.
+
+Do not modify the simulator's governing equations or numerical integration as part of this optimization refactoring.
+
+Use the existing transient motor simulation, not approximate analytical impulse estimates.
+
+The optimization engine must obtain at least:
+
+- Total impulse.
+- Maximum chamber pressure.
+- Average chamber pressure.
+- Maximum thrust.
+- Average thrust.
+- Burn time.
+- Specific impulse.
+- Propellant mass.
+- Any other existing metrics required by the interface.
+
+The objective and pressure constraint must use full-precision simulation outputs, not rounded display values.
+
+---
+
+# 8. PERFORMANCE AND COMPUTATIONAL EFFICIENCY
+
+The simulator is relatively fast, and the application can afford hundreds or thousands of evaluations.
+
+The new architecture must use the available computational budget efficiently.
+
+### 8.1. Evaluation budget
+
+Implement configurable parameters such as:
+
+- Population size.
+- Maximum evaluations.
+- Maximum generations.
+- Convergence tolerance.
+- Number of stagnant generations before termination.
+- Random seed.
+
+Use approximately 1,000 evaluations as an initial benchmark for one fixed-N, three-variable optimization.
+
+This is a starting point for performance testing, not a guarantee that the optimum will always be found within that budget.
+
+For automatic N exploration, clearly calculate and display the total budget.
+
+### 8.2. Caching
+
+Implement candidate caching to avoid repeated simulations of identical configurations.
+
+Cache keys must account for:
+
+- N.
+- D0.
+- d0.
+- L0.
+- The relevant fixed configuration.
+
+Do not round continuous variables so aggressively that distinct candidate geometries are treated as identical.
+
+### 8.3. Memory management
+
+This is particularly important when performing thousands of simulations.
+
+Do not retain the complete transient simulation arrays for every evaluated candidate.
+
+For every evaluation, retain the compact performance metrics and optimization information required for the scatter and convergence diagrams.
+
+Retain full SimulationResults only for the best candidate configurations, or re-run the simulator for the final top candidates to recover their complete thrust and pressure histories.
+
+The UI must still be able to display the complete simulation curves for the selected candidates.
+
+### 8.4. Asynchronous execution
+
+The optimization must not freeze the application interface.
+
+Preserve a correct asynchronous execution model.
+
+Investigate whether the current application architecture supports running the simulator inside Web Workers. If practical, use a worker or worker pool to offload expensive simulation evaluations.
+
+Otherwise, use properly sized evaluation batches and yield execution to the UI between batches.
+
+Do not assume that wrapping synchronous simulations in Promise.all automatically parallelizes them.
+
+Provide progress updates and, where practical, cancellation support.
+
+### 8.5. Random seed and reproducibility
+
+Use a controlled, configurable random seed.
+
+Identical inputs and identical seeds should produce reproducible optimization trajectories, subject to the deterministic behavior of the simulator and execution environment.
+
+Allow different seeds for independent DE restarts.
+
+---
+
+# 9. CONVERGENCE AND VALIDATION
+
+The engine must have clearly defined termination criteria.
+
+Use a combination of:
+
+- Maximum evaluation budget.
+- Maximum number of generations.
+- Relative improvement in the best feasible impulse.
+- Lack of improvement over a configurable number of generations.
+
+Do not terminate prematurely simply because several candidates happen to have similar objective values.
+
+Maintain a record of:
+
+- Best feasible impulse per generation.
+- Best configuration.
+- Number of evaluations.
+- Number of valid simulations.
+- Number of feasible candidates.
+- Number of overpressure candidates.
+- Execution time.
+
+### Independent validation using the same algorithm
+
+To increase confidence in the solution without introducing another optimizer, support optional independent Differential Evolution restarts using different random seeds.
+
+Compare the best feasible results.
+
+If independent runs repeatedly converge to similar impulse values and geometries, confidence in the result increases.
+
+Do not label the result as mathematically guaranteed to be the global optimum.
+
+At the end of the optimization, re-run the best configuration through runSimulation independently.
+
+This final simulation must confirm the reported:
+
+- Total impulse.
+- Maximum chamber pressure.
+- Propellant mass.
+- Burn time.
+- Thrust history.
+
+The final result must be classified as verified feasible only after this independent evaluation succeeds.
+
+---
+
+# 10. PRESERVE THE EXISTING USER INTERFACE
+
+Do not redesign the entire SmartSearchEngine component.
+
+Preserve the existing visual structure, style, language support, and user workflow wherever possible.
+
+The existing three-phase configuration interface should remain:
+
+### PHASE 1 — HARDWARE
+
+Preserve the inputs for:
+
+- Chamber diameter Dc.
+- Chamber length Lc.
+- Maximum pressure Pmax_lim.
+- Nozzle throat Dt0.
+- Nozzle exit diameter Ds.
+- Divergence angle alpha.
+- Chamber and nozzle efficiencies.
+- Ambient pressure.
+- Other existing hardware parameters.
+
+### PHASE 2 — GRAIN CONFIGURATION
+
+Preserve:
+
+- Grain shape selection.
+- Propellant selection, including custom propellants.
+- Grain count: fixed or automatic range 1 to X.
+- D0: free, fixed or range.
+- d0: free, fixed or range.
+- L0: free, fixed or range.
+- Propellant mass constraint: free, fixed or range.
+- Outer, core and end burning-surface controls.
+
+Ensure that free and range modes now use real continuous optimization intervals.
+
+### PHASE 3 — OPTIMIZATION
+
+Remove the current algorithm selector:
+
+- Basic Search.
+- Advanced Search.
+- Hybrid CMA-ES + Simplex.
+
+There must be one optimization algorithm: Differential Evolution.
+
+Replace the old selector with a compact information panel describing:
+
+- Algorithm: Differential Evolution.
+- Optimization variables.
+- Grain-count operating mode.
+- Population size.
+- Maximum evaluation budget.
+- Current progress.
+- Best feasible impulse.
+
+The user should not need to choose between different optimization algorithms.
+
+The user should be able to configure search precision through the evaluation budget, rather than selecting different algorithms.
+
+For the first version, maximum total impulse must be the main optimization objective.
+
+---
+
+# 11. RESULTS AND VISUALIZATION
+
+Preserve the current results dashboard and ensure that all its information remains compatible.
+
+The engine should return:
+
+### Best candidates
+
+Return the best feasible candidates ranked by actual total impulse.
+
+The first candidate must always be the highest-impulse feasible solution found.
+
+The remaining candidates should provide useful geometric diversity where possible, without displacing a better candidate from rank 1.
+
+Support candidates with different values of N when automatic grain-count exploration is enabled.
+
+### Candidate metrics
+
+Preserve the current metrics:
+
+- Total impulse.
+- Maximum pressure.
+- Average pressure.
+- Maximum thrust.
+- Average thrust.
+- Initial thrust.
+- Burn time.
+- Action time.
+- Isp.
+- Motor class.
+- Thrust flatness.
+- Chamber filling fraction.
+- Propellant mass.
+- Predicted apogee, if retained as an informational metric.
+
+Predicted apogee must not affect the maximum-impulse objective.
+
+### Graphs
+
+Preserve the three current visualization tabs:
+
+1. Thrust and chamber-pressure histories.
+2. Explored solution space: maximum pressure versus total impulse.
+3. Optimization convergence history.
+
+The convergence graph must represent the best feasible impulse found over the optimization process.
+
+Invalid and infeasible configurations must be distinguishable from feasible ones.
+
+### Apply configuration
+
+Keep the existing functionality that transfers the selected candidate to the main simulator inputs.
+
+Ensure that the full configuration is transferred correctly, including N and all existing grain, motor and nozzle parameters.
+
+---
+
+# 12. TYPES, API AND ARCHITECTURAL CLEANUP
+
+Inspect all existing references to:
+
+- SmartSearchConfig.
+- CandidateResult.
+- SmartSearchOutcome.
+- EvaluatedPoint.
+- OptimizationProgress.
+- SearchPrecisionMode.
+- runSmartSearch.
+- runSmartSearchAsync.
+
+Refactor these structures as necessary.
+
+Remove obsolete algorithm-specific types and state once all references have been migrated.
+
+Use one canonical asynchronous optimization implementation.
+
+Do not maintain two independent optimizer implementations for synchronous and asynchronous execution.
+
+In particular, inspect the current synchronous wrapper, which starts an asynchronous operation and immediately falls back to synchronous execution. Correct this behavior.
+
+If compatibility is needed, update callers to consume a Promise-based result correctly rather than maintaining a second search engine.
+
+Preserve or deliberately migrate all UI data contracts.
+
+Use strict TypeScript types. Avoid unnecessary any types.
+
+Separate responsibilities clearly:
+
+- Configuration and bounds generation.
+- Differential Evolution algorithm.
+- Candidate evaluation.
+- Constraint evaluation.
+- Result aggregation.
+- Progress reporting.
+
+The optimizer should be independent of React and should not contain UI-specific logic.
+
+---
+
+# 13. TESTING AND NUMERICAL VALIDATION
+
+Before declaring the refactoring complete, implement appropriate tests.
+
+### Algorithm tests
+
+Test Differential Evolution using standard mathematical benchmark functions with known optima:
+
+- Sphere function.
+- Rosenbrock function.
+- Rastrigin function.
+
+Verify that the algorithm works with one, two, three and additional continuous dimensions.
+
+### Constraint tests
+
+Verify:
+
+- Pressure constraint enforcement.
+- Geometric feasibility.
+- Fixed variables.
+- User-defined variable ranges.
+- Shape-dependent variables.
+- Mass constraints.
+- Invalid simulator outputs.
+
+### Grain-count tests
+
+Verify:
+
+- Fixed N.
+- Automatic N from 1 to X.
+- Correct recalculation of geometrical bounds for every N.
+- Correct identification of the best configuration across all N.
+- No arbitrary grain-count cap.
+- Correct chamber-length feasibility.
+
+### Integration tests
+
+Verify that:
+
+- The original simulator is called correctly.
+- Simulation results are not modified.
+- The selected best candidate can be re-simulated.
+- The returned metrics match the simulator output.
+- The UI graphs still work.
+- Applying a candidate transfers all required inputs.
+- Progress updates are coherent.
+- Identical seeds reproduce the same search.
+
+Also benchmark the runtime using the existing simulator.
+
+Compare the evaluation count, execution time and final feasible impulse across repeated runs.
+
+---
+
+# 14. IMPLEMENTATION REQUIREMENTS
+
+Follow this order of work.
+
+**STEP 1 — REPOSITORY AUDIT**
+
+Inspect all related files, dependencies, imports, types and callers.
+
+Identify every component affected by the migration.
+
+Do not start deleting code before understanding its dependencies.
+
+**STEP 2 — DEFINE THE NEW MATHEMATICAL MODEL**
+
+Establish the exact objective, constraints, active variables, variable bounds and discrete N handling.
+
+Ensure that the mathematical definition agrees with the existing simulator.
+
+**STEP 3 — IMPLEMENT THE DIFFERENTIAL EVOLUTION ENGINE**
+
+Implement and test the canonical DE algorithm independently of the React interface.
+
+**STEP 4 — IMPLEMENT THE SIMULATION EVALUATION LAYER**
+
+Connect DE to the existing simulator.
+
+Verify correct inputs, metrics, constraint evaluation and caching.
+
+**STEP 5 — IMPLEMENT N EXPLORATION**
+
+Implement fixed-N and automatic 1-to-X exploration using the same DE engine.
+
+Ensure all N configurations are compared correctly.
+
+**STEP 6 — MIGRATE THE UI**
+
+Remove the old algorithm selector and connect the new optimization pipeline.
+
+Preserve the existing user experience and results dashboard.
+
+**STEP 7 — REMOVE OBSOLETE IMPLEMENTATIONS**
+
+Only after the new pipeline works correctly, remove:
+
+- Old basic search.
+- Old advanced neighborhood search.
+- Custom adaptive swarm procedures.
+- Approximate CMA-ES sampling logic.
+- Custom Nelder-Mead simplex implementation.
+- Duplicate synchronous search implementation.
+- Obsolete algorithm selection state and types.
+
+Do not remove unrelated simulator functionality.
+
+**STEP 8 — VALIDATION**
+
+Run the relevant tests, build, type checks and numerical benchmarks.
+
+Resolve all regressions.
+
+---
+
+# 15. FINAL ACCEPTANCE CRITERIA
+
+The refactoring is complete only when all of the following are true:
+
+1. There is one actual Differential Evolution optimization engine.
+2. There are no parallel legacy search algorithms.
+3. The optimizer works with one, two or three active continuous variables.
+4. Fixed variables are removed from the optimization vector.
+5. Free and range variables are optimized continuously.
+6. N can be fixed or automatically explored from 1 to X.
+7. Every permitted integer N is considered in automatic mode.
+8. The optimization uses the actual HERMES simulator.
+9. Total impulse is maximized directly in the maximum-impulse objective.
+10. Chamber pressure and geometric constraints are enforced correctly.
+11. Invalid or infeasible configurations cannot win.
+12. Simulation evaluations are cached appropriately.
+13. Memory usage remains controlled for thousands of evaluations.
+14. The UI remains responsive and reports real optimization progress.
+15. The best candidate is independently re-simulated.
+16. The existing results dashboard and Apply to Simulator functionality continue working.
+17. The application builds successfully and passes its relevant tests.
+
+IMPORTANT FINAL INSTRUCTION:
+
+Do not simplify the project by deleting features that are still needed.
+
+Do not change the physical simulation model.
+
+Do not introduce arbitrary coefficients, undocumented assumptions, or artificial performance improvements.
+
+Do not claim global optimality simply because the algorithm has converged.
+
+Prioritize mathematical correctness, numerical reliability, physical feasibility and maintainable architecture over superficial code simplification.
+
+The final deliverable should be a fully integrated HERMES optimization system based on one unified Differential Evolution engine, capable of searching the grain geometry for maximum feasible total impulse across both fixed and automatically explored grain counts.

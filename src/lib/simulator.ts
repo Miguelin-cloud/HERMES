@@ -409,19 +409,28 @@ export function runSimulation({ motor, grains, nozzle, customPropellants }: Simu
     const At_total_val = state.reduce((sum, s) => sum + (s.At || At0), 0) / Ntipos;
     const current_exprat2 = Ae / At_total_val;
 
-    // Gasto másico que escapa por la tobera (mnoz_total)
-    const mnoz_total = P0_prod_Pa * (At_total_val / 1e6) * Math.sqrt(k_total / (R_total * T0real_total)) * Math.pow(2 / (k_total + 1), (k_total + 1) / (2 * (k_total - 1)));
-    
-    const msto_total = total_mgen - mnoz_total;
-    msto_total_acc += msto_total * dt;
-
     const Vgra_total = state.reduce((a,b) => a + b.Vg, 0) / 1e9;
     Vfree_total = Math.max(1e-9, Vc_m3 - Vgra_total);
-    const rhoprod = Math.max(0, msto_total_acc / Vfree_total);
 
-    // CORRECCIÓN FÍSICA APLICADA: Sumar Patm de manera rigurosa para obtener la presión absoluta real
+    // Coeficiente de escape sónico de la tobera por unidad de presión manométrica [kg / (s · Pa)]
+    const K_noz = (At_total_val / 1e6) * Math.sqrt(k_total / (R_total * T0real_total)) * Math.pow(2 / (k_total + 1), (k_total + 1) / (2 * (k_total - 1)));
+
+    // Frecuencia característica de relajación de la masa en cámara [s^-1]
+    const lambda = (R_total * T0real_total * K_noz) / Vfree_total;
+
+    // Integración analítica exacta de msto_total_acc sobre el dt para eliminar inestabilidades de rigidez (Euler explícito)
+    if (lambda > 1e-12) {
+      const expTerm = Math.exp(-lambda * dt);
+      msto_total_acc = msto_total_acc * expTerm + (total_mgen / lambda) * (1 - expTerm);
+    } else {
+      msto_total_acc = Math.max(0, msto_total_acc + total_mgen * dt);
+    }
+
+    const rhoprod = Math.max(0, msto_total_acc / Vfree_total);
     P0_prod_Pa = rhoprod * R_total * T0real_total;
-    P0 = P0_prod_Pa / 1e6 + Patm; 
+    P0 = P0_prod_Pa / 1e6 + Patm;
+
+    const mnoz_total = P0_prod_Pa * K_noz; 
 
     const step_total_Ab = state.reduce((sum, s) => sum + s.Ab, 0);
     const step_dominant_r = state.reduce((sum, s) => sum + (s.xincp / dt), 0) / Math.max(1, state.length);

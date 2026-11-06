@@ -1,6 +1,6 @@
 {
-  "name": "HERMES",
-  "description": "Simulador de motores cohete de propulsante sólido basado en HERMES y OpenMotor.",
+  "name": "HERMES V2.0.0",
+  "description": "Simulador de motores cohete de propulsante sólido HERMES v2.0.0 con Optimizador Balístico Inteligente Smart Search.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

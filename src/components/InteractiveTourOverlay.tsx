@@ -29,7 +29,7 @@ export interface TourStep {
   description: string;
   bulletPoints?: string[];
   tab?: string; // Tab to switch to if needed
-  smartSearchStep?: 1 | 2 | 3;
+  smartSearchStep?: 0 | 1 | 2 | 3;
   openModal?: 'propellant';
   openModalTab?: 'catalog' | 'editor';
   closeModal?: 'propellant';

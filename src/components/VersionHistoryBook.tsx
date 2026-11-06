@@ -258,36 +258,36 @@ export const VERSIONS_LOG: VersionData[] = [
   },
   {
     version: '2.0',
-    codename: 'Smart Search & Custom Chemistry',
-    date: '2026-11-03',
+    codename: 'Smart Search & Aerospace v2.0',
+    date: '2026-11-04',
     isLatest: true,
     badge: { en: 'Active Version v2.0', es: 'Versión Activa v2.0', fr: 'Version Active v2.0', it: 'Versione Attiva v2.0' },
     title: {
-      en: 'Smart Search Engine, Custom Propellants & Technical Notes',
-      es: 'Motor Smart Search, Propulsantes Personalizados y Notas Técnicas',
-      fr: 'Moteur Smart Search, Propergols Personnalisés et Notes Techniques',
-      it: 'Motore Smart Search, Propellenti Personalizzati e Note Tecniche'
+      en: 'HERMES v2.0: Smart Search (It Max), Dual Solvers & Aerospace Redesign',
+      es: 'HERMES v2.0: Smart Search (Máximo Rendimiento It), Algoritmos Duales y Rediseño Aeroespacial',
+      fr: 'HERMES v2.0 : Smart Search (Rendement Maximal It), Solveurs Doubles & Refonte',
+      it: 'HERMES v2.0: Smart Search (Massimo Rendimento It), Risolutori Doppi e Riprogettazione'
     },
     summary: {
-      en: 'Launches Version 1.4 featuring the Smart Search inverse optimization architecture, the Custom Propellant Synthesizer with multi-pressure Saint-Robert ranges, technical documentation suite in /NOTAS, and responsive split-screen input precision.',
-      es: 'Inaugura la Versión 1.4 destacando la arquitectura de optimización inversa Smart Search, el sintetizador de propulsantes a medida con rangos múltiples de Saint-Robert, la suite de documentación técnica en /NOTAS y la precisión responsiva de entradas.',
-      fr: 'Lancement de la Version 1.4 avec l\'architecture d\'optimisation Smart Search, le synthétiseur de propergols sur mesure, la documentation /NOTAS et les entrées réactives.',
-      it: 'Lancio della Versione 1.4 con l\'architettura di ottimizzazione Smart Search, il sintetizzatore di propellenti, la documentazione /NOTAS e gli input reattivi.'
+      en: 'Major release v2.0 featuring the streamlined Smart Search inverse engine focused on Peak Performance (It), flexible chamber pressure controls (Max Limit or Min-Max Range), fast dual solvers (Fast Global Sampling ~1-2s and Seed-Driven Nelder-Mead Simplex ~2-4s), landing wizard flow, Custom Propellant Synthesizer, and technical engineering suite.',
+      es: 'Lanzamiento principal v2.0 con el motor rediseñado de optimización inversa Smart Search centrado en "Máximo Rendimiento (It)", control flexible de presión (Solo Máximo o Rango Mín-Máx), algoritmos duales de alta velocidad (Búsqueda Básica con Filtrado Kn ~1-2s y Búsqueda Avanzada por Polítopo Simplex sobre Semilla ~2-4s), flujo guiado por asistente, sintetizador de propulsantes y suite técnica de notas.',
+      fr: 'Version majeure 2.0 avec l\'optimisation Smart Search centrée sur le Rendement Maximal (It), contrôle de plage de pression, et solveurs rapides Global et Simplex sur Semence.',
+      it: 'Versione principale 2.0 con l\'ottimizzazione Smart Search incentrata sul Massimo Rendimento (It), controllo intervallo di pressione e risolutori veloci Globale e Simplex.'
     },
     highlights: [
       {
         icon: Sparkles,
         title: { 
-          en: 'Smart Search Inverse Optimization (Max Altitude Most Validated)', 
-          es: 'Optimización Inversa Smart Search (Máxima Altitud Más Validada)', 
-          fr: 'Optimisation Inverse Smart Search (Altitude Maximale Validée)', 
-          it: 'Ottimizzazione Inversa Smart Search (Altitudine Massima Validata)' 
+          en: 'Smart Search v2.0: Peak Performance (It) & Fast Dual Solvers', 
+          es: 'Smart Search v2.0: Máximo Rendimiento (It) y Algoritmos Duales Ultra-Rápidos', 
+          fr: 'Smart Search v2.0 : Rendement Maximal (It) et Solveurs Rapides', 
+          it: 'Smart Search v2.0: Massimo Rendimento (It) e Risolutori Veloci' 
         },
         desc: {
-          en: 'Inverse design engine that finds the optimal grain combination and nozzle throat. The "Maximum Altitude / Peak Total Impulse" mode is the most thoroughly tested and ballistically validated algorithm in the engine.',
-          es: 'Motor de diseño inverso que calcula la combinación óptima de granos y tobera. El objetivo de "Máxima Altitud / Mayor Impulso Total" es el algoritmo más extensamente probado y validado balísticamente.',
-          fr: 'Moteur de conception inverse. Le mode "Altitude Maximale / Impulsion Totale" est l\'algorithme le plus testé et validé balistiquement.',
-          it: 'Motore di progettazione inversa. La modalità "Altitudine Massima / Impulso Totale" è l\'algoritmo più testato e validato balisticamente.'
+          en: 'Inverse solver centered on maximizing Total Impulse (It) for any given motor casing and nozzle. Features flexible chamber pressure definition (single Pmax or [Pmin, Pmax] range) and two high-speed simulation algorithms: Fast Global Sampling (~1-2s) with analytical Kn pre-filtering, and Advanced Search (~2-4s) running continuous Nelder-Mead downhill simplex and adaptive gradient optimization directly on the warm-start seed.',
+          es: 'Motor de diseño inverso centrado en maximizar el Impulso Total (It) para una cámara y tobera dadas. Incorpora definición flexible de presión (Solo Pmáx o Rango [Pmín, Pmáx]) y dos algoritmos de alta velocidad: Búsqueda Básica (~1-2s) con pre-filtrado analítico Kn de alto espectro, y Búsqueda Avanzada (~2-4s) que toma directamente el óptimo global como semilla y ejecuta optimización por Polítopo Simplex Nelder-Mead en espacio continuo sin bucles repetitivos.',
+          fr: 'Moteur de conception inverse pour maximiser l\'impulsion totale (It) avec sélection de plage de pression et solveurs rapides : Échantillonnage Global (~1-2s) et Simplex Nelder-Mead sur Semence (~2-4s).',
+          it: 'Motore di progettazione inversa per massimizzare l\'impulso totale (It) con intervallo di pressione e risolutori veloci: Scansione Globale (~1-2s) e Simplex Nelder-Mead (~2-4s).'
         }
       },
       {
