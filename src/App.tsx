@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Rocket } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -627,26 +627,43 @@ export default function App() {
     setShowExportModal(true);
   };
 
-  const chartData = results ? results.t.map((time, i) => {
-    let pointData: any = {
-      time: Number((time || 0).toFixed(4)),
-      P0_MPa: Number(Math.max(0, results.P0_MPa[i] || 0).toFixed(3)),
-      P0_gage: Number(Math.max(0, results.P0_gage[i] || 0).toFixed(3)),
-      F_N: Number(Math.max(0, results.F_N[i] || 0).toFixed(2)),
-      E_N: Number(Math.max(0, results.E_N[i] || 0).toFixed(2)),
-      mgra_total: Number((results.mgra_total[i] || 0).toFixed(3)),
-    };
-    
-    // Add burn areas for each grain
-    results.grains.forEach((g, gIndex) => {
-      pointData[`g${gIndex}_Abc`] = Number((results.grains_Abc?.[gIndex]?.[i] || 0).toFixed(1));
-      pointData[`g${gIndex}_Abe`] = Number((results.grains_Abe?.[gIndex]?.[i] || 0).toFixed(1));
-      pointData[`g${gIndex}_Abs`] = Number((results.grains_Abs?.[gIndex]?.[i] || 0).toFixed(1));
-      pointData[`g${gIndex}_Ab`] = Number((results.grains_Ab?.[gIndex]?.[i] || 0).toFixed(1));
-    });
+  const chartData = useMemo(() => {
+    if (!results || !results.t || results.t.length === 0) return [];
+    const totalPoints = results.t.length;
+    // Si la simulación contiene miles de puntos (ej. dt muy fino o motores de combustión larga),
+    // muestreamos suavemente para no saturar el DOM SVG de Recharts manteniendo 60 FPS
+    const stride = totalPoints > 1500 ? Math.ceil(totalPoints / 1200) : 1;
+    const sampled: any[] = [];
 
-    return pointData;
-  }) : [];
+    const buildPoint = (idx: number) => {
+      const time = results.t[idx];
+      let pointData: any = {
+        time: Number((time || 0).toFixed(4)),
+        P0_MPa: Number(Math.max(0, results.P0_MPa[idx] || 0).toFixed(3)),
+        P0_gage: Number(Math.max(0, results.P0_gage[idx] || 0).toFixed(3)),
+        F_N: Number(Math.max(0, results.F_N[idx] || 0).toFixed(2)),
+        E_N: Number(Math.max(0, results.E_N[idx] || 0).toFixed(2)),
+        mgra_total: Number((results.mgra_total[idx] || 0).toFixed(3)),
+      };
+      results.grains.forEach((g, gIndex) => {
+        pointData[`g${gIndex}_Abc`] = Number((results.grains_Abc?.[gIndex]?.[idx] || 0).toFixed(1));
+        pointData[`g${gIndex}_Abe`] = Number((results.grains_Abe?.[gIndex]?.[idx] || 0).toFixed(1));
+        pointData[`g${gIndex}_Abs`] = Number((results.grains_Abs?.[gIndex]?.[idx] || 0).toFixed(1));
+        pointData[`g${gIndex}_Ab`] = Number((results.grains_Ab?.[gIndex]?.[idx] || 0).toFixed(1));
+      });
+      return pointData;
+    };
+
+    for (let i = 0; i < totalPoints; i += stride) {
+      sampled.push(buildPoint(i));
+    }
+    // Asegurar que el último punto exacto de fin de combustión esté siempre incluido
+    if ((totalPoints - 1) % stride !== 0) {
+      sampled.push(buildPoint(totalPoints - 1));
+    }
+
+    return sampled;
+  }, [results]);
 
   const t = translations[lang];
 

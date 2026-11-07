@@ -224,7 +224,7 @@ export function runSimulation({ motor, grains, nozzle, customPropellants }: Simu
     grains_Abs: state.map(s => s.Abs || 0),
     grains_Ab: state.map(s => s.Ab || 0)
   });
-  while (mgra_total_val >= 0.00001 && step < 10000) {
+  while (mgra_total_val >= 0.00001 && current_t < 600.0 && step < 2000000) {
     step++;
     const dt = motor.paso_de_tiempo;
     current_t += dt;
@@ -468,7 +468,7 @@ export function runSimulation({ motor, grains, nozzle, customPropellants }: Simu
   
   const final_At_total_val = state.reduce((sum, s) => sum + (s.At || At0), 0) / Ntipos;
 
-  while ((P0 - Patm) > 0.01 && step < 12000) {
+  while ((P0 - Patm) > 0.01 && current_t < 600.0 && step < 2500000) {
     step++;
     const dt = motor.paso_de_tiempo;
     current_t += dt;

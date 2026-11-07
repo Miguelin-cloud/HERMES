@@ -54,6 +54,7 @@ import {
   Cell,
   ZAxis
 } from 'recharts';
+import { smartLoc } from '../lib/smartSearchI18n';
 import { 
   SmartSearchGoal, 
   CandidateResult, 
@@ -92,7 +93,13 @@ export function SmartSearchEngine({
   onApplyConfiguration
 }: SmartSearchEngineProps) {
   const isSpanish = lang === 'es';
+  const isFrench = lang === 'fr';
+  const isItalian = lang === 'it';
   const isLight = theme === 'light';
+
+  const loc = (es: string, en: string, fr?: string, it?: string): string => {
+    return smartLoc(es, en, lang, fr, it);
+  };
 
   // Wizard Phase: 0 (Goal Inbox), 1 (Hardware), 2 (Grain Constraints), 3 (Algorithms & Execute)
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
@@ -106,9 +113,12 @@ export function SmartSearchEngine({
     if (searchProgress) {
       setSearchProgress(prev => prev ? {
         ...prev,
-        stepDescription: isSpanish 
-          ? 'Cancelando simulación y recuperando candidatos evaluados...' 
-          : 'Cancelling simulation and gathering evaluated candidates...'
+        stepDescription: loc(
+          'Cancelando simulación y recuperando candidatos evaluados...',
+          'Cancelling simulation and gathering evaluated candidates...',
+          'Annulation de la simulation et récupération des candidats évalués...',
+          'Annullamento della simulazione e recupero dei candidati valutati...'
+        )
       } : null);
     }
   };
@@ -369,7 +379,7 @@ export function SmartSearchEngine({
     setAppliedSuccess(false);
     setSearchProgress({
       phase: 'init',
-      stepDescription: isSpanish ? 'Inicializando espacio de búsqueda balístico...' : 'Initializing ballistic search space...',
+      stepDescription: loc('Inicializando espacio de búsqueda balístico...', 'Initializing ballistic search space...'),
       currentEvaluations: 0,
       totalEstimated: 350,
       percent: 5,
@@ -479,7 +489,11 @@ export function SmartSearchEngine({
 
   // Apply configuration to main engine inputs
   const handleApplyToEngine = (cand: CandidateResult) => {
-    onApplyConfiguration(cand.inputs.motor, cand.inputs.nozzle, cand.inputs.grains);
+    const motorToApply = {
+      ...cand.inputs.motor,
+      paso_de_tiempo: initialMotor.paso_de_tiempo || cand.inputs.motor.paso_de_tiempo || 0.001
+    };
+    onApplyConfiguration(motorToApply, cand.inputs.nozzle, cand.inputs.grains);
     setAppliedSuccess(true);
     setTimeout(() => setAppliedSuccess(false), 3500);
   };
@@ -500,13 +514,16 @@ export function SmartSearchEngine({
               <h2 className="text-sm md:text-base font-bold text-foreground flex items-center gap-2 font-mono">
                 HERMES SMART SEARCH v2.0.0
                 <span className="text-[10px] uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  {isSpanish ? 'Optimizador Balístico Inteligente' : 'Intelligent Ballistic Optimizer'}
+                  {loc('Optimizador Balístico Inteligente', 'Intelligent Ballistic Optimizer', 'Optimiseur Balistique Intelligent', 'Ottimizzatore Balistico Intelligente')}
                 </span>
               </h2>
               <p className="text-xs text-muted-foreground">
-                {isSpanish 
-                  ? 'Búsqueda evolutiva de geometrías de grano óptimas para cámara y tobera existentes'
-                  : 'Evolutionary inverse optimization of propellant grain geometries for fixed chamber and nozzle'}
+                {loc(
+                  'Búsqueda evolutiva de geometrías de grano óptimas para cámara y tobera existentes',
+                  'Evolutionary inverse optimization of propellant grain geometries for fixed chamber and nozzle',
+                  'Optimisation inverse évolutive des géométries de grains pour chambre et tuyère fixes',
+                  'Ottimizzazione inversa evolutiva delle geometrie dei grani per camera e ugello fissi'
+                )}
               </p>
             </div>
           </div>
@@ -522,7 +539,7 @@ export function SmartSearchEngine({
             className="h-8 text-xs font-mono flex items-center gap-1.5 border-border"
           >
             <Info size={14} className="text-emerald-600 dark:text-emerald-400" />
-            {isSpanish ? 'Algoritmo & Formulación' : 'Algorithm & Formulation'}
+            {loc('Algoritmo & Formulación', 'Algorithm & Formulation', 'Algorithme & Formulation', 'Algoritmo & Formulazione')}
           </Button>
 
           <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border">
@@ -535,7 +552,7 @@ export function SmartSearchEngine({
               }`}
             >
               <Target size={13} />
-              {isSpanish ? 'Objetivo: Máx Altitud' : 'Goal: Max Altitude'}
+              {loc('Objetivo: Máx Altitud', 'Goal: Max Altitude', 'Objectif : Altitude Max', 'Obiettivo: Altitudine Max')}
             </button>
 
             <ChevronRight size={14} className="text-muted-foreground opacity-50" />
@@ -550,7 +567,7 @@ export function SmartSearchEngine({
               }`}
             >
               <span className="w-4 h-4 rounded-full bg-black/20 flex items-center justify-center text-[10px]">1</span>
-              {isSpanish ? 'Fase 1: Hardware' : 'Phase 1: Hardware'}
+              {loc('Fase 1: Hardware', 'Phase 1: Hardware', 'Phase 1 : Matériel', 'Fase 1: Hardware')}
             </button>
             
             <ChevronRight size={14} className="text-muted-foreground opacity-50" />
@@ -565,7 +582,7 @@ export function SmartSearchEngine({
               }`}
             >
               <span className="w-4 h-4 rounded-full bg-black/20 flex items-center justify-center text-[10px]">2</span>
-              {isSpanish ? 'Fase 2: Granos' : 'Phase 2: Grains'}
+              {loc('Fase 2: Granos', 'Phase 2: Grains', 'Phase 2 : Grains', 'Fase 2: Grani')}
             </button>
 
             <ChevronRight size={14} className="text-muted-foreground opacity-50" />
@@ -580,7 +597,7 @@ export function SmartSearchEngine({
               }`}
             >
               <span className="w-4 h-4 rounded-full bg-black/20 flex items-center justify-center text-[10px]">3</span>
-              {isSpanish ? 'Fase 3: Algoritmos' : 'Phase 3: Algorithms'}
+              {loc('Fase 3: Algoritmos', 'Phase 3: Algorithms', 'Phase 3 : Algorithmes', 'Fase 3: Algoritmi')}
             </button>
           </div>
         </div>
@@ -594,15 +611,13 @@ export function SmartSearchEngine({
           <div className="flex items-center justify-between pb-3 border-b border-emerald-500/30">
             <h4 className="font-bold font-mono text-sm flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
               <Zap size={18} className="text-emerald-500 animate-pulse" />
-              {isSpanish 
-                ? 'Guía Completa de Smart Search: Flujo de Misión, Algoritmos, Modus Operandi y Formulación' 
-                : 'Smart Search Complete Guide: Mission Workflow, Algorithms, Modus Operandi & Formulation'}
+              {loc('Guía Completa de Smart Search: Flujo de Misión, Algoritmos, Modus Operandi y Formulación', 'Smart Search Complete Guide: Mission Workflow, Algorithms, Modus Operandi & Formulation')}
             </h4>
             <button 
               onClick={() => setShowAlgorithmInfo(false)}
               className="text-xs font-bold px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-800 dark:text-emerald-200 transition-colors cursor-pointer"
             >
-              ✕ {isSpanish ? 'Cerrar Guía' : 'Close Guide'}
+              ✕ {loc('Cerrar Guía', 'Close Guide')}
             </button>
           </div>
 
@@ -610,39 +625,31 @@ export function SmartSearchEngine({
           <div className="space-y-2 p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10">
             <span className="font-bold font-mono uppercase text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
               <Target size={15} />
-              {isSpanish ? '1. Flujo Secuencial de Optimización (De Objetivo a Ejecución)' : '1. Sequential Optimization Workflow (Goal to Execution)'}
+              {loc('1. Flujo Secuencial de Optimización (De Objetivo a Ejecución)', '1. Sequential Optimization Workflow (Goal to Execution)')}
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px]">
               <div className="p-2 rounded-lg bg-card/80 border border-emerald-500/40 space-y-0.5">
                 <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">0. Objetivo Primario</span>
                 <p className="text-[10px] text-muted-foreground">
-                  {isSpanish 
-                    ? 'Bandeja inicial donde se selecciona Máxima Altitud (Mayor Impulso Total It = ∫ F dt) antes de configurar cotas.' 
-                    : 'Initial tray to select Maximum Altitude (Peak Total Impulse It = ∫ F dt) prior to configuring dimensions.'}
+                  {loc('Bandeja inicial donde se selecciona Máxima Altitud (Mayor Impulso Total It = ∫ F dt) antes de configurar cotas.', 'Initial tray to select Maximum Altitude (Peak Total Impulse It = ∫ F dt) prior to configuring dimensions.')}
                 </p>
               </div>
               <div className="p-2 rounded-lg bg-card/80 border border-border space-y-0.5">
                 <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">1. Fase 1: Hardware</span>
                 <p className="text-[10px] text-muted-foreground">
-                  {isSpanish 
-                    ? 'Cotado de cámara (Dc, Lc), límite de sobrepresión Pmax_lim, tobera fija (Dt, Ds, α) y avisos de expansión en vivo.' 
-                    : 'Fixed casing (Dc, Lc), MEOP pressure threshold, nozzle geometry (Dt, Ds, α), and real-time expansion alerts.'}
+                  {loc('Cotado de cámara (Dc, Lc), límite de sobrepresión Pmax_lim, tobera fija (Dt, Ds, α) y avisos de expansión en vivo.', 'Fixed casing (Dc, Lc), MEOP pressure threshold, nozzle geometry (Dt, Ds, α), and real-time expansion alerts.')}
                 </p>
               </div>
               <div className="p-2 rounded-lg bg-card/80 border border-border space-y-0.5">
                 <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">2. Fase 2: Granos</span>
                 <p className="text-[10px] text-muted-foreground">
-                  {isSpanish 
-                    ? 'Geometría (BATES, Estrella, Macizo), N granos, modos Libre/Fijo/Rango (D0, d0, L0), caras activas y restricción de masa.' 
-                    : 'Shape, segment count, Free/Fixed/Range modes for D0, d0, L0, active faces, and total propellant mass limits.'}
+                  {loc('Geometría (BATES, Estrella, Macizo), N granos, modos Libre/Fijo/Rango (D0, d0, L0), caras activas y restricción de masa.', 'Shape, segment count, Free/Fixed/Range modes for D0, d0, L0, active faces, and total propellant mass limits.')}
                 </p>
               </div>
               <div className="p-2 rounded-lg bg-card/80 border border-border space-y-0.5">
                 <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">3. Fase 3: Algoritmos</span>
                 <p className="text-[10px] text-muted-foreground">
-                  {isSpanish 
-                    ? 'Elección del presupuesto DE, botón de Cancelar Simulación en vivo y monitoreo del HUD de evolución.' 
-                    : 'DE budget preset selection, live Cancel Simulation button, and real-time convergence HUD monitoring.'}
+                  {loc('Elección del presupuesto DE, botón de Cancelar Simulación en vivo y monitoreo del HUD de evolución.', 'DE budget preset selection, live Cancel Simulation button, and real-time convergence HUD monitoring.')}
                 </p>
               </div>
             </div>
@@ -652,7 +659,7 @@ export function SmartSearchEngine({
           <div className="space-y-2">
             <span className="font-bold font-mono uppercase text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
               <Cpu size={15} />
-              {isSpanish ? '2. Los 3 Modos de Algoritmo de Búsqueda Evolutiva y su Modus Operandi' : '2. The 3 Evolutionary Search Algorithm Modes & Modus Operandi'}
+              {loc('2. Los 3 Modos de Algoritmo de Búsqueda Evolutiva y su Modus Operandi', '2. The 3 Evolutionary Search Algorithm Modes & Modus Operandi')}
             </span>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               
@@ -661,19 +668,17 @@ export function SmartSearchEngine({
                 <div className="flex items-center justify-between font-mono font-bold text-foreground">
                   <span className="flex items-center gap-1.5">
                     <Zap size={14} className="text-amber-500" />
-                    {isSpanish ? 'Búsqueda Rápida' : 'Fast Search'}
+                    {loc('Búsqueda Rápida', 'Fast Search')}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold">
                     500 evals / N
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {isSpanish
-                    ? 'Modus Operandi: Población compacta NP = 15 con G = 33 generaciones de DE/rand/1/bin inicializadas mediante muestreo hipercubo latino (LHS). Emplea mutación adaptativa rápida con cruce binomial CR = 0.85.'
-                    : 'Modus Operandi: Compact population NP = 15 with G = 33 generations of DE/rand/1/bin seeded by Latin Hypercube Sampling (LHS). Uses fast adaptive mutation and binomial crossover CR = 0.85.'}
+                  {loc('Modus Operandi: Población compacta NP = 15 con G = 33 generaciones de DE/rand/1/bin inicializadas mediante muestreo hipercubo latino (LHS). Emplea mutación adaptativa rápida con cruce binomial CR = 0.85.', 'Modus Operandi: Compact population NP = 15 with G = 33 generations of DE/rand/1/bin seeded by Latin Hypercube Sampling (LHS). Uses fast adaptive mutation and binomial crossover CR = 0.85.')}
                 </p>
                 <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold pt-1 border-t border-border/40">
-                  {isSpanish ? '🎯 ~1 - 2s por N | Barrido veloz de viabilidad inicial.' : '🎯 ~1 - 2s per N | Fast initial feasibility sweep.'}
+                  {loc('🎯 ~1 - 2s por N | Barrido veloz de viabilidad inicial.', '🎯 ~1 - 2s per N | Fast initial feasibility sweep.')}
                 </div>
               </div>
 
@@ -682,19 +687,17 @@ export function SmartSearchEngine({
                 <div className="flex items-center justify-between font-mono font-bold text-foreground">
                   <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
                     <Sparkles size={14} />
-                    {isSpanish ? 'Búsqueda Estándar (Recomendado)' : 'Standard Search (Recommended)'}
+                    {loc('Búsqueda Estándar (Recomendado)', 'Standard Search (Recommended)')}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">
                     1.000 evals / N
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {isSpanish
-                    ? 'Modus Operandi: Población balanceada NP = 25 con G = 40 generaciones. Incorpora dither estocástico del factor de escala F ∈ [0.5, 0.9] por generación y vector, garantizando diversidad y evitando estancamientos en óptimos locales.'
-                    : 'Modus Operandi: Balanced population NP = 25 with G = 40 generations. Incorporates stochastic dithering of scale factor F ∈ [0.5, 0.9] per generation, preventing premature local minima convergence.'}
+                  {loc('Modus Operandi: Población balanceada NP = 25 con G = 40 generaciones. Incorpora dither estocástico del factor de escala F ∈ [0.5, 0.9] por generación y vector, garantizando diversidad y evitando estancamientos en óptimos locales.', 'Modus Operandi: Balanced population NP = 25 with G = 40 generations. Incorporates stochastic dithering of scale factor F ∈ [0.5, 0.9] per generation, preventing premature local minima convergence.')}
                 </p>
                 <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold pt-1 border-t border-border/40">
-                  {isSpanish ? '🎯 ~2 - 4s por N | Diseño balístico definitivo de alta fidelidad.' : '🎯 ~2 - 4s per N | Production high-fidelity motor design.'}
+                  {loc('🎯 ~2 - 4s por N | Diseño balístico definitivo de alta fidelidad.', '🎯 ~2 - 4s per N | Production high-fidelity motor design.')}
                 </div>
               </div>
 
@@ -703,19 +706,17 @@ export function SmartSearchEngine({
                 <div className="flex items-center justify-between font-mono font-bold text-foreground">
                   <span className="flex items-center gap-1.5">
                     <Rocket size={14} className="text-purple-500" />
-                    {isSpanish ? 'Búsqueda Profunda' : 'Deep Search'}
+                    {loc('Búsqueda Profunda', 'Deep Search')}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold">
                     2.000 evals / N
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {isSpanish
-                    ? 'Modus Operandi: Población expandida NP = 40 con G = 50 generaciones. Explora exhaustivamente hipervolúmenes restringidos donde el límite de sobrepresión Pmax está muy próximo a la frontera crítica de rotura.'
-                    : 'Modus Operandi: Expanded population NP = 40 with G = 50 generations. Exhaustively explores constrained hyperspaces where Pmax limit operates near critical burst boundaries.'}
+                  {loc('Modus Operandi: Población expandida NP = 40 con G = 50 generaciones. Explora exhaustivamente hipervolúmenes restringidos donde el límite de sobrepresión Pmax está muy próximo a la frontera crítica de rotura.', 'Modus Operandi: Expanded population NP = 40 with G = 50 generations. Exhaustively explores constrained hyperspaces where Pmax limit operates near critical burst boundaries.')}
                 </p>
                 <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold pt-1 border-t border-border/40">
-                  {isSpanish ? '🔬 ~5 - 8s por N | Geometrías estrella e hiperespacios complejos.' : '🔬 ~5 - 8s per N | Star geometries & complex hyperspaces.'}
+                  {loc('🔬 ~5 - 8s por N | Geometrías estrella e hiperespacios complejos.', '🔬 ~5 - 8s per N | Star geometries & complex hyperspaces.')}
                 </div>
               </div>
 
@@ -726,12 +727,10 @@ export function SmartSearchEngine({
           <div className="p-3.5 rounded-xl border border-red-500/40 bg-red-500/10 space-y-1 text-[11px]">
             <span className="font-bold text-red-600 dark:text-red-400 font-mono uppercase flex items-center gap-1.5">
               <XCircle size={15} />
-              {isSpanish ? '3. Cancelación de Simulación en Vivo y Retorno de Resultados Parciales' : '3. Live Simulation Cancellation & Partial Results Preservation'}
+              {loc('3. Cancelación de Simulación en Vivo y Retorno de Resultados Parciales', '3. Live Simulation Cancellation & Partial Results Preservation')}
             </span>
             <p className="text-muted-foreground leading-relaxed">
-              {isSpanish
-                ? 'Durante la ejecución del optimizador (en búsquedas profundas o presupuestos elevados), aparece un botón rojo de CANCELAR SIMULACIÓN visible en el HUD de progreso y en la barra de lanzamiento. Al pulsarlo, el algoritmo detiene inmediatamente el bucle evolutivo de forma segura y devuelve todos los mejores candidatos factibles evaluados hasta ese momento, permitiendo corregir parámetros sin perder el trabajo cómputo previo.'
-                : 'During search execution, a prominent red CANCEL SIMULATION button is available inside the HUD and action bar. Clicking it safely aborts the evolution loop and returns the best feasible candidates found up to that timestamp, allowing instant configuration adjustments without losing evaluated data.'}
+              {loc('Durante la ejecución del optimizador (en búsquedas profundas o presupuestos elevados), aparece un botón rojo de CANCELAR SIMULACIÓN visible en el HUD de progreso y en la barra de lanzamiento. Al pulsarlo, el algoritmo detiene inmediatamente el bucle evolutivo de forma segura y devuelve todos los mejores candidatos factibles evaluados hasta ese momento, permitiendo corregir parámetros sin perder el trabajo cómputo previo.', 'During search execution, a prominent red CANCEL SIMULATION button is available inside the HUD and action bar. Clicking it safely aborts the evolution loop and returns the best feasible candidates found up to that timestamp, allowing instant configuration adjustments without losing evaluated data.')}
             </p>
           </div>
 
@@ -739,23 +738,19 @@ export function SmartSearchEngine({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-emerald-500/20">
             <div className="space-y-1.5">
               <span className="font-bold text-foreground font-mono uppercase text-[11px] block">
-                {isSpanish ? '4. Motor de Simulación Numérico 0D Intacto' : '4. Untouched Exact Numerical 0D Solver'}
+                {loc('4. Motor de Simulación Numérico 0D Intacto', '4. Untouched Exact Numerical 0D Solver')}
               </span>
               <p>
-                {isSpanish
-                  ? 'El optimizador NO modifica ni aproxima las leyes físicas. Resuelve para cada vector [D0, d0, L0] la integración balística 0D completa con la ley de Vieille (r = a·Pⁿ), continuidad másica en cámara con tobera de Laval y regresión geométrica 3D de todas las caras de grano activas. El impulso total It = ∫ F dt devuelto es el valor físico exacto sin puntuaciones artificiales ni penalizaciones ficticias.'
-                  : 'The optimizer does NOT alter or approximate physical laws. It solves complete 0D transient ballistics with Vieille burn law (r = a·Pⁿ), chamber mass continuity with Laval nozzle, and 3D regression of active faces for each vector [D0, d0, L0]. The returned total impulse It = ∫ F dt is exact.'}
+                {loc('El optimizador NO modifica ni aproxima las leyes físicas. Resuelve para cada vector [D0, d0, L0] la integración balística 0D completa con la ley de Vieille (r = a·Pⁿ), continuidad másica en cámara con tobera de Laval y regresión geométrica 3D de todas las caras de grano activas. El impulso total It = ∫ F dt devuelto es el valor físico exacto sin puntuaciones artificiales ni penalizaciones ficticias.', 'The optimizer does NOT alter or approximate physical laws. It solves complete 0D transient ballistics with Vieille burn law (r = a·Pⁿ), chamber mass continuity with Laval nozzle, and 3D regression of active faces for each vector [D0, d0, L0]. The returned total impulse It = ∫ F dt is exact.')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <span className="font-bold text-foreground font-mono uppercase text-[11px] block">
-                {isSpanish ? '5. Reglas de Factibilidad de Deb (1998) y Selección Rígida' : '5. Deb Feasibility Rules (1998) & Strict Selection'}
+                {loc('5. Reglas de Factibilidad de Deb (1998) y Selección Rígida', '5. Deb Feasibility Rules (1998) & Strict Selection')}
               </span>
               <p>
-                {isSpanish
-                  ? 'Los métodos continuos basados en gradiente fracasan en balística debido a las discontinuidades del quemado y censurado por sobrepresión. La Selección de Deb garantiza que: 1) Cualquier solución factible (Pmax ≤ Plim) vence a una inviable; 2) Entre factibles gana estrictamente el mayor impulso total puro (Max It); 3) Entre inviables gana la de menor sobrepresión sin penalizaciones arbitrarias.'
-                  : 'Gradient methods fail in ballistics due to burning sliver discontinuities and pressure censoring. Deb Selection guarantees: 1) Any feasible candidate dominates infeasible ones; 2) Among feasible candidates, strictly highest total impulse (Max It) wins; 3) Among infeasible candidates, lowest pressure violation wins without arbitrary weights.'}
+                {loc('Los métodos continuos basados en gradiente fracasan en balística debido a las discontinuidades del quemado y censurado por sobrepresión. La Selección de Deb garantiza que: 1) Cualquier solución factible (Pmax ≤ Plim) vence a una inviable; 2) Entre factibles gana estrictamente el mayor impulso total puro (Max It); 3) Entre inviables gana la de menor sobrepresión sin penalizaciones arbitrarias.', 'Gradient methods fail in ballistics due to burning sliver discontinuities and pressure censoring. Deb Selection guarantees: 1) Any feasible candidate dominates infeasible ones; 2) Among feasible candidates, strictly highest total impulse (Max It) wins; 3) Among infeasible candidates, lowest pressure violation wins without arbitrary weights.')}
               </p>
             </div>
           </div>
@@ -771,23 +766,26 @@ export function SmartSearchEngine({
             <div>
               <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2 font-mono">
                 <Target size={16} />
-                {isSpanish ? 'Bandeja de Objetivos de Misión' : 'Mission Objectives Inbox'}
+                {loc('Bandeja de Objetivos de Misión', 'Mission Objectives Inbox', 'Boîte des Objectifs de Mission', 'Casella degli Obiettivi di Missione')}
               </CardTitle>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {isSpanish 
-                  ? 'Selecciona el objetivo propulsivo para iniciar la configuración de motor, restricciones de grano y algoritmos de optimización'
-                  : 'Select your propulsion mission goal to enter the hardware, grain constraints, and algorithm configuration flow'}
+                {loc(
+                  'Selecciona el objetivo propulsivo para iniciar la configuración de motor, restricciones de grano y algoritmos de optimización',
+                  'Select your propulsion mission goal to enter the hardware, grain constraints, and algorithm configuration flow',
+                  'Sélectionnez votre objectif propulsif pour commencer la configuration du moteur, des grains et des algorithmes',
+                  'Seleziona l\'obiettivo propulsivo per avviare la configurazione del motore, dei vincoli dei grani e degli algoritmi'
+                )}
               </p>
             </div>
             <div className="text-[11px] font-mono text-muted-foreground bg-muted/50 px-3 py-1 rounded-lg border border-border">
-              <span>{isSpanish ? 'Flujo:' : 'Workflow:'} <strong className="text-foreground">{isSpanish ? 'Objetivo → Fase 1 → Fase 2 → Fase 3' : 'Goal → Phase 1 → Phase 2 → Phase 3'}</strong></span>
+              <span>{loc('Flujo:', 'Workflow:', 'Flux :', 'Flusso:')} <strong className="text-foreground">{loc('Objetivo → Fase 1 → Fase 2 → Fase 3', 'Goal → Phase 1 → Phase 2 → Phase 3', 'Objectif → Phase 1 → Phase 2 → Phase 3', 'Obiettivo → Fase 1 → Fase 2 → Fase 3')}</strong></span>
             </div>
           </CardHeader>
 
           <CardContent className="p-6 space-y-6">
             <div className="space-y-2">
               <span className="text-xs font-bold uppercase font-mono tracking-wider text-muted-foreground">
-                {isSpanish ? 'Objetivo Primario de Optimización' : 'Primary Optimization Objective'}
+                {loc('Objetivo Primario de Optimización', 'Primary Optimization Objective', 'Objectif Principal d\'Optimisation', 'Obiettivo Primario di Ottimizzazione')}
               </span>
               
               {/* Objective Drawer / Tray: Max Altitude / Max Total Impulse */}
@@ -806,14 +804,14 @@ export function SmartSearchEngine({
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                          {isSpanish ? 'Bandeja Principal de Misión' : 'Main Mission Tray'}
+                          {loc('Bandeja Principal de Misión', 'Main Mission Tray', 'Bac Principal de Mission', 'Cassetto Principale di Missione')}
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
-                          {isSpanish ? 'Activo' : 'Active'}
+                          {loc('Activo', 'Active', 'Actif', 'Attivo')}
                         </span>
                       </div>
                       <h3 className="text-base sm:text-lg font-bold text-foreground mt-0.5 font-mono flex items-center gap-2">
-                        {isSpanish ? 'Máxima Altitud / Mayor Impulso Total (It)' : 'Maximum Altitude / Peak Total Impulse (It)'}
+                        {loc('Máxima Altitud / Mayor Impulso Total (It)', 'Maximum Altitude / Peak Total Impulse (It)', 'Altitude Maximale / Impulsion Totale Maximale (It)', 'Massima Altitudine / Massimo Impulso Totale (It)')}
                       </h3>
                     </div>
                   </div>
@@ -826,7 +824,7 @@ export function SmartSearchEngine({
                     }}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-5 text-xs font-mono flex items-center gap-2 shadow-xs group-hover:shadow-md cursor-pointer self-start sm:self-auto shrink-0"
                   >
-                    <span>{isSpanish ? 'Configurar Motor y Tobera (Fase 1)' : 'Configure Motor & Nozzle (Phase 1)'}</span>
+                    <span>{loc('Configurar Motor y Tobera (Fase 1)', 'Configure Motor & Nozzle (Phase 1)', 'Configurer Moteur et Tuyère (Phase 1)', 'Configura Motore e Ugello (Fase 1)')}</span>
                     <ArrowRight size={16} />
                   </Button>
                 </div>
@@ -836,32 +834,35 @@ export function SmartSearchEngine({
                   <div className="flex items-center justify-between flex-wrap gap-2 text-foreground">
                     <span className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
                       <CheckCircle2 size={15} />
-                      {isSpanish ? 'Criterio de Selección Estricto:' : 'Strict Selection Criterion:'}
+                      {loc('Criterio de Selección Estricto:', 'Strict Selection Criterion:', 'Critère de Sélection Strict :', 'Criterio di Selezione Severo:')}
                     </span>
                     <span className="px-2.5 py-1 rounded bg-muted text-foreground font-bold border border-border text-[11px]">
-                      Mejor Solución = max I_total &nbsp;[sujeto a P_max ≤ P_límite]
+                      {loc('Mejor Solución = max I_total  [sujeto a P_max ≤ P_límite]', 'Best Solution = max I_total  [subject to P_max ≤ P_limit]', 'Meilleure Solution = max I_total  [sujet à P_max ≤ P_limite]', 'Migliore Soluzione = max I_total  [soggetto a P_max ≤ P_limite]')}
                     </span>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed font-sans">
-                    {isSpanish
-                      ? 'Maximiza estrictamente la energía propulsiva total acumulada obtenida de la integración temporal completa del empuje (I_total = ∫ F dt) devuelta por el simulador físico. No premia artificialmente geometrías por planitud ni ocupación de cámara si entregan menor impulso total. La selección global de granos (N) y cotas geométricas se rige por factibilidad de Deb.'
-                      : 'Strictly maximizes total propulsive energy from complete physical thrust time integration (I_total = ∫ F dt) returned by the simulator. Does not artificially favor flat thrust or packing volume if total impulse is lower. Global grain count (N) and dimensions are governed by Deb feasibility selection.'}
+                    {loc(
+                      'Maximiza estrictamente la energía propulsiva total acumulada obtenida de la integración temporal completa del empuje (I_total = ∫ F dt) devuelta por el simulador físico. No premia artificialmente geometrías por planitud ni ocupación de cámara si entregan menor impulso total. La selección global de granos (N) y cotas geométricas se rige por factibilidad de Deb.',
+                      'Strictly maximizes total propulsive energy from complete physical thrust time integration (I_total = ∫ F dt) returned by the simulator. Does not artificially favor flat thrust or packing volume if total impulse is lower. Global grain count (N) and dimensions are governed by Deb feasibility selection.',
+                      'Maximise strictement l\'énergie propulsive totale issue de l\'intégration temporelle de la poussée (I_total = ∫ F dt) calculée par le simulateur. Ne favorise pas artificiellement la planéité si l\'impulsion totale est moindre. Le nombre de grains (N) et les cotes obéissent aux règles de Deb.',
+                      'Massimizza rigorosamente l\'energia propulsiva totale derivante dall\'integrazione temporale della spinta (I_total = ∫ F dt) restituita dal simulatore. Non favorisce artificialmente la piattezza se l\'impulso totale è inferiore. Il numero di grani (N) e le dimensioni seguono le regole di Deb.'
+                    )}
                   </p>
                 </div>
 
                 {/* Feature Highlights Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] font-mono">
                   <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60">
-                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{isSpanish ? 'Cálculo Físico' : 'Physics Calculation'}</span>
-                    <span className="font-bold text-foreground">{isSpanish ? 'Impulso Total Puro (N·s)' : 'Pure Total Impulse (N·s)'}</span>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{loc('Cálculo Físico', 'Physics Calculation', 'Calcul Physique', 'Calcolo Fisico')}</span>
+                    <span className="font-bold text-foreground">{loc('Impulso Total Puro (N·s)', 'Pure Total Impulse (N·s)', 'Impulsion Totale Pure (N·s)', 'Impulso Totale Puro (N·s)')}</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60">
-                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{isSpanish ? 'Manejo de Restricciones' : 'Constraint Handling'}</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{isSpanish ? 'Reglas de Deb (Sin penalizaciones ficticias)' : 'Deb Rules (No arbitrary penalty weights)'}</span>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{loc('Manejo de Restricciones', 'Constraint Handling', 'Gestion des Contraintes', 'Gestione dei Vincoli')}</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{loc('Reglas de Deb (Sin penalizaciones)', 'Deb Rules (No arbitrary penalties)', 'Règles de Deb (Sans pénalités)', 'Regole di Deb (Senza penalità)')}</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60">
-                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{isSpanish ? 'Comparativa de Granos' : 'Grain Exploration'}</span>
-                    <span className="font-bold text-foreground">{isSpanish ? 'Automática N = 1 .. N_max' : 'Automatic N = 1 .. N_max'}</span>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-bold">{loc('Comparativa de Granos', 'Grain Exploration', 'Exploration des Grains', 'Esplorazione dei Grani')}</span>
+                    <span className="font-bold text-foreground">{loc('Automática N = 1 .. N_max', 'Automatic N = 1 .. N_max', 'Automatique N = 1 .. N_max', 'Automatica N = 1 .. N_max')}</span>
                   </div>
                 </div>
               </div>
@@ -877,10 +878,10 @@ export function SmartSearchEngine({
             <div>
               <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
                 <Sliders size={16} />
-                {isSpanish ? 'Fase 1: Hardware Definido (Cámara y Tobera)' : 'Phase 1: Defined Hardware (Chamber & Nozzle)'}
+                {loc('Fase 1: Hardware Definido (Cámara y Tobera)', 'Phase 1: Defined Hardware (Chamber & Nozzle)', 'Phase 1 : Matériel Défini (Chambre & Tuyère)', 'Fase 1: Hardware Definito (Camera & Ugello)')}
               </CardTitle>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {isSpanish ? 'Introduce las cotas de la cámara y tobera existente que vamos a equipar' : 'Enter existing motor casing and nozzle dimensions'}
+                {loc('Introduce las cotas de la cámara y tobera existente que vamos a equipar', 'Enter existing motor casing and nozzle dimensions', 'Entrez les dimensions de la chambre et de la tuyère existantes', 'Inserisci le dimensioni della camera e dell\'ugello esistenti')}
               </p>
             </div>
             
@@ -888,9 +889,9 @@ export function SmartSearchEngine({
             <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground bg-muted/40 px-3 py-1 rounded-lg border border-border">
               <span>Vol: <strong className="text-foreground">{chamberVolumeCm3.toFixed(1)} cm³</strong></span>
               <span>•</span>
-              <span>{isSpanish ? 'Esbeltez (Lc/Dc):' : 'Slenderness (Lc/Dc):'} <strong className="text-foreground">{slendernessRatio.toFixed(1)}</strong></span>
+              <span>{loc('Esbeltez (Lc/Dc):', 'Slenderness (Lc/Dc):', 'Élancement (Lc/Dc) :', 'Snellezza (Lc/Dc):')} <strong className="text-foreground">{slendernessRatio.toFixed(1)}</strong></span>
               <span>•</span>
-              <span>{isSpanish ? 'Expansión (ε = Ae/At):' : 'Expansion (ε = Ae/At):'} <strong className="text-foreground">{expRatio.toFixed(2)}</strong></span>
+              <span>{loc('Expansión (ε = Ae/At):', 'Expansion (ε = Ae/At):', 'Expansion (ε = Ae/At) :', 'Espansione (ε = Ae/At):')} <strong className="text-foreground">{expRatio.toFixed(2)}</strong></span>
             </div>
           </CardHeader>
 
@@ -903,7 +904,7 @@ export function SmartSearchEngine({
               <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-1.5">
                 <UiLabel className="text-xs font-bold text-foreground flex items-center gap-1.5 font-mono uppercase tracking-wider">
                   <Layers size={14} className="text-emerald-600 dark:text-emerald-400" />
-                  {isSpanish ? 'Diámetro Interior Cámara (Dc)' : 'Chamber Inner Diameter (Dc)'}
+                  {loc('Diámetro Interior Cámara (Dc)', 'Chamber Inner Diameter (Dc)')}
                 </UiLabel>
                 <div className="flex items-center gap-2">
                   <Input
@@ -918,11 +919,11 @@ export function SmartSearchEngine({
                 </div>
                 {isDcEmptyOrInvalid ? (
                   <p className="text-[10px] text-red-500 font-medium">
-                    {isSpanish ? '⚠️ Recomendación: define un diámetro válido (> 0 mm)' : '⚠️ Recommendation: define a valid diameter (> 0 mm)'}
+                    {loc('⚠️ Recomendación: define un diámetro válido (> 0 mm)', '⚠️ Recommendation: define a valid diameter (> 0 mm)')}
                   </p>
                 ) : (
                   <p className="text-[10px] text-muted-foreground">
-                    {isSpanish ? 'Diámetro interno disponible para el grano + liner' : 'Usable inner diameter for propellant & liner'}
+                    {loc('Diámetro interno disponible para el grano + liner', 'Usable inner diameter for propellant & liner')}
                   </p>
                 )}
               </div>
@@ -931,7 +932,7 @@ export function SmartSearchEngine({
               <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-1.5">
                 <UiLabel className="text-xs font-bold text-foreground flex items-center gap-1.5 font-mono uppercase tracking-wider">
                   <Layers size={14} className="text-emerald-600 dark:text-emerald-400" />
-                  {isSpanish ? 'Longitud Útil Cámara (Lc)' : 'Chamber Usable Length (Lc)'}
+                  {loc('Longitud Útil Cámara (Lc)', 'Chamber Usable Length (Lc)')}
                 </UiLabel>
                 <div className="flex items-center gap-2">
                   <Input
@@ -946,11 +947,11 @@ export function SmartSearchEngine({
                 </div>
                 {isLcEmptyOrInvalid ? (
                   <p className="text-[10px] text-red-500 font-medium">
-                    {isSpanish ? '⚠️ Recomendación: define una longitud válida (> 0 mm)' : '⚠️ Recommendation: define a valid length (> 0 mm)'}
+                    {loc('⚠️ Recomendación: define una longitud válida (> 0 mm)', '⚠️ Recommendation: define a valid length (> 0 mm)')}
                   </p>
                 ) : (
                   <p className="text-[10px] text-muted-foreground">
-                    {isSpanish ? 'Longitud entre cierres/tobera disponible para granos' : 'Usable length inside casing'}
+                    {loc('Longitud entre cierres/tobera disponible para granos', 'Usable length inside casing')}
                   </p>
                 )}
               </div>
@@ -959,7 +960,7 @@ export function SmartSearchEngine({
               <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-1.5">
                 <UiLabel className="text-xs font-bold text-foreground flex items-center gap-1.5 font-mono uppercase tracking-wider">
                   <ShieldCheck size={14} className="text-emerald-600 dark:text-emerald-400" />
-                  {isSpanish ? 'Presión Máxima Segura (Pmax)' : 'Max Safe Pressure Limit (Pmax)'}
+                  {loc('Presión Máxima Segura (Pmax)', 'Max Safe Pressure Limit (Pmax)')}
                 </UiLabel>
                 <div className="flex items-center gap-2">
                   <Input
@@ -975,11 +976,11 @@ export function SmartSearchEngine({
                 </div>
                 {isPmaxEmptyOrInvalid ? (
                   <p className="text-[10px] text-red-500 font-medium">
-                    {isSpanish ? '⚠️ Recomendación: define un límite de presión (ej: 6.0 MPa) para una simulación realista' : '⚠️ Recommendation: define a pressure limit (e.g. 6.0 MPa) for realistic simulation'}
+                    {loc('⚠️ Recomendación: define un límite de presión (ej: 6.0 MPa) para una simulación realista', '⚠️ Recommendation: define a pressure limit (e.g. 6.0 MPa) for realistic simulation')}
                   </p>
                 ) : (
                   <p className="text-[10px] text-muted-foreground">
-                    {isSpanish ? 'Límite estructural admisible para descartar sobrepresiones' : 'Maximum allowable MEOP / proof pressure threshold'}
+                    {loc('Límite estructural admisible para descartar sobrepresiones', 'Maximum allowable MEOP / proof pressure threshold')}
                   </p>
                 )}
               </div>
@@ -992,12 +993,12 @@ export function SmartSearchEngine({
               <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-3">
                 <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5 uppercase font-mono tracking-wider">
                   <Zap size={14} className="text-emerald-600 dark:text-emerald-400" />
-                  {isSpanish ? 'Tobera Fija Existente' : 'Fixed Nozzle Geometry'}
+                  {loc('Tobera Fija Existente', 'Fixed Nozzle Geometry')}
                 </h4>
                 <div className="grid grid-cols-3 gap-2.5">
                   <div className="space-y-1">
                     <UiLabel className="text-[10px] text-muted-foreground font-mono flex items-center justify-between">
-                      <span>{isSpanish ? 'Garganta (Dt) [mm]' : 'Throat (Dt) [mm]'}</span>
+                      <span>{loc('Garganta (Dt) [mm]', 'Throat (Dt) [mm]')}</span>
                       {(isDt0GeDs || isDt0GeDc) && <AlertTriangle size={12} className="text-red-500 animate-pulse" />}
                     </UiLabel>
                     <Input
@@ -1013,7 +1014,7 @@ export function SmartSearchEngine({
 
                   <div className="space-y-1">
                     <UiLabel className="text-[10px] text-muted-foreground font-mono flex items-center justify-between">
-                      <span>{isSpanish ? 'Salida (Ds) [mm]' : 'Exit (Ds) [mm]'}</span>
+                      <span>{loc('Salida (Ds) [mm]', 'Exit (Ds) [mm]')}</span>
                       {isDt0GeDs && <AlertTriangle size={12} className="text-red-500 animate-pulse" />}
                     </UiLabel>
                     <Input
@@ -1029,7 +1030,7 @@ export function SmartSearchEngine({
 
                   <div className="space-y-1">
                     <UiLabel className="text-[10px] text-muted-foreground font-mono">
-                      {isSpanish ? 'Ángulo (α) [°]' : 'Angle (α) [°]'}
+                      {loc('Ángulo (α) [°]', 'Angle (α) [°]')}
                     </UiLabel>
                     <Input
                       type="number"
@@ -1043,23 +1044,17 @@ export function SmartSearchEngine({
                 {isDt0GeDs && (
                   <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                     <AlertTriangle size={12} className="shrink-0" />
-                    {isSpanish 
-                      ? `⚠️ Dt (${Dt0Val} mm) ≥ Ds (${DsVal} mm). En toberas de Laval la garganta debe ser menor que la salida (ε > 1).` 
-                      : `⚠️ Dt (${Dt0Val} mm) ≥ Ds (${DsVal} mm). In de Laval nozzles throat must be smaller than exit (ε > 1).`}
+                    {loc(`⚠️ Dt (${Dt0Val} mm) ≥ Ds (${DsVal} mm). En toberas de Laval la garganta debe ser menor que la salida (ε > 1).`, `⚠️ Dt (${Dt0Val} mm) ≥ Ds (${DsVal} mm). In de Laval nozzles throat must be smaller than exit (ε > 1).`)}
                   </p>
                 )}
                 {isDt0GeDc && (
                   <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                     <AlertTriangle size={12} className="shrink-0" />
-                    {isSpanish 
-                      ? `⚠️ Dt (${Dt0Val} mm) ≥ Dc cámara (${DcVal} mm). La garganta no puede igualar o superar la cámara.` 
-                      : `⚠️ Dt (${Dt0Val} mm) ≥ chamber Dc (${DcVal} mm). Throat cannot equal or exceed chamber diameter.`}
+                    {loc(`⚠️ Dt (${Dt0Val} mm) ≥ Dc cámara (${DcVal} mm). La garganta no puede igualar o superar la cámara.`, `⚠️ Dt (${Dt0Val} mm) ≥ chamber Dc (${DcVal} mm). Throat cannot equal or exceed chamber diameter.`)}
                   </p>
                 )}
                 <p className="text-[10px] text-muted-foreground font-mono">
-                  {isSpanish 
-                    ? `Área de garganta At = ${AtVal.toFixed(1)} mm² | Relación de expansión ε = ${expRatio.toFixed(2)}`
-                    : `Throat area At = ${AtVal.toFixed(1)} mm² | Expansion ratio ε = ${expRatio.toFixed(2)}`}
+                  {loc(`Área de garganta At = ${AtVal.toFixed(1)} mm² | Relación de expansión ε = ${expRatio.toFixed(2)}`, `Throat area At = ${AtVal.toFixed(1)} mm² | Expansion ratio ε = ${expRatio.toFixed(2)}`)}
                 </p>
               </div>
 
@@ -1068,7 +1063,7 @@ export function SmartSearchEngine({
                 <div>
                   <h4 className="text-xs font-bold text-foreground mb-2 flex items-center gap-1.5 uppercase font-mono tracking-wider">
                     <Flame size={14} className="text-emerald-600 dark:text-emerald-400" />
-                    {isSpanish ? 'Propelente a Utilizar' : 'Selected Propellant'}
+                    {loc('Propelente a Utilizar', 'Selected Propellant')}
                   </h4>
                   <Select
                     value={propellantId.toString()}
@@ -1080,7 +1075,7 @@ export function SmartSearchEngine({
                     <SelectContent>
                       {allPropellants.map((p) => (
                         <SelectItem key={p.id} value={p.id.toString()} className="text-xs font-mono">
-                          {p.name} {p.isCustom ? (isSpanish ? '(Personalizado)' : '(Custom)') : ''}
+                          {p.name} {p.isCustom ? (loc('(Personalizado)', '(Custom)')) : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1101,14 +1096,14 @@ export function SmartSearchEngine({
             <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-3">
               <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5 uppercase font-mono tracking-wider">
                 <Sliders size={14} className="text-emerald-600 dark:text-emerald-400" />
-                {isSpanish ? 'Rendimientos y Entorno Operativo' : 'Efficiencies & Operating Environment'}
+                {loc('Rendimientos y Entorno Operativo', 'Efficiencies & Operating Environment')}
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 
                 {/* etac */}
                 <div className="space-y-1">
                   <UiLabel className="text-[10px] text-muted-foreground font-mono font-bold flex items-center justify-between">
-                    <span>{isSpanish ? 'Rendimiento Cámara (ηc*)' : 'Chamber Efficiency (ηc*)'}</span>
+                    <span>{loc('Rendimiento Cámara (ηc*)', 'Chamber Efficiency (ηc*)')}</span>
                     <span className="text-emerald-600 font-bold">{Math.round((parseFloat(inputValues.etac) || 0.85) * 100)}%</span>
                   </UiLabel>
                   <Input
@@ -1122,14 +1117,14 @@ export function SmartSearchEngine({
                     className="h-8 text-xs font-mono font-bold"
                   />
                   <p className="text-[9px] text-muted-foreground">
-                    {isSpanish ? 'Eficiencia de combustión (típico: 0.85 - 0.95)' : 'Combustion C* efficiency'}
+                    {loc('Eficiencia de combustión (típico: 0.85 - 0.95)', 'Combustion C* efficiency')}
                   </p>
                 </div>
 
                 {/* etanoz */}
                 <div className="space-y-1">
                   <UiLabel className="text-[10px] text-muted-foreground font-mono font-bold flex items-center justify-between">
-                    <span>{isSpanish ? 'Rendimiento Tobera (ηnoz)' : 'Nozzle Efficiency (ηnoz)'}</span>
+                    <span>{loc('Rendimiento Tobera (ηnoz)', 'Nozzle Efficiency (ηnoz)')}</span>
                     <span className="text-emerald-600 font-bold">{Math.round((parseFloat(inputValues.etanoz) || 0.75) * 100)}%</span>
                   </UiLabel>
                   <Input
@@ -1143,14 +1138,14 @@ export function SmartSearchEngine({
                     className="h-8 text-xs font-mono font-bold"
                   />
                   <p className="text-[9px] text-muted-foreground">
-                    {isSpanish ? 'Eficiencia de tobera / expansión (típico: 0.70 - 0.90)' : 'Nozzle thrust efficiency'}
+                    {loc('Eficiencia de tobera / expansión (típico: 0.70 - 0.90)', 'Nozzle thrust efficiency')}
                   </p>
                 </div>
 
                 {/* Pamb */}
                 <div className="space-y-1">
                   <UiLabel className="text-[10px] text-muted-foreground font-mono font-bold">
-                    {isSpanish ? 'Presión Ambiente (Pamb) [MPa]' : 'Ambient Pressure (Pamb) [MPa]'}
+                    {loc('Presión Ambiente (Pamb) [MPa]', 'Ambient Pressure (Pamb) [MPa]')}
                   </UiLabel>
                   <Input
                     type="number"
@@ -1161,7 +1156,7 @@ export function SmartSearchEngine({
                     className="h-8 text-xs font-mono font-bold"
                   />
                   <p className="text-[9px] text-muted-foreground">
-                    {isSpanish ? 'Nivel del mar: 0.101325 MPa (1 atm)' : 'Sea level pressure: 0.101325 MPa'}
+                    {loc('Nivel del mar: 0.101325 MPa (1 atm)', 'Sea level pressure: 0.101325 MPa')}
                   </p>
                 </div>
 
@@ -1176,13 +1171,13 @@ export function SmartSearchEngine({
                 className="h-10 px-5 text-xs font-bold flex items-center gap-2 cursor-pointer"
               >
                 <ArrowLeft size={16} />
-                {isSpanish ? 'Volver a Bandeja de Objetivos' : 'Back to Goal Inbox'}
+                {loc('Volver a Bandeja de Objetivos', 'Back to Goal Inbox')}
               </Button>
               <Button
                 onClick={() => setActiveStep(2)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 flex items-center gap-2 shadow-xs cursor-pointer"
               >
-                {isSpanish ? 'Continuar a Fase 2: Granos' : 'Continue to Phase 2: Grains'}
+                {loc('Continuar a Fase 2: Granos', 'Continue to Phase 2: Grains')}
                 <ArrowRight size={16} />
               </Button>
             </div>
@@ -1198,14 +1193,14 @@ export function SmartSearchEngine({
             <div>
               <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
                 <Sliders size={16} />
-                {isSpanish ? 'Fase 2: Geometría y Restricción de Granos' : 'Phase 2: Grain Geometry & Constraints'}
+                {loc('Fase 2: Geometría y Restricción de Granos', 'Phase 2: Grain Geometry & Constraints')}
               </CardTitle>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {isSpanish ? 'Elige la forma del grano, caras activas de combustión y bloquea o libera dimensiones' : 'Select grain shape, active burn surfaces, and lock/unlock dimensions'}
+                {loc('Elige la forma del grano, caras activas de combustión y bloquea o libera dimensiones', 'Select grain shape, active burn surfaces, and lock/unlock dimensions')}
               </p>
             </div>
             <div className="text-[11px] font-mono text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg border border-border">
-              <span>{isSpanish ? 'Cámara:' : 'Chamber:'} <strong className="text-foreground">Dc={DcVal}mm, Lc={LcVal}mm</strong></span>
+              <span>{loc('Cámara:', 'Chamber:')} <strong className="text-foreground">Dc={DcVal}mm, Lc={LcVal}mm</strong></span>
             </div>
           </CardHeader>
 
@@ -1217,7 +1212,7 @@ export function SmartSearchEngine({
               {/* Shape Selector */}
               <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2">
                 <UiLabel className="text-xs font-bold text-foreground block font-mono uppercase tracking-wider">
-                  {isSpanish ? 'Geometría Base del Grano' : 'Base Grain Geometry'}
+                  {loc('Geometría Base del Grano', 'Base Grain Geometry')}
                 </UiLabel>
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -1238,7 +1233,7 @@ export function SmartSearchEngine({
                         : 'border-border hover:bg-muted text-muted-foreground'
                     }`}
                   >
-                    <span className="text-xs">{isSpanish ? 'Estrella (Star Core)' : 'Star Core'}</span>
+                    <span className="text-xs">{loc('Estrella (Star Core)', 'Star Core')}</span>
                   </button>
                   <button
                     onClick={() => setShape(3)}
@@ -1248,7 +1243,7 @@ export function SmartSearchEngine({
                         : 'border-border hover:bg-muted text-muted-foreground'
                     }`}
                   >
-                    <span className="text-xs">{isSpanish ? 'Macizo (End-burner)' : 'Solid (End-burner)'}</span>
+                    <span className="text-xs">{loc('Macizo (End-burner)', 'Solid (End-burner)')}</span>
                   </button>
                 </div>
               </div>
@@ -1256,7 +1251,7 @@ export function SmartSearchEngine({
               {/* Segment Count (N) */}
               <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2">
                 <UiLabel className="text-xs font-bold text-foreground block font-mono uppercase tracking-wider">
-                  {isSpanish ? 'Número de Segmentos (Granos)' : 'Number of Grain Segments'}
+                  {loc('Número de Segmentos (Granos)', 'Number of Grain Segments')}
                 </UiLabel>
                 <div className="grid grid-cols-2 gap-2">
                   <label className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${
@@ -1270,7 +1265,7 @@ export function SmartSearchEngine({
                       className="text-emerald-600"
                     />
                     <span className="text-xs font-bold text-foreground">
-                      {isSpanish ? 'Rango (1 a N)' : 'Range (1 to N)'}
+                      {loc('Rango (1 a N)', 'Range (1 to N)')}
                     </span>
                   </label>
                   <label className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${
@@ -1284,14 +1279,14 @@ export function SmartSearchEngine({
                       className="text-emerald-600"
                     />
                     <span className="text-xs font-bold text-foreground">
-                      {isSpanish ? 'Cantidad Fija' : 'Fixed Count'}
+                      {loc('Cantidad Fija', 'Fixed Count')}
                     </span>
                   </label>
                 </div>
 
                 {grainCountMode === 'range' ? (
                   <div className="flex items-center gap-2 pt-1">
-                    <span className="text-xs text-muted-foreground">{isSpanish ? 'Explorar desde 1 hasta máximo:' : 'Explore from 1 up to:'}</span>
+                    <span className="text-xs text-muted-foreground">{loc('Explorar desde 1 hasta máximo:', 'Explore from 1 up to:')}</span>
                     <Input
                       type="number"
                       min="1"
@@ -1302,11 +1297,11 @@ export function SmartSearchEngine({
                       placeholder="5"
                       className={`w-20 h-7 text-xs font-mono font-bold ${isGrainCountEmptyOrInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
                     />
-                    <span className="text-xs text-muted-foreground">{isSpanish ? 'granos' : 'grains'}</span>
+                    <span className="text-xs text-muted-foreground">{loc('granos', 'grains')}</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 pt-1">
-                    <span className="text-xs text-muted-foreground">{isSpanish ? 'Cantidad exacta de granos:' : 'Exact grain count:'}</span>
+                    <span className="text-xs text-muted-foreground">{loc('Cantidad exacta de granos:', 'Exact grain count:')}</span>
                     <Input
                       type="number"
                       min="1"
@@ -1317,7 +1312,7 @@ export function SmartSearchEngine({
                       placeholder="3"
                       className={`w-20 h-7 text-xs font-mono font-bold ${isGrainCountEmptyOrInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
                     />
-                    <span className="text-xs text-muted-foreground">{isSpanish ? 'granos' : 'grains'}</span>
+                    <span className="text-xs text-muted-foreground">{loc('granos', 'grains')}</span>
                   </div>
                 )}
               </div>
@@ -1327,10 +1322,10 @@ export function SmartSearchEngine({
             <div className="space-y-3 pt-2 border-t border-border">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
-                  {isSpanish ? 'Restricciones y Dimensiones de Grano' : 'Grain Dimension Constraints'}
+                  {loc('Restricciones y Dimensiones de Grano', 'Grain Dimension Constraints')}
                 </span>
                 <span className="text-[11px] text-muted-foreground flex items-center gap-2 font-mono">
-                  <span>{isSpanish ? 'Elige si fijar un valor, definir un rango o dejar libre al optimizador' : 'Choose fixed value, range, or free optimization'}</span>
+                  <span>{loc('Elige si fijar un valor, definir un rango o dejar libre al optimizador', 'Choose fixed value, range, or free optimization')}</span>
                 </span>
               </div>
 
@@ -1341,10 +1336,10 @@ export function SmartSearchEngine({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-xs font-bold text-foreground">
-                        {isSpanish ? 'Diámetro Exterior (D0)' : 'Outer Diameter (D0)'}
+                        {loc('Diámetro Exterior (D0)', 'Outer Diameter (D0)')}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
-                        {isSpanish ? `Cámara Dc = ${DcVal} mm` : `Chamber Dc = ${DcVal} mm`}
+                        {loc(`Cámara Dc = ${DcVal} mm`, `Chamber Dc = ${DcVal} mm`)}
                       </div>
                     </div>
                   </div>
@@ -1360,7 +1355,7 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Libre' : 'Free'}
+                      {loc('Libre', 'Free')}
                     </button>
                     <button
                       type="button"
@@ -1371,7 +1366,7 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Fijo' : 'Fixed'}
+                      {loc('Fijo', 'Fixed')}
                     </button>
                     <button
                       type="button"
@@ -1382,14 +1377,14 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Rango' : 'Range'}
+                      {loc('Rango', 'Range')}
                     </button>
                   </div>
 
                   {/* Controls based on mode */}
                   {modeD0 === 'free' && (
                     <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center">
-                      {isSpanish ? 'Auto: Holgura óptima (Dc - 1 a 2.5 mm)' : 'Auto: Optimal casing clearance'}
+                      {loc('Auto: Holgura óptima (Dc - 1 a 2.5 mm)', 'Auto: Optimal casing clearance')}
                     </div>
                   )}
 
@@ -1409,14 +1404,12 @@ export function SmartSearchEngine({
                         {isD0GeDc && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
                       </div>
                       {isD0EmptyOrInvalid && (
-                        <p className="text-[10px] text-red-500 font-medium">{isSpanish ? '⚠️ Introduce D0' : '⚠️ Enter D0'}</p>
+                        <p className="text-[10px] text-red-500 font-medium">{loc('⚠️ Introduce D0', '⚠️ Enter D0')}</p>
                       )}
                       {isD0GeDc && (
                         <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                           <AlertTriangle size={12} className="shrink-0" />
-                          {isSpanish 
-                            ? `⚠️ D0 (${valD0Num} mm) ≥ Dc cámara (${DcVal} mm). El grano debe ser menor que la cámara.` 
-                            : `⚠️ D0 (${valD0Num} mm) ≥ chamber Dc (${DcVal} mm). Grain must fit inside casing.`}
+                          {loc(`⚠️ D0 (${valD0Num} mm) ≥ Dc cámara (${DcVal} mm). El grano debe ser menor que la cámara.`, `⚠️ D0 (${valD0Num} mm) ≥ chamber Dc (${DcVal} mm). Grain must fit inside casing.`)}
                         </p>
                       )}
                     </div>
@@ -1451,17 +1444,13 @@ export function SmartSearchEngine({
                       {isMaxD0GeDc && (
                         <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                           <AlertTriangle size={12} className="shrink-0" />
-                          {isSpanish 
-                            ? `⚠️ Máx D0 (${maxD0Num} mm) ≥ Dc (${DcVal} mm).` 
-                            : `⚠️ Max D0 (${maxD0Num} mm) ≥ Chamber Dc (${DcVal} mm).`}
+                          {loc(`⚠️ Máx D0 (${maxD0Num} mm) ≥ Dc (${DcVal} mm).`, `⚠️ Max D0 (${maxD0Num} mm) ≥ Chamber Dc (${DcVal} mm).`)}
                         </p>
                       )}
                       {isD0RangeInverted && (
                         <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                           <AlertTriangle size={12} className="shrink-0" />
-                          {isSpanish 
-                            ? `⚠️ Mín D0 (${minD0Num} mm) ≥ Máx D0 (${maxD0Num} mm). Rango invertido.` 
-                            : `⚠️ Min D0 (${minD0Num} mm) ≥ Max D0 (${maxD0Num} mm). Inverted range.`}
+                          {loc(`⚠️ Mín D0 (${minD0Num} mm) ≥ Máx D0 (${maxD0Num} mm). Rango invertido.`, `⚠️ Min D0 (${minD0Num} mm) ≥ Max D0 (${maxD0Num} mm). Inverted range.`)}
                         </p>
                       )}
                     </div>
@@ -1474,10 +1463,10 @@ export function SmartSearchEngine({
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs font-bold text-foreground">
-                          {isSpanish ? 'Diámetro Núcleo (d0)' : 'Core Diameter (d0)'}
+                          {loc('Diámetro Núcleo (d0)', 'Core Diameter (d0)')}
                         </div>
                         <div className="text-[10px] text-muted-foreground">
-                          {isSpanish ? 'Canal central de gas' : 'Central combustion port'}
+                          {loc('Canal central de gas', 'Central combustion port')}
                         </div>
                       </div>
                     </div>
@@ -1493,7 +1482,7 @@ export function SmartSearchEngine({
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        {isSpanish ? 'Libre' : 'Free'}
+                        {loc('Libre', 'Free')}
                       </button>
                       <button
                         type="button"
@@ -1504,7 +1493,7 @@ export function SmartSearchEngine({
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        {isSpanish ? 'Fijo' : 'Fixed'}
+                        {loc('Fijo', 'Fixed')}
                       </button>
                       <button
                         type="button"
@@ -1515,14 +1504,14 @@ export function SmartSearchEngine({
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        {isSpanish ? 'Rango' : 'Range'}
+                        {loc('Rango', 'Range')}
                       </button>
                     </div>
 
                     {/* Controls based on mode */}
                     {moded0 === 'free' && (
                       <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center">
-                        {isSpanish ? 'Auto: Búsqueda del ratio Kn y empuje óptimo' : 'Auto: Sweep optimal Kn and thrust'}
+                        {loc('Auto: Búsqueda del ratio Kn y empuje óptimo', 'Auto: Sweep optimal Kn and thrust')}
                       </div>
                     )}
 
@@ -1542,14 +1531,12 @@ export function SmartSearchEngine({
                           {isd0GeD0 && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
                         </div>
                         {isd0EmptyOrInvalid && (
-                          <p className="text-[10px] text-red-500 font-medium">{isSpanish ? '⚠️ Introduce d0' : '⚠️ Enter d0'}</p>
+                          <p className="text-[10px] text-red-500 font-medium">{loc('⚠️ Introduce d0', '⚠️ Enter d0')}</p>
                         )}
                         {isd0GeD0 && (
                           <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                             <AlertTriangle size={12} className="shrink-0" />
-                            {isSpanish 
-                              ? `⚠️ d0 (${vald0Num} mm) ≥ D0 (${effectiveOuterD} mm). Espesor de quemado (web) nulo.` 
-                              : `⚠️ d0 (${vald0Num} mm) ≥ D0 (${effectiveOuterD} mm). Zero web thickness.`}
+                            {loc(`⚠️ d0 (${vald0Num} mm) ≥ D0 (${effectiveOuterD} mm). Espesor de quemado (web) nulo.`, `⚠️ d0 (${vald0Num} mm) ≥ D0 (${effectiveOuterD} mm). Zero web thickness.`)}
                           </p>
                         )}
                       </div>
@@ -1584,17 +1571,13 @@ export function SmartSearchEngine({
                         {isd0RangeInverted && (
                           <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                             <AlertTriangle size={12} className="shrink-0" />
-                            {isSpanish 
-                              ? `⚠️ Mín d0 (${mind0Num} mm) ≥ Máx d0 (${maxd0Num} mm). Rango invertido.` 
-                              : `⚠️ Min d0 (${mind0Num} mm) ≥ Max d0 (${maxd0Num} mm). Inverted range.`}
+                            {loc(`⚠️ Mín d0 (${mind0Num} mm) ≥ Máx d0 (${maxd0Num} mm). Rango invertido.`, `⚠️ Min d0 (${mind0Num} mm) ≥ Max d0 (${maxd0Num} mm). Inverted range.`)}
                           </p>
                         )}
                         {isMind0GeD0 && (
                           <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                             <AlertTriangle size={12} className="shrink-0" />
-                            {isSpanish 
-                              ? `⚠️ Mín d0 (${mind0Num} mm) ≥ D0 (${effectiveOuterD} mm).` 
-                              : `⚠️ Min d0 (${mind0Num} mm) ≥ D0 (${effectiveOuterD} mm).`}
+                            {loc(`⚠️ Mín d0 (${mind0Num} mm) ≥ D0 (${effectiveOuterD} mm).`, `⚠️ Min d0 (${mind0Num} mm) ≥ D0 (${effectiveOuterD} mm).`)}
                           </p>
                         )}
                       </div>
@@ -1602,7 +1585,7 @@ export function SmartSearchEngine({
                   </div>
                 ) : (
                   <div className="p-3.5 rounded-xl border border-border bg-muted/10 flex flex-col items-center justify-center text-xs text-muted-foreground font-mono text-center">
-                    <span>{isSpanish ? 'Grano macizo (Solid):' : 'Solid grain configuration:'}</span>
+                    <span>{loc('Grano macizo (Solid):', 'Solid grain configuration:')}</span>
                     <strong className="text-foreground mt-1">d0 = 0 mm</strong>
                   </div>
                 )}
@@ -1612,10 +1595,10 @@ export function SmartSearchEngine({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-xs font-bold text-foreground">
-                        {isSpanish ? 'Longitud de Grano (L0)' : 'Grain Length (L0)'}
+                        {loc('Longitud de Grano (L0)', 'Grain Length (L0)')}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
-                        {isSpanish ? `Cámara Lc = ${LcVal} mm` : `Chamber Lc = ${LcVal} mm`}
+                        {loc(`Cámara Lc = ${LcVal} mm`, `Chamber Lc = ${LcVal} mm`)}
                       </div>
                     </div>
                   </div>
@@ -1631,7 +1614,7 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Libre' : 'Free'}
+                      {loc('Libre', 'Free')}
                     </button>
                     <button
                       type="button"
@@ -1642,7 +1625,7 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Fija' : 'Fixed'}
+                      {loc('Fija', 'Fixed')}
                     </button>
                     <button
                       type="button"
@@ -1653,14 +1636,14 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Rango' : 'Range'}
+                      {loc('Rango', 'Range')}
                     </button>
                   </div>
 
                   {/* Controls based on mode */}
                   {modeL0 === 'free' && (
                     <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center">
-                      {isSpanish ? 'Auto: Ajuste a longitud de cámara Lc' : 'Auto: Fit to chamber length Lc'}
+                      {loc('Auto: Ajuste a longitud de cámara Lc', 'Auto: Fit to chamber length Lc')}
                     </div>
                   )}
 
@@ -1680,14 +1663,12 @@ export function SmartSearchEngine({
                         {isL0ExceedsLc && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
                       </div>
                       {isL0EmptyOrInvalid && (
-                        <p className="text-[10px] text-red-500 font-medium">{isSpanish ? '⚠️ Introduce L0' : '⚠️ Enter L0'}</p>
+                        <p className="text-[10px] text-red-500 font-medium">{loc('⚠️ Introduce L0', '⚠️ Enter L0')}</p>
                       )}
                       {isL0ExceedsLc && (
                         <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                           <AlertTriangle size={12} className="shrink-0" />
-                          {isSpanish 
-                            ? `⚠️ N×L0 (${fixedNNum} × ${valL0Num} = ${(fixedNNum * valL0Num).toFixed(1)} mm) supera Lc (${LcVal} mm).` 
-                            : `⚠️ N×L0 (${fixedNNum} × ${valL0Num} = ${(fixedNNum * valL0Num).toFixed(1)} mm) exceeds Lc (${LcVal} mm).`}
+                          {loc(`⚠️ N×L0 (${fixedNNum} × ${valL0Num} = ${(fixedNNum * valL0Num).toFixed(1)} mm) supera Lc (${LcVal} mm).`, `⚠️ N×L0 (${fixedNNum} × ${valL0Num} = ${(fixedNNum * valL0Num).toFixed(1)} mm) exceeds Lc (${LcVal} mm).`)}
                         </p>
                       )}
                     </div>
@@ -1722,9 +1703,7 @@ export function SmartSearchEngine({
                       {isL0RangeInverted && (
                         <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
                           <AlertTriangle size={12} className="shrink-0" />
-                          {isSpanish 
-                            ? `⚠️ Mín L0 (${minL0Num} mm) ≥ Máx L0 (${maxL0Num} mm). Rango invertido.` 
-                            : `⚠️ Min L0 (${minL0Num} mm) ≥ Max L0 (${maxL0Num} mm). Inverted range.`}
+                          {loc(`⚠️ Mín L0 (${minL0Num} mm) ≥ Máx L0 (${maxL0Num} mm). Rango invertido.`, `⚠️ Min L0 (${minL0Num} mm) ≥ Max L0 (${maxL0Num} mm). Inverted range.`)}
                         </p>
                       )}
                     </div>
@@ -1738,10 +1717,10 @@ export function SmartSearchEngine({
             <div className="space-y-2 pt-2 border-t border-border">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
-                  {isSpanish ? 'Superficies de Quemado e Inhibición' : 'Burn Surfaces & Inhibitions'}
+                  {loc('Superficies de Quemado e Inhibición', 'Burn Surfaces & Inhibitions')}
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  {isSpanish ? 'Seleccionado = Quema activa (Rojo) | Deseleccionado = Inhibido (Negro)' : 'Selected = Burns (Red) | Deselected = Inhibited (Black)'}
+                  {loc('Seleccionado = Quema activa (Rojo) | Deseleccionado = Inhibido (Negro)', 'Selected = Burns (Red) | Deselected = Inhibited (Black)')}
                 </span>
               </div>
 
@@ -1765,12 +1744,12 @@ export function SmartSearchEngine({
                     </div>
                     <span className="text-xs font-bold font-mono">
                       {outerBurns 
-                        ? (isSpanish ? 'Cara Exterior: Quema' : 'Outer Surface: Burns') 
-                        : (isSpanish ? 'Cara Exterior: Inhibida' : 'Outer Surface: Inhibited')}
+                        ? (loc('Cara Exterior: Quema', 'Outer Surface: Burns')) 
+                        : (loc('Cara Exterior: Inhibida', 'Outer Surface: Inhibited'))}
                     </span>
                   </div>
                   <span className="text-[10px] font-mono font-bold">
-                    {outerBurns ? (isSpanish ? '🔥 Quema (Rojo)' : '🔥 Burns (Red)') : (isSpanish ? '🛡️ Inhibida (Negro)' : '🛡️ Inhibited (Black)')}
+                    {outerBurns ? (loc('🔥 Quema (Rojo)', '🔥 Burns (Red)')) : (loc('🛡️ Inhibida (Negro)', '🛡️ Inhibited (Black)'))}
                   </span>
                 </button>
 
@@ -1792,12 +1771,12 @@ export function SmartSearchEngine({
                     </div>
                     <span className="text-xs font-bold font-mono">
                       {coreBurns 
-                        ? (isSpanish ? 'Núcleo: Quema' : 'Core: Burns') 
-                        : (isSpanish ? 'Núcleo: Inhibido' : 'Core: Inhibited')}
+                        ? (loc('Núcleo: Quema', 'Core: Burns')) 
+                        : (loc('Núcleo: Inhibido', 'Core: Inhibited'))}
                     </span>
                   </div>
                   <span className="text-[10px] font-mono font-bold">
-                    {coreBurns ? (isSpanish ? '🔥 Quema (Rojo)' : '🔥 Burns (Red)') : (isSpanish ? '🛡️ Inhibido (Negro)' : '🛡️ Inhibited (Black)')}
+                    {coreBurns ? (loc('🔥 Quema (Rojo)', '🔥 Burns (Red)')) : (loc('🛡️ Inhibido (Negro)', '🛡️ Inhibited (Black)'))}
                   </span>
                 </button>
 
@@ -1819,12 +1798,12 @@ export function SmartSearchEngine({
                     </div>
                     <span className="text-xs font-bold font-mono">
                       {endsBurn 
-                        ? (isSpanish ? 'Extremos: Queman' : 'Ends: Burn') 
-                        : (isSpanish ? 'Extremos: Inhibidos' : 'Ends: Inhibited')}
+                        ? (loc('Extremos: Queman', 'Ends: Burn')) 
+                        : (loc('Extremos: Inhibidos', 'Ends: Inhibited'))}
                     </span>
                   </div>
                   <span className="text-[10px] font-mono font-bold">
-                    {endsBurn ? (isSpanish ? '🔥 Queman (Rojo)' : '🔥 Burn (Red)') : (isSpanish ? '🛡️ Inhibidos (Negro)' : '🛡️ Inhibited (Black)')}
+                    {endsBurn ? (loc('🔥 Queman (Rojo)', '🔥 Burn (Red)')) : (loc('🛡️ Inhibidos (Negro)', '🛡️ Inhibited (Black)'))}
                   </span>
                 </button>
 
@@ -1836,10 +1815,10 @@ export function SmartSearchEngine({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-1.5">
                   <Flame size={14} className="text-emerald-600 dark:text-emerald-400" />
-                  {isSpanish ? 'Restricción de Masa Total de Propelente (Mprop)' : 'Total Propellant Mass Constraint (Mprop)'}
+                  {loc('Restricción de Masa Total de Propelente (Mprop)', 'Total Propellant Mass Constraint (Mprop)')}
                 </span>
                 <span className="text-[11px] text-muted-foreground font-mono">
-                  {isSpanish ? 'Fija o limita la masa total de todos los granos sumados' : 'Fix or bound total grain propellant mass'}
+                  {loc('Fija o limita la masa total de todos los granos sumados', 'Fix or bound total grain propellant mass')}
                 </span>
               </div>
 
@@ -1857,7 +1836,7 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Libre' : 'Free'}
+                      {loc('Libre', 'Free')}
                     </button>
                     <button
                       type="button"
@@ -1868,7 +1847,7 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Fijar Masa' : 'Fixed Mass'}
+                      {loc('Fijar Masa', 'Fixed Mass')}
                     </button>
                     <button
                       type="button"
@@ -1879,7 +1858,7 @@ export function SmartSearchEngine({
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {isSpanish ? 'Rango' : 'Range'}
+                      {loc('Rango', 'Range')}
                     </button>
                   </div>
 
@@ -1887,16 +1866,14 @@ export function SmartSearchEngine({
                   <div className="md:col-span-2">
                     {modeMprop === 'free' && (
                       <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2.5 rounded-lg text-center">
-                        {isSpanish 
-                          ? 'Auto: El optimizador calculará la masa máxima admisible según el volumen útil de la cámara' 
-                          : 'Auto: Optimizer finds optimal mass filling available chamber volume'}
+                        {loc('Auto: El optimizador calculará la masa máxima admisible según el volumen útil de la cámara', 'Auto: Optimizer finds optimal mass filling available chamber volume')}
                       </div>
                     )}
 
                     {modeMprop === 'fixed' && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-                          {isSpanish ? 'Masa total exacta objetivo:' : 'Exact target total mass:'}
+                          {loc('Masa total exacta objetivo:', 'Exact target total mass:')}
                         </span>
                         <Input
                           type="number"
@@ -1951,13 +1928,13 @@ export function SmartSearchEngine({
                 className="h-10 px-5 text-xs font-bold flex items-center gap-2 cursor-pointer"
               >
                 <ArrowLeft size={16} />
-                {isSpanish ? 'Atrás (Fase 1)' : 'Back (Phase 1)'}
+                {loc('Atrás (Fase 1)', 'Back (Phase 1)')}
               </Button>
               <Button
                 onClick={() => setActiveStep(3)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 flex items-center gap-2 shadow-xs cursor-pointer"
               >
-                {isSpanish ? 'Continuar a Fase 3: Algoritmos' : 'Continue to Phase 3: Algorithms'}
+                {loc('Continuar a Fase 3: Algoritmos', 'Continue to Phase 3: Algorithms')}
                 <ArrowRight size={16} />
               </Button>
             </div>
@@ -1973,14 +1950,14 @@ export function SmartSearchEngine({
             <div>
               <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
                 <Cpu size={16} />
-                {isSpanish ? 'Fase 3: Algoritmos y Lanzamiento del Optimizador' : 'Phase 3: Algorithms & Optimizer Execution'}
+                {loc('Fase 3: Algoritmos y Lanzamiento del Optimizador', 'Phase 3: Algorithms & Optimizer Execution')}
               </CardTitle>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {isSpanish ? 'Configura el presupuesto de simulación y lanza la optimización balística global' : 'Configure simulation budget and launch global ballistic optimization'}
+                {loc('Configura el presupuesto de simulación y lanza la optimización balística global', 'Configure simulation budget and launch global ballistic optimization')}
               </p>
             </div>
             <div className="text-[11px] font-mono text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg border border-border">
-              <span>{isSpanish ? 'Hardware:' : 'Hardware:'} <strong className="text-foreground">{DcVal}x{LcVal} mm, Dt={Dt0Val} mm</strong></span>
+              <span>{loc('Hardware:', 'Hardware:')} <strong className="text-foreground">{DcVal}x{LcVal} mm, Dt={Dt0Val} mm</strong></span>
             </div>
           </CardHeader>
 
@@ -1995,19 +1972,17 @@ export function SmartSearchEngine({
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 font-mono">
-                      {isSpanish ? 'Objetivo Activo de Misión' : 'Active Mission Objective'}
+                      {loc('Objetivo Activo de Misión', 'Active Mission Objective')}
                     </span>
                     <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">
-                      {isSpanish ? 'Fijado en Bandeja' : 'Set in Inbox'}
+                      {loc('Fijado en Bandeja', 'Set in Inbox')}
                     </span>
                   </div>
                   <h3 className="text-sm font-bold text-foreground mt-0.5 font-mono">
-                    {isSpanish ? 'Máxima Altitud / Mayor Impulso Total Real (It)' : 'Maximum Altitude / Peak Total Real Impulse (It)'}
+                    {loc('Máxima Altitud / Mayor Impulso Total Real (It)', 'Maximum Altitude / Peak Total Real Impulse (It)')}
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
-                    {isSpanish 
-                      ? 'Maximización matemática estricta de It = ∫ F dt garantizando Pmax ≤ P_límite con reglas de Deb sin funciones de penalización arbitrarias.' 
-                      : 'Strict mathematical maximization of It = ∫ F dt guaranteeing Pmax ≤ P_limit with Deb rules without arbitrary penalty weights.'}
+                    {loc('Maximización matemática estricta de It = ∫ F dt garantizando Pmax ≤ P_límite con reglas de Deb sin funciones de penalización arbitrarias.', 'Strict mathematical maximization of It = ∫ F dt guaranteeing Pmax ≤ P_limit with Deb rules without arbitrary penalty weights.')}
                   </p>
                 </div>
               </div>
@@ -2019,7 +1994,7 @@ export function SmartSearchEngine({
                 className="h-8 text-xs font-mono border-emerald-500/40 hover:bg-emerald-500/20 shrink-0 cursor-pointer"
               >
                 <ArrowLeft size={13} className="mr-1" />
-                {isSpanish ? 'Cambiar Objetivo' : 'Change Objective'}
+                {loc('Cambiar Objetivo', 'Change Objective')}
               </Button>
             </div>
 
@@ -2033,22 +2008,20 @@ export function SmartSearchEngine({
                     </div>
                     <div>
                       <h4 className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-2">
-                        <span>{isSpanish ? 'Motor Unificado: Differential Evolution (DE/rand/1/bin)' : 'Unified Engine: Differential Evolution (DE/rand/1/bin)'}</span>
+                        <span>{loc('Motor Unificado: Differential Evolution (DE/rand/1/bin)', 'Unified Engine: Differential Evolution (DE/rand/1/bin)')}</span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-bold">
-                          {isSpanish ? 'Canónico' : 'Canonical'}
+                          {loc('Canónico', 'Canonical')}
                         </span>
                       </h4>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {isSpanish
-                          ? 'Optimización estocástica global sin derivadas con muestreo Latino Hipercúbico (LHS), dither adaptativo y selección estricta de factibilidad de Deb.'
-                          : 'Derivative-free global stochastic optimizer with Latin Hypercube Sampling (LHS), adaptive dithering, and Deb feasibility selection.'}
+                        {loc('Optimización estocástica global sin derivadas con muestreo Latino Hipercúbico (LHS), dither adaptativo y selección estricta de factibilidad de Deb.', 'Derivative-free global stochastic optimizer with Latin Hypercube Sampling (LHS), adaptive dithering, and Deb feasibility selection.')}
                       </p>
                     </div>
                   </div>
 
                   <div className="text-right shrink-0">
                     <span className="text-[10px] font-mono px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-semibold">
-                      {isSpanish ? 'Objetivo: Max It (Impulso Total)' : 'Objective: Max It (Total Impulse)'}
+                      {loc('Objetivo: Max It (Impulso Total)', 'Objective: Max It (Total Impulse)')}
                     </span>
                   </div>
                 </div>
@@ -2056,24 +2029,24 @@ export function SmartSearchEngine({
                 {/* 4 Architectural Spec Badges */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-emerald-500/20 text-[11px] font-mono">
                   <div className="p-2 rounded-lg bg-card border border-border/60">
-                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{isSpanish ? 'Estrategia' : 'Strategy'}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Estrategia', 'Strategy')}</div>
                     <div className="font-bold text-foreground mt-0.5">DE/rand/1/bin (LHS)</div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
-                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{isSpanish ? 'Variables Activas' : 'Active Variables'}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Variables Activas', 'Active Variables')}</div>
                     <div className="font-bold text-foreground mt-0.5">
                       {modeD0 !== 'fixed' ? 'D0 ' : ''}{moded0 !== 'fixed' && shape !== 3 ? 'd0 ' : ''}{modeL0 !== 'fixed' ? 'L0' : ''}
-                      {modeD0 === 'fixed' && (moded0 === 'fixed' || shape === 3) && modeL0 === 'fixed' ? (isSpanish ? 'Ninguna (Fijadas)' : 'None (Fixed)') : ''}
+                      {modeD0 === 'fixed' && (moded0 === 'fixed' || shape === 3) && modeL0 === 'fixed' ? (loc('Ninguna (Fijadas)', 'None (Fixed)')) : ''}
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
-                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{isSpanish ? 'Modo de Granos' : 'Grain Mode'}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Modo de Granos', 'Grain Mode')}</div>
                     <div className="font-bold text-foreground mt-0.5">
                       {grainCountMode === 'range' ? `Auto (N = 1 .. ${inputValues.maxGrainCount || 5})` : `Fijo (N = ${inputValues.fixedGrainCount || 3})`}
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
-                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{isSpanish ? 'Restricción Pmax' : 'Pmax Constraint'}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Restricción Pmax', 'Pmax Constraint')}</div>
                     <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">≤ {inputValues.Pmax_lim || '6.0'} MPa (Deb)</div>
                   </div>
                 </div>
@@ -2084,10 +2057,10 @@ export function SmartSearchEngine({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-1.5">
                     <SlidersHorizontal size={14} className="text-emerald-600 dark:text-emerald-400" />
-                    {isSpanish ? 'Presupuesto de Simulaciones por Valor de N' : 'Simulation Budget per Grain Count N'}
+                    {loc('Presupuesto de Simulaciones por Valor de N', 'Simulation Budget per Grain Count N')}
                   </span>
                   <span className="text-[11px] text-muted-foreground font-mono">
-                    {isSpanish ? 'Configura la profundidad de la búsqueda global' : 'Configure global search evaluation depth'}
+                    {loc('Configura la profundidad de la búsqueda global', 'Configure global search evaluation depth')}
                   </span>
                 </div>
 
@@ -2108,18 +2081,18 @@ export function SmartSearchEngine({
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                           <Zap size={14} className="text-amber-500" />
-                          {isSpanish ? 'Búsqueda Rápida' : 'Fast Search'}
+                          {loc('Búsqueda Rápida', 'Fast Search')}
                         </span>
                         {budgetPreset === 'fast' && evaluationsPerN === 500 && (
                           <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
                         )}
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        {isSpanish ? '500 simulaciones / N. Exploración ágil para dimensionado preliminar.' : '500 simulations / N. Fast exploration for preliminary sizing.'}
+                        {loc('500 simulaciones / N. Exploración ágil para dimensionado preliminar.', '500 simulations / N. Fast exploration for preliminary sizing.')}
                       </p>
                     </div>
                     <div className="mt-2 pt-1.5 border-t border-border/40 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      ⚡ ~1 - 2s {isSpanish ? 'por grano' : 'per grain'}
+                      ⚡ ~1 - 2s {loc('por grano', 'per grain')}
                     </div>
                   </div>
 
@@ -2139,18 +2112,18 @@ export function SmartSearchEngine({
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                           <Sparkles size={14} className="text-emerald-500" />
-                          {isSpanish ? 'Estándar (Recomendado)' : 'Standard (Recommended)'}
+                          {loc('Estándar (Recomendado)', 'Standard (Recommended)')}
                         </span>
                         {budgetPreset === 'standard' && evaluationsPerN === 1000 && (
                           <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
                         )}
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        {isSpanish ? '1.000 simulaciones / N. Convergencia balística sólida de alta fidelidad.' : '1,000 simulations / N. Robust high-fidelity ballistic convergence.'}
+                        {loc('1.000 simulaciones / N. Convergencia balística sólida de alta fidelidad.', '1,000 simulations / N. Robust high-fidelity ballistic convergence.')}
                       </p>
                     </div>
                     <div className="mt-2 pt-1.5 border-t border-border/40 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      🎯 ~2 - 4s {isSpanish ? 'por grano' : 'per grain'}
+                      🎯 ~2 - 4s {loc('por grano', 'per grain')}
                     </div>
                   </div>
 
@@ -2170,18 +2143,18 @@ export function SmartSearchEngine({
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                           <Rocket size={14} className="text-purple-500" />
-                          {isSpanish ? 'Búsqueda Profunda' : 'Deep Search'}
+                          {loc('Búsqueda Profunda', 'Deep Search')}
                         </span>
                         {budgetPreset === 'deep' && evaluationsPerN === 2000 && (
                           <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
                         )}
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        {isSpanish ? '2.000 simulaciones / N. Máxima exploración global para geometrías complejas.' : '2,000 simulations / N. Exhaustive global exploration for complex geometries.'}
+                        {loc('2.000 simulaciones / N. Máxima exploración global para geometrías complejas.', '2,000 simulations / N. Exhaustive global exploration for complex geometries.')}
                       </p>
                     </div>
                     <div className="mt-2 pt-1.5 border-t border-border/40 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      🔬 ~5 - 8s {isSpanish ? 'por grano' : 'per grain'}
+                      🔬 ~5 - 8s {loc('por grano', 'per grain')}
                     </div>
                   </div>
                 </div>
@@ -2192,14 +2165,22 @@ export function SmartSearchEngine({
                     <Activity size={15} className="text-emerald-500 shrink-0" />
                     <span>
                       {grainCountMode === 'range' ? (
-                        isSpanish ? (
+                        lang === 'es' ? (
                           <>Presupuesto: <strong>{evaluationsPerN.toLocaleString()}</strong> evals / grano × <strong>{inputValues.maxGrainCount || 5}</strong> valores de N = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulaciones totales</strong></>
+                        ) : lang === 'fr' ? (
+                          <>Budget : <strong>{evaluationsPerN.toLocaleString()}</strong> évals / grain × <strong>{inputValues.maxGrainCount || 5}</strong> valeurs de N = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulations au total</strong></>
+                        ) : lang === 'it' ? (
+                          <>Budget: <strong>{evaluationsPerN.toLocaleString()}</strong> valutazioni / grano × <strong>{inputValues.maxGrainCount || 5}</strong> valori di N = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulazioni totali</strong></>
                         ) : (
                           <>Budget: <strong>{evaluationsPerN.toLocaleString()}</strong> evals / grain × <strong>{inputValues.maxGrainCount || 5}</strong> N values = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} total simulations</strong></>
                         )
                       ) : (
-                        isSpanish ? (
+                        lang === 'es' ? (
                           <>Presupuesto: <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} simulaciones balísticas</strong> para N = {inputValues.fixedGrainCount || 3} granos fijos</>
+                        ) : lang === 'fr' ? (
+                          <>Budget : <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} simulations balistiques</strong> pour N = {inputValues.fixedGrainCount || 3} grains fixes</>
+                        ) : lang === 'it' ? (
+                          <>Budget: <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} simulazioni balistiche</strong> per N = {inputValues.fixedGrainCount || 3} grani fissi</>
                         ) : (
                           <>Budget: <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} ballistic simulations</strong> for fixed N = {inputValues.fixedGrainCount || 3}</>
                         )
@@ -2208,7 +2189,7 @@ export function SmartSearchEngine({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] text-muted-foreground">{isSpanish ? 'Personalizar:' : 'Custom:'}</span>
+                    <span className="text-[11px] text-muted-foreground">{loc('Personalizar:', 'Custom:')}</span>
                     <input
                       type="number"
                       min={100}
@@ -2244,12 +2225,12 @@ export function SmartSearchEngine({
                     <div>
                       <div className="text-xs font-bold font-mono flex items-center gap-2 text-emerald-400">
                         <span>
-                          {isSpanish ? 'EVOLUCIÓN DIFERENCIAL ACTIVA (DE/rand/1/bin)' : 'DIFFERENTIAL EVOLUTION RUNNING (DE/rand/1/bin)'}
+                          {loc('EVOLUCIÓN DIFERENCIAL ACTIVA (DE/rand/1/bin)', 'DIFFERENTIAL EVOLUTION RUNNING (DE/rand/1/bin)')}
                         </span>
                         <span className="inline-block w-2 h-2 rounded-full animate-ping bg-emerald-400"></span>
                       </div>
                       <div className="text-[11px] text-slate-300 font-mono mt-0.5">
-                        {searchProgress?.stepDescription || (isSpanish ? 'Evaluando candidatos balísticos...' : 'Evaluating ballistic candidates...')}
+                        {searchProgress?.stepDescription || (loc('Evaluando candidatos balísticos...', 'Evaluating ballistic candidates...'))}
                       </div>
                     </div>
                   </div>
@@ -2272,7 +2253,7 @@ export function SmartSearchEngine({
                       className="bg-red-600 hover:bg-red-700 text-white font-bold h-9 px-4 text-xs font-mono flex items-center gap-1.5 shadow-md border border-red-500 cursor-pointer shrink-0"
                     >
                       <XCircle size={15} />
-                      {isSpanish ? 'CANCELAR SIMULACIÓN' : 'CANCEL SIMULATION'}
+                      {loc('CANCELAR SIMULACIÓN', 'CANCEL SIMULATION')}
                     </Button>
                   </div>
                 </div>
@@ -2292,7 +2273,7 @@ export function SmartSearchEngine({
                   <div className="flex items-center gap-2">
                     <Activity size={12} className="text-emerald-400" />
                     <span>
-                      {isSpanish ? 'Simulaciones Balísticas:' : 'Ballistic Simulations:'}{' '}
+                      {loc('Simulaciones Balísticas:', 'Ballistic Simulations:')}{' '}
                       <strong className="text-white">{searchProgress?.currentEvaluations || 0}</strong>
                       {searchProgress?.totalEstimated ? ` / ~${searchProgress.totalEstimated}` : ''}
                     </span>
@@ -2300,7 +2281,7 @@ export function SmartSearchEngine({
 
                   {searchProgress?.bestConfigSummary && (
                     <div className="text-emerald-300 text-[10px] truncate max-w-xs sm:max-w-md">
-                      🏆 {isSpanish ? 'Mejor:' : 'Best:'} <strong>{searchProgress.bestConfigSummary}</strong>
+                      🏆 {loc('Mejor:', 'Best:')} <strong>{searchProgress.bestConfigSummary}</strong>
                     </div>
                   )}
                 </div>
@@ -2313,44 +2294,42 @@ export function SmartSearchEngine({
                 <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5 animate-pulse" />
                 <div className="space-y-1">
                   <div className="font-bold text-sm">
-                    {isSpanish ? '⚠️ Restricción Geométrica No Física Detectada' : '⚠️ Non-Physical Geometric Constraint Detected'}
+                    {loc('⚠️ Restricción Geométrica No Física Detectada', '⚠️ Non-Physical Geometric Constraint Detected')}
                   </div>
                   <div className="text-[11px] leading-relaxed">
                     {isDt0GeDs && (
-                      <span className="block">• {isSpanish ? `Garganta tobera Dt (${Dt0Val} mm) ≥ Salida Ds (${DsVal} mm). En toberas de Laval la salida debe ser mayor.` : `Nozzle throat Dt (${Dt0Val} mm) ≥ Exit Ds (${DsVal} mm). Exit must be larger.`}</span>
+                      <span className="block">• {loc(`Garganta tobera Dt (${Dt0Val} mm) ≥ Salida Ds (${DsVal} mm). En toberas de Laval la salida debe ser mayor.`, `Nozzle throat Dt (${Dt0Val} mm) ≥ Exit Ds (${DsVal} mm). Exit must be larger.`)}</span>
                     )}
                     {isDt0GeDc && (
-                      <span className="block">• {isSpanish ? `Garganta tobera Dt (${Dt0Val} mm) ≥ Cámara Dc (${DcVal} mm). La garganta no cabe en la cámara.` : `Nozzle throat Dt (${Dt0Val} mm) ≥ Chamber Dc (${DcVal} mm).`}</span>
+                      <span className="block">• {loc(`Garganta tobera Dt (${Dt0Val} mm) ≥ Cámara Dc (${DcVal} mm). La garganta no cabe en la cámara.`, `Nozzle throat Dt (${Dt0Val} mm) ≥ Chamber Dc (${DcVal} mm).`)}</span>
                     )}
                     {isD0GeDc && (
-                      <span className="block">• {isSpanish ? `Diámetro exterior D0 (${valD0Num} mm) ≥ Cámara Dc (${DcVal} mm). El grano no cabe en la cámara.` : `Grain outer D0 (${valD0Num} mm) ≥ Chamber Dc (${DcVal} mm). Grain does not fit.`}</span>
+                      <span className="block">• {loc(`Diámetro exterior D0 (${valD0Num} mm) ≥ Cámara Dc (${DcVal} mm). El grano no cabe en la cámara.`, `Grain outer D0 (${valD0Num} mm) ≥ Chamber Dc (${DcVal} mm). Grain does not fit.`)}</span>
                     )}
                     {isMaxD0GeDc && (
-                      <span className="block">• {isSpanish ? `Máximo D0 (${maxD0Num} mm) ≥ Cámara Dc (${DcVal} mm). Rango excede el diámetro de cámara.` : `Max D0 (${maxD0Num} mm) ≥ Chamber Dc (${DcVal} mm).`}</span>
+                      <span className="block">• {loc(`Máximo D0 (${maxD0Num} mm) ≥ Cámara Dc (${DcVal} mm). Rango excede el diámetro de cámara.`, `Max D0 (${maxD0Num} mm) ≥ Chamber Dc (${DcVal} mm).`)}</span>
                     )}
                     {isD0RangeInverted && (
-                      <span className="block">• {isSpanish ? `Rango D0 invertido: Mín (${minD0Num} mm) ≥ Máx (${maxD0Num} mm).` : `Inverted D0 range: Min (${minD0Num} mm) ≥ Max (${maxD0Num} mm).`}</span>
+                      <span className="block">• {loc(`Rango D0 invertido: Mín (${minD0Num} mm) ≥ Máx (${maxD0Num} mm).`, `Inverted D0 range: Min (${minD0Num} mm) ≥ Max (${maxD0Num} mm).`)}</span>
                     )}
                     {isd0GeD0 && (
-                      <span className="block">• {isSpanish ? `Núcleo interior d0 (${vald0Num} mm) ≥ Diámetro D0 (${effectiveOuterD} mm). Espesor de pared (web) nulo o negativo.` : `Inner core d0 (${vald0Num} mm) ≥ Outer D0 (${effectiveOuterD} mm). Zero or negative web.`}</span>
+                      <span className="block">• {loc(`Núcleo interior d0 (${vald0Num} mm) ≥ Diámetro D0 (${effectiveOuterD} mm). Espesor de pared (web) nulo o negativo.`, `Inner core d0 (${vald0Num} mm) ≥ Outer D0 (${effectiveOuterD} mm). Zero or negative web.`)}</span>
                     )}
                     {isd0RangeInverted && (
-                      <span className="block">• {isSpanish ? `Rango d0 invertido: Mín (${mind0Num} mm) ≥ Máx (${maxd0Num} mm).` : `Inverted d0 range: Min (${mind0Num} mm) ≥ Max (${maxd0Num} mm).`}</span>
+                      <span className="block">• {loc(`Rango d0 invertido: Mín (${mind0Num} mm) ≥ Máx (${maxd0Num} mm).`, `Inverted d0 range: Min (${mind0Num} mm) ≥ Max (${maxd0Num} mm).`)}</span>
                     )}
                     {isMind0GeD0 && (
-                      <span className="block">• {isSpanish ? `Mínimo d0 (${mind0Num} mm) ≥ Diámetro D0 (${effectiveOuterD} mm).` : `Min d0 (${mind0Num} mm) ≥ Outer D0 (${effectiveOuterD} mm).`}</span>
+                      <span className="block">• {loc(`Mínimo d0 (${mind0Num} mm) ≥ Diámetro D0 (${effectiveOuterD} mm).`, `Min d0 (${mind0Num} mm) ≥ Outer D0 (${effectiveOuterD} mm).`)}</span>
                     )}
                     {isL0ExceedsLc && (
-                      <span className="block">• {isSpanish ? `Longitud total N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) supera longitud útil de cámara Lc (${LcVal} mm).` : `Total length N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) exceeds chamber Lc (${LcVal} mm).`}</span>
+                      <span className="block">• {loc(`Longitud total N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) supera longitud útil de cámara Lc (${LcVal} mm).`, `Total length N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) exceeds chamber Lc (${LcVal} mm).`)}</span>
                     )}
                     {isL0RangeInverted && (
-                      <span className="block">• {isSpanish ? `Rango L0 invertido: Mín (${minL0Num} mm) ≥ Máx (${maxL0Num} mm).` : `Inverted L0 range: Min (${minL0Num} mm) ≥ Max (${maxL0Num} mm).`}</span>
+                      <span className="block">• {loc(`Rango L0 invertido: Mín (${minL0Num} mm) ≥ Máx (${maxL0Num} mm).`, `Inverted L0 range: Min (${minL0Num} mm) ≥ Max (${maxL0Num} mm).`)}</span>
                     )}
                   </div>
                   <div className="text-[10px] text-red-600 dark:text-red-400 font-bold pt-0.5">
-                    {isSpanish 
-                      ? 'Por favor, retrocede a la Fase 1 o Fase 2 y ajusta las dimensiones antes de iniciar la optimización.'
-                      : 'Please return to Phase 1 or Phase 2 and adjust dimensions before starting optimization.'}
+                    {loc('Por favor, retrocede a la Fase 1 o Fase 2 y ajusta las dimensiones antes de iniciar la optimización.', 'Please return to Phase 1 or Phase 2 and adjust dimensions before starting optimization.')}
                   </div>
                 </div>
               </div>
@@ -2365,7 +2344,7 @@ export function SmartSearchEngine({
                 className="h-11 px-5 text-xs font-bold flex items-center gap-2 w-full sm:w-auto cursor-pointer"
               >
                 <ArrowLeft size={16} />
-                {isSpanish ? 'Atrás (Fase 2)' : 'Back (Phase 2)'}
+                {loc('Atrás (Fase 2)', 'Back (Phase 2)')}
               </Button>
 
               <div className="flex items-center gap-2.5 w-full sm:w-auto">
@@ -2377,7 +2356,7 @@ export function SmartSearchEngine({
                     className="font-bold h-11 px-6 shadow-md flex items-center justify-center gap-2 text-sm tracking-wide transition-all w-full sm:w-auto cursor-pointer bg-red-600 hover:bg-red-700 text-white border border-red-500"
                   >
                     <XCircle size={18} />
-                    {isSpanish ? 'CANCELAR SIMULACIÓN' : 'CANCEL SIMULATION'}
+                    {loc('CANCELAR SIMULACIÓN', 'CANCEL SIMULATION')}
                   </Button>
                 )}
 
@@ -2394,19 +2373,17 @@ export function SmartSearchEngine({
                   {isSearching ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      {isSpanish 
-                        ? 'Optimizando con Differential Evolution (DE/rand/1/bin)...' 
-                        : 'Optimizing with Differential Evolution...'}
+                      {loc('Optimizando con Differential Evolution (DE/rand/1/bin)...', 'Optimizing with Differential Evolution...')}
                     </>
                   ) : hasGeometricConflict ? (
                     <>
                       <AlertTriangle size={18} />
-                      {isSpanish ? 'CORREGIR COTAS GEOMÉTRICAS' : 'FIX GEOMETRIC CONSTRAINTS'}
+                      {loc('CORREGIR COTAS GEOMÉTRICAS', 'FIX GEOMETRIC CONSTRAINTS')}
                     </>
                   ) : (
                     <>
                       <Cpu size={18} />
-                      {isSpanish ? 'EJECUTAR OPTIMIZADOR GLOBAL (DIFFERENTIAL EVOLUTION)' : 'RUN GLOBAL OPTIMIZER (DIFFERENTIAL EVOLUTION)'}
+                      {loc('EJECUTAR OPTIMIZADOR GLOBAL (DIFFERENTIAL EVOLUTION)', 'RUN GLOBAL OPTIMIZER (DIFFERENTIAL EVOLUTION)')}
                     </>
                   )}
                 </Button>
@@ -2428,17 +2405,15 @@ export function SmartSearchEngine({
                 <XCircle size={20} className="text-red-600 dark:text-red-400 shrink-0" />
                 <div>
                   <strong className="font-bold block text-sm">
-                    {isSpanish ? 'Simulación cancelada por el usuario' : 'Simulation stopped by user'}
+                    {loc('Simulación cancelada por el usuario', 'Simulation stopped by user')}
                   </strong>
                   <span className="text-[11px] text-muted-foreground">
-                    {isSpanish
-                      ? 'La optimización se interrumpió anticipadamente. Se conservan y muestran los mejores candidatos factibles evaluados hasta ese momento.'
-                      : 'Optimization was stopped early. Preserving and displaying the best feasible candidates found up to that point.'}
+                    {loc('La optimización se interrumpió anticipadamente. Se conservan y muestran los mejores candidatos factibles evaluados hasta ese momento.', 'Optimization was stopped early. Preserving and displaying the best feasible candidates found up to that point.')}
                   </span>
                 </div>
               </div>
               <span className="px-2.5 py-1 rounded bg-red-500/20 text-red-700 dark:text-red-300 font-bold text-[10px] uppercase tracking-wider shrink-0 border border-red-500/30">
-                {isSpanish ? 'Cancelada' : 'Cancelled'}
+                {loc('Cancelada', 'Cancelled')}
               </span>
             </div>
           )}
@@ -2461,14 +2436,12 @@ export function SmartSearchEngine({
                 <div className="text-sm md:text-base font-bold text-foreground flex items-center gap-2 font-mono">
                   <span>
                     {searchOutcome.bestCandidates.length > 0
-                      ? (isSpanish 
-                          ? `${searchOutcome.bestCandidates.length} ${searchOutcome.bestCandidates.length === 1 ? 'Mejor Solución Óptima Encontrada' : 'Mejores Soluciones Óptimas Encontradas'}` 
-                          : `${searchOutcome.bestCandidates.length} Top Optimal Solutions Found`)
-                      : (isSpanish ? 'No se encontraron soluciones viables' : 'No viable solutions found')}
+                      ? (loc(`${searchOutcome.bestCandidates.length} ${searchOutcome.bestCandidates.length === 1 ? 'Mejor Solución Óptima Encontrada' : 'Mejores Soluciones Óptimas Encontradas'}`, `${searchOutcome.bestCandidates.length} Top Optimal Solutions Found`))
+                      : (loc('No se encontraron soluciones viables', 'No viable solutions found'))}
                   </span>
                   {searchOutcome.safeCount > 0 && (
                     <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                      {searchOutcome.safeCount} {isSpanish ? '100% Seguras (P ≤ Pmax)' : 'Safe (P ≤ Pmax)'}
+                      {searchOutcome.safeCount} {loc('100% Seguras (P ≤ Pmax)', 'Safe (P ≤ Pmax)')}
                     </span>
                   )}
                   <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
@@ -2476,9 +2449,7 @@ export function SmartSearchEngine({
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {isSpanish
-                    ? `${searchOutcome.totalEvaluated} configuraciones evaluadas exhaustivamente en ${searchOutcome.executionTimeMs} ms`
-                    : `${searchOutcome.totalEvaluated} configurations evaluated in ${searchOutcome.executionTimeMs} ms`}
+                  {loc(`${searchOutcome.totalEvaluated} configuraciones evaluadas exhaustivamente en ${searchOutcome.executionTimeMs} ms`, `${searchOutcome.totalEvaluated} configurations evaluated in ${searchOutcome.executionTimeMs} ms`)}
                 </div>
               </div>
             </div>
@@ -2487,7 +2458,7 @@ export function SmartSearchEngine({
             {searchOutcome.hasOverpressureWarning && (
               <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                 <AlertTriangle size={15} />
-                {isSpanish ? 'Aviso: Presión Elevada' : 'Notice: Elevated Pressure'}
+                {loc('Aviso: Presión Elevada', 'Notice: Elevated Pressure')}
               </span>
             )}
           </div>
@@ -2499,13 +2470,11 @@ export function SmartSearchEngine({
                 <div className="flex items-center gap-2">
                   <Sliders className="text-emerald-600 dark:text-emerald-400" size={16} />
                   <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
-                    {isSpanish
-                      ? `Comparativa de Impulso por Número de Granos (N = 1 .. ${searchOutcome.grainSummaries.length})`
-                      : `Impulse Comparison by Grain Count (N = 1 .. ${searchOutcome.grainSummaries.length})`}
+                    {loc(`Comparativa de Impulso por Número de Granos (N = 1 .. ${searchOutcome.grainSummaries.length})`, `Impulse Comparison by Grain Count (N = 1 .. ${searchOutcome.grainSummaries.length})`)}
                   </span>
                 </div>
                 <span className="text-[11px] text-muted-foreground font-mono">
-                  {isSpanish ? 'Selección estricta del mejor impulso factible' : 'Strict selection of highest feasible impulse'}
+                  {loc('Selección estricta del mejor impulso factible', 'Strict selection of highest feasible impulse')}
                 </span>
               </div>
 
@@ -2524,16 +2493,16 @@ export function SmartSearchEngine({
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-bold font-mono text-foreground">
-                            N = {g.N} {g.N === 1 ? (isSpanish ? 'grano' : 'grain') : (isSpanish ? 'granos' : 'grains')}
+                            N = {g.N} {g.N === 1 ? (loc('grano', 'grain')) : (loc('granos', 'grains'))}
                           </span>
                           {isWinner && (
                             <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-emerald-600 text-white">
-                              ★ {isSpanish ? 'GANADOR' : 'WINNER'}
+                              ★ {loc('GANADOR', 'WINNER')}
                             </span>
                           )}
                         </div>
                         <div className={`text-sm font-extrabold font-mono ${isWinner ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
-                          {g.bestFeasibleImpulse !== null ? `${g.bestFeasibleImpulse} N·s` : (isSpanish ? 'No factible' : 'Infeasible')}
+                          {g.bestFeasibleImpulse !== null ? `${g.bestFeasibleImpulse} N·s` : (loc('No factible', 'Infeasible'))}
                         </div>
                         <div className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">
                           {g.bestConfigLabel}
@@ -2549,9 +2518,7 @@ export function SmartSearchEngine({
               </div>
 
               <p className="text-[11px] text-muted-foreground leading-relaxed pt-1 border-t border-border/50">
-                {isSpanish
-                  ? `Configuración seleccionada: ${searchOutcome.bestCandidates[0]?.config.grainCount} granos (${searchOutcome.bestCandidates[0]?.metrics.totalImpulse} N·s) por ser la mejor solución encontrada entre todas las configuraciones factibles de N exploradas.`
-                  : `Selected configuration: ${searchOutcome.bestCandidates[0]?.config.grainCount} grains (${searchOutcome.bestCandidates[0]?.metrics.totalImpulse} N·s) strictly yielding the highest feasible total impulse across all evaluated grain counts.`}
+                {loc(`Configuración seleccionada: ${searchOutcome.bestCandidates[0]?.config.grainCount} granos (${searchOutcome.bestCandidates[0]?.metrics.totalImpulse} N·s) por ser la mejor solución encontrada entre todas las configuraciones factibles de N exploradas.`, `Selected configuration: ${searchOutcome.bestCandidates[0]?.config.grainCount} grains (${searchOutcome.bestCandidates[0]?.metrics.totalImpulse} N·s) strictly yielding the highest feasible total impulse across all evaluated grain counts.`)}
               </p>
             </div>
           )}
@@ -2576,7 +2543,7 @@ export function SmartSearchEngine({
                     {diag.description}
                   </p>
                   <div className="pl-6 pt-1 font-semibold flex items-center gap-1.5">
-                    <span>💡 <strong>{isSpanish ? 'Solución Recomendada:' : 'Recommendation:'}</strong> {diag.recommendation}</span>
+                    <span>💡 <strong>{loc('Solución Recomendada:', 'Recommendation:')}</strong> {diag.recommendation}</span>
                   </div>
                 </div>
               ))}
@@ -2589,10 +2556,10 @@ export function SmartSearchEngine({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-1.5">
                   <BarChart3 size={15} className="text-emerald-600 dark:text-emerald-400" />
-                  {isSpanish ? 'Las 5 Mejores Configuraciones Óptimas (Diversidad Balística)' : 'Top 5 Optimal Configurations (Ballistic Diversity)'}
+                  {loc('Las 5 Mejores Configuraciones Óptimas (Diversidad Balística)', 'Top 5 Optimal Configurations (Ballistic Diversity)')}
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  {isSpanish ? 'Haz clic en una opción para ver su curva transitoria y cargarla' : 'Click an option to inspect curves and apply it'}
+                  {loc('Haz clic en una opción para ver su curva transitoria y cargarla', 'Click an option to inspect curves and apply it')}
                 </span>
               </div>
 
@@ -2616,7 +2583,7 @@ export function SmartSearchEngine({
                               ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30' 
                               : 'bg-muted text-muted-foreground'
                           }`}>
-                            #{cand.rank} {cand.rank === 1 ? (isSpanish ? '★ ÓPTIMO' : '★ BEST') : ''}
+                            #{cand.rank} {cand.rank === 1 ? (loc('★ ÓPTIMO', '★ BEST')) : ''}
                           </span>
                           <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">
                             {cand.metrics.totalImpulse} N·s
@@ -2649,16 +2616,14 @@ export function SmartSearchEngine({
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                      {isSpanish ? `Candidato #${currentCandidate.rank}` : `Candidate #${currentCandidate.rank}`}
+                      {loc(`Candidato #${currentCandidate.rank}`, `Candidate #${currentCandidate.rank}`)}
                     </span>
                     <CardTitle className="text-sm font-bold text-foreground font-mono">
                       {currentCandidate.config.grainSummary}
                     </CardTitle>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {isSpanish 
-                      ? `Longitud total ocupada: ${currentCandidate.config.totalGrainLength} mm dentro de cámara ${DcVal}x${LcVal} mm (${currentCandidate.metrics.chamberFillFraction}% llenado)`
-                      : `Total grain stack: ${currentCandidate.config.totalGrainLength} mm inside ${DcVal}x${LcVal} mm chamber (${currentCandidate.metrics.chamberFillFraction}% filling)`}
+                    {loc(`Longitud total ocupada: ${currentCandidate.config.totalGrainLength} mm dentro de cámara ${DcVal}x${LcVal} mm (${currentCandidate.metrics.chamberFillFraction}% llenado)`, `Total grain stack: ${currentCandidate.config.totalGrainLength} mm inside ${DcVal}x${LcVal} mm chamber (${currentCandidate.metrics.chamberFillFraction}% filling)`)}
                   </p>
                 </div>
 
@@ -2671,12 +2636,12 @@ export function SmartSearchEngine({
                     {appliedSuccess ? (
                       <>
                         <Check size={16} />
-                        {isSpanish ? '¡Cargado en Inputs con éxito!' : 'Applied to Inputs!'}
+                        {loc('¡Cargado en Inputs con éxito!', 'Applied to Inputs!')}
                       </>
                     ) : (
                       <>
                         <Send size={16} />
-                        {isSpanish ? 'Cargar esta Configuración a Inputs' : 'Apply to Simulator Inputs'}
+                        {loc('Cargar esta Configuración a Inputs', 'Apply to Simulator Inputs')}
                       </>
                     )}
                   </Button>
@@ -2691,7 +2656,7 @@ export function SmartSearchEngine({
                   <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex flex-col justify-between">
                     <div>
                       <div className="text-[10px] font-bold uppercase font-mono text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
-                        <span>{isSpanish ? 'Impulso Total' : 'Total Impulse'}</span>
+                        <span>{loc('Impulso Total', 'Total Impulse')}</span>
                         <Zap size={13} />
                       </div>
                       <div className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
@@ -2699,7 +2664,7 @@ export function SmartSearchEngine({
                       </div>
                     </div>
                     <div className="text-[11px] font-mono text-muted-foreground pt-1.5 mt-1 border-t border-border/50 flex items-center justify-between">
-                      <span>{isSpanish ? 'Clase:' : 'Class:'}</span>
+                      <span>{loc('Clase:', 'Class:')}</span>
                       <strong className="text-emerald-700 dark:text-emerald-300 font-bold">{currentCandidate.metrics.motorClass} ({currentCandidate.metrics.isp}s Isp)</strong>
                     </div>
                   </div>
@@ -2708,7 +2673,7 @@ export function SmartSearchEngine({
                   <div className="p-3 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
                     <div>
                       <div className="text-[10px] font-bold uppercase font-mono text-muted-foreground flex items-center justify-between">
-                        <span>{isSpanish ? 'Empuje y Fuerzas' : 'Thrust & Forces'}</span>
+                        <span>{loc('Empuje y Fuerzas', 'Thrust & Forces')}</span>
                         <Flame size={13} />
                       </div>
                       <div className="text-lg font-bold font-mono text-foreground mt-1">
@@ -2716,7 +2681,7 @@ export function SmartSearchEngine({
                       </div>
                     </div>
                     <div className="text-[11px] font-mono text-muted-foreground pt-1.5 mt-1 border-t border-border/50 flex items-center justify-between">
-                      <span>{isSpanish ? 'Media / Inicial:' : 'Avg / Init:'}</span>
+                      <span>{loc('Media / Inicial:', 'Avg / Init:')}</span>
                       <strong className="text-foreground">{currentCandidate.metrics.avgThrust}N / {currentCandidate.metrics.initialThrust}N</strong>
                     </div>
                   </div>
@@ -2725,7 +2690,7 @@ export function SmartSearchEngine({
                   <div className="p-3 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
                     <div>
                       <div className="text-[10px] font-bold uppercase font-mono text-muted-foreground flex items-center justify-between">
-                        <span>{isSpanish ? 'Presión Cámara' : 'Chamber Pressure'}</span>
+                        <span>{loc('Presión Cámara', 'Chamber Pressure')}</span>
                         <Activity size={13} />
                       </div>
                       <div className={`text-lg font-bold font-mono mt-1 ${
@@ -2737,7 +2702,7 @@ export function SmartSearchEngine({
                       </div>
                     </div>
                     <div className="text-[11px] font-mono text-muted-foreground pt-1.5 mt-1 border-t border-border/50 flex items-center justify-between">
-                      <span>{isSpanish ? 'P. Media:' : 'Avg Pres:'}</span>
+                      <span>{loc('P. Media:', 'Avg Pres:')}</span>
                       <strong className="text-foreground">{currentCandidate.metrics.avgPressure} MPa</strong>
                     </div>
                   </div>
@@ -2746,7 +2711,7 @@ export function SmartSearchEngine({
                   <div className="p-3 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
                     <div>
                       <div className="text-[10px] font-bold uppercase font-mono text-muted-foreground flex items-center justify-between">
-                        <span>{isSpanish ? 'Tiempo de Quemado' : 'Burn Time'}</span>
+                        <span>{loc('Tiempo de Quemado', 'Burn Time')}</span>
                         <Clock size={13} />
                       </div>
                       <div className="text-lg font-bold font-mono text-foreground mt-1">
@@ -2754,7 +2719,7 @@ export function SmartSearchEngine({
                       </div>
                     </div>
                     <div className="text-[11px] font-mono text-muted-foreground pt-1.5 mt-1 border-t border-border/50 flex items-center justify-between">
-                      <span>{isSpanish ? 'Planitud Perfil:' : 'Profile Flatness:'}</span>
+                      <span>{loc('Planitud Perfil:', 'Profile Flatness:')}</span>
                       <strong className="text-foreground">{currentCandidate.metrics.thrustFlatness}%</strong>
                     </div>
                   </div>
@@ -2763,7 +2728,7 @@ export function SmartSearchEngine({
                   <div className="p-3 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
                     <div>
                       <div className="text-[10px] font-bold uppercase font-mono text-muted-foreground flex items-center justify-between">
-                        <span>{isSpanish ? 'Masa Propelente' : 'Propellant Mass'}</span>
+                        <span>{loc('Masa Propelente', 'Propellant Mass')}</span>
                         <Layers size={13} />
                       </div>
                       <div className="text-lg font-bold font-mono text-foreground mt-1">
@@ -2771,7 +2736,7 @@ export function SmartSearchEngine({
                       </div>
                     </div>
                     <div className="text-[11px] font-mono text-muted-foreground pt-1.5 mt-1 border-t border-border/50 flex items-center justify-between">
-                      <span>{isSpanish ? 'Llenado Cámara:' : 'Chamber Fill:'}</span>
+                      <span>{loc('Llenado Cámara:', 'Chamber Fill:')}</span>
                       <strong className="text-foreground">{currentCandidate.metrics.chamberFillFraction}%</strong>
                     </div>
                   </div>
@@ -2792,7 +2757,7 @@ export function SmartSearchEngine({
                         }`}
                       >
                         <Activity size={13} className="text-emerald-500" />
-                        <span>{isSpanish ? 'Curvas F(t) y P0(t)' : 'F(t) & P0(t) Curves'}</span>
+                        <span>{loc('Curvas F(t) y P0(t)', 'F(t) & P0(t) Curves')}</span>
                       </button>
 
                       <button
@@ -2805,7 +2770,7 @@ export function SmartSearchEngine({
                         }`}
                       >
                         <BarChart3 size={13} className="text-blue-500" />
-                        <span>{isSpanish ? 'Espacio de Soluciones (Pmax vs It)' : 'Solution Space Map'}</span>
+                        <span>{loc('Espacio de Soluciones (Pmax vs It)', 'Solution Space Map')}</span>
                       </button>
 
                       <button
@@ -2818,14 +2783,14 @@ export function SmartSearchEngine({
                         }`}
                       >
                         <TrendingUp size={13} className="text-amber-500" />
-                        <span>{isSpanish ? 'Evolución / Convergencia' : 'Convergence History'}</span>
+                        <span>{loc('Evolución / Convergencia', 'Convergence History')}</span>
                       </button>
                     </div>
 
                     <span className="text-[11px] font-mono text-muted-foreground">
-                      {diagramTab === 'curves' && (isSpanish ? `${currentCandidate.simulation.t.length} puntos integrados` : `${currentCandidate.simulation.t.length} simulation steps`)}
-                      {diagramTab === 'scatter' && (isSpanish ? `${scatterPoints.length} motores evaluados` : `${scatterPoints.length} evaluated configurations`)}
-                      {diagramTab === 'convergence' && (isSpanish ? `${convergenceLineData.length} iteraciones registradas` : `${convergenceLineData.length} iterations tracked`)}
+                      {diagramTab === 'curves' && (loc(`${currentCandidate.simulation.t.length} puntos integrados`, `${currentCandidate.simulation.t.length} simulation steps`))}
+                      {diagramTab === 'scatter' && (loc(`${scatterPoints.length} motores evaluados`, `${scatterPoints.length} evaluated configurations`))}
+                      {diagramTab === 'convergence' && (loc(`${convergenceLineData.length} iteraciones registradas`, `${convergenceLineData.length} iterations tracked`))}
                     </span>
                   </div>
 
@@ -2867,7 +2832,7 @@ export function SmartSearchEngine({
                             yAxisId="thrust" 
                             type="monotone" 
                             dataKey="F_N" 
-                            name={isSpanish ? 'Empuje F (N)' : 'Thrust F (N)'} 
+                            name={loc('Empuje F (N)', 'Thrust F (N)')} 
                             stroke="#10b981" 
                             strokeWidth={2.5} 
                             dot={false} 
@@ -2876,7 +2841,7 @@ export function SmartSearchEngine({
                             yAxisId="pressure" 
                             type="monotone" 
                             dataKey="P0_MPa" 
-                            name={isSpanish ? 'Presión P0 (MPa)' : 'Pressure P0 (MPa)'} 
+                            name={loc('Presión P0 (MPa)', 'Pressure P0 (MPa)')} 
                             stroke="#3b82f6" 
                             strokeWidth={2} 
                             dot={false} 
@@ -2890,7 +2855,7 @@ export function SmartSearchEngine({
                   {diagramTab === 'scatter' && (
                     <div className="space-y-2">
                       <div className="text-[11px] text-muted-foreground flex items-center justify-between">
-                        <span>{isSpanish ? 'Diagrama de puntos explorados durante la optimización (Verde = Seguro, Rojo/Naranja = Sobrepresión, Estrella = Candidato Seleccionado)' : 'Explored configurations map (Green = Safe, Red = Overpressure, Star = Selected)'}</span>
+                        <span>{loc('Diagrama de puntos explorados durante la optimización (Verde = Seguro, Rojo/Naranja = Sobrepresión, Estrella = Candidato Seleccionado)', 'Explored configurations map (Green = Safe, Red = Overpressure, Star = Selected)')}</span>
                       </div>
                       <div className="h-64 w-full pt-1">
                         <ResponsiveContainer width="100%" height="100%">
@@ -2899,7 +2864,7 @@ export function SmartSearchEngine({
                             <XAxis 
                               type="number" 
                               dataKey="x" 
-                              name={isSpanish ? "Presión Pico Pmax" : "Peak Pressure Pmax"} 
+                              name={loc("Presión Pico Pmax", "Peak Pressure Pmax")} 
                               unit=" MPa"
                               tick={{ fontSize: 10 }}
                               stroke={isLight ? '#78716c' : '#94a3b8'}
@@ -2907,7 +2872,7 @@ export function SmartSearchEngine({
                             <YAxis 
                               type="number" 
                               dataKey="y" 
-                              name={isSpanish ? "Impulso Total It" : "Total Impulse It"} 
+                              name={loc("Impulso Total It", "Total Impulse It")} 
                               unit=" N·s"
                               tick={{ fontSize: 10 }}
                               stroke={isLight ? '#78716c' : '#94a3b8'}
@@ -2918,7 +2883,7 @@ export function SmartSearchEngine({
                               stroke="#ef4444" 
                               strokeDasharray="4 4" 
                               label={{ 
-                                value: isSpanish ? `Límite Pmax (${inputValues.Pmax_lim} MPa)` : `Pmax limit (${inputValues.Pmax_lim} MPa)`, 
+                                value: loc(`Límite Pmax (${inputValues.Pmax_lim} MPa)`, `Pmax limit (${inputValues.Pmax_lim} MPa)`), 
                                 fill: '#ef4444', 
                                 fontSize: 10,
                                 position: 'insideTopRight'
@@ -2935,10 +2900,10 @@ export function SmartSearchEngine({
                                       {pt.grainCount}x L={pt.L0}mm (D={pt.D0} / d={pt.d0}mm)
                                     </div>
                                     <div className="text-emerald-600 dark:text-emerald-400">
-                                      {isSpanish ? 'Impulso Total:' : 'Total Impulse:'} <strong>{pt.totalImpulse} N·s</strong>
+                                      {loc('Impulso Total:', 'Total Impulse:')} <strong>{pt.totalImpulse} N·s</strong>
                                     </div>
                                     <div className={pt.maxPressure > parseFloat(inputValues.Pmax_lim || '6.0') ? 'text-red-500' : 'text-foreground'}>
-                                      {isSpanish ? 'Presión Máx:' : 'Max Pressure:'} <strong>{pt.maxPressure} MPa</strong>
+                                      {loc('Presión Máx:', 'Max Pressure:')} <strong>{pt.maxPressure} MPa</strong>
                                     </div>
                                     <div className="text-muted-foreground">
                                       tb: {pt.burnTime}s | Fmax: {pt.maxThrust}N
@@ -2947,7 +2912,7 @@ export function SmartSearchEngine({
                                 );
                               }}
                             />
-                            <Scatter name={isSpanish ? "Soluciones" : "Solutions"} data={scatterPoints}>
+                            <Scatter name={loc("Soluciones", "Solutions")} data={scatterPoints}>
                               {scatterPoints.map((entry, index) => {
                                 let fillColor = entry.isSafe ? '#10b981' : '#ef4444';
                                 if (entry.isCurrentSelected) fillColor = '#f59e0b';
@@ -2971,7 +2936,7 @@ export function SmartSearchEngine({
                   {diagramTab === 'convergence' && (
                     <div className="space-y-2">
                       <div className="text-[11px] text-muted-foreground flex items-center justify-between">
-                        <span>{isSpanish ? 'Evolución del mejor score y mejor impulso a lo largo de las evaluaciones del algoritmo genético' : 'Evolution of best score and impulse throughout the genetic search iterations'}</span>
+                        <span>{loc('Evolución del mejor score y mejor impulso a lo largo de las evaluaciones del algoritmo genético', 'Evolution of best score and impulse throughout the genetic search iterations')}</span>
                       </div>
                       <div className="h-64 w-full pt-1">
                         <ResponsiveContainer width="100%" height="100%">
@@ -3008,7 +2973,7 @@ export function SmartSearchEngine({
                               yAxisId="impulse" 
                               type="monotone" 
                               dataKey="bestImpulse" 
-                              name={isSpanish ? 'Mejor Impulso It (N·s)' : 'Best Impulse (N·s)'} 
+                              name={loc('Mejor Impulso It (N·s)', 'Best Impulse (N·s)')} 
                               stroke="#10b981" 
                               strokeWidth={2.5} 
                               dot={false} 
@@ -3017,7 +2982,7 @@ export function SmartSearchEngine({
                               yAxisId="score" 
                               type="monotone" 
                               dataKey="bestScore" 
-                              name={isSpanish ? 'Mejor Fitness Score' : 'Best Fitness Score'} 
+                              name={loc('Mejor Fitness Score', 'Best Fitness Score')} 
                               stroke="#f59e0b" 
                               strokeWidth={1.5} 
                               strokeDasharray="4 4"

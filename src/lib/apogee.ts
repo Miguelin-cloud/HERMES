@@ -102,7 +102,8 @@ export function calculateApogee(
    h_launch: number = 169,
    T_celcius: number = 28,
    mach_ref_raw: number[] = DEFAULT_MACH_REF,
-   cd_ref_raw: number[] = DEFAULT_CD_REF
+   cd_ref_raw: number[] = DEFAULT_CD_REF,
+   flight_path_angle_deg: number = 90
 ): ApogeeResult {
    // Sanitize and sort Mach-Cd pairs
    let mach_ref = DEFAULT_MACH_REF;
@@ -128,14 +129,23 @@ export function calculateApogee(
    const R_air = 287;
    const gamma = 1.4;
    
+   // Flight path angle convention: elevation above horizontal (90° = vertical, 87° = 3° tilt)
+   const angle_deg = Math.max(45, Math.min(90, isNaN(flight_path_angle_deg) ? 90 : flight_path_angle_deg));
+   const theta_0 = (angle_deg * Math.PI) / 180;
+   const cos_theta_0 = Math.cos(theta_0);
+   const sin_theta_0 = Math.sin(theta_0);
+
    const T_launch_K = 273.15 + T_celcius;
    const P_launch = 101325 * Math.pow(1 - 2.25577e-5 * h_launch, 5.25588);
    const rho_launch = P_launch / (R_air * T_launch_K);
    const area_ref = Math.PI * Math.pow(d_rocket, 2) / 4;
 
    let t = 0;
+   let x = 0; // horizontal downrange distance (m)
    let h = 0; // relative elevation above launch pad (m)
-   let v = 0; // vertical velocity (m/s)
+   let vx = 0; // horizontal velocity (m/s)
+   let vy = 0; // vertical velocity (m/s)
+   let v = 0;  // total speed (m/s)
    const default_dt = (tt.length > 1) ? (tt[1] - tt[0]) : 0.001;
    
    const hist_t: number[] = [];
@@ -169,50 +179,69 @@ export function calculateApogee(
        const T_local = T_launch_K - 0.0065 * h;
        
        // Calculate density dynamically relative to launch site conditions
-       const rho = rho_launch * Math.pow(T_local / T_launch_K, (g0 / (0.0065 * R_air)) - 1);
-       const v_sound = Math.sqrt(gamma * R_air * T_local);
+       const rho = Math.max(0, rho_launch * Math.pow(Math.max(1e-4, T_local / T_launch_K), (g0 / (0.0065 * R_air)) - 1));
+       const v_sound = Math.max(1, Math.sqrt(gamma * R_air * Math.max(10, T_local)));
 
-       const mach = Math.abs(v) / v_sound;
+       const mach = v / v_sound;
        const current_cd = interp1(mach_ref, cd_ref, mach);
 
-       const drag = 0.5 * Math.max(0, rho) * v * v * current_cd * area_ref; 
+       const drag_mag = 0.5 * rho * v * v * current_cd * area_ref; 
        const weight = mass * g_local;
 
-       const F_net_real = thrust - weight - Math.sign(v) * drag;
-       const acceleration_real = F_net_real / mass;
+       let ax = 0;
+       let ay = 0;
 
-       let F_net = 0;
-       let acceleration = 0;
-       let dv = 0;
-       let dx = 0;
-
-       if (h <= 0 && acceleration_real <= 0) {
-           F_net = 0;
-           acceleration = 0;
-           dv = 0;
+       if (h <= 0 && v <= 1e-4) {
+           // On launch pad / rail: along rail motion
+           const F_rail = thrust - weight * sin_theta_0;
+           if (F_rail > 0) {
+               const a_rail = F_rail / mass;
+               ax = a_rail * cos_theta_0;
+               ay = a_rail * sin_theta_0;
+           } else {
+               ax = 0;
+               ay = 0;
+           }
        } else {
-           F_net = F_net_real;
-           acceleration = acceleration_real;
-           dv = current_dt * acceleration;
+           // In 2D flight: thrust aligns with body/velocity pitch angle
+           let pitch = theta_0;
+           if (v > 0.1) {
+               pitch = Math.atan2(vy, vx);
+           }
+           
+           const thrust_x = thrust * Math.cos(pitch);
+           const thrust_y = thrust * Math.sin(pitch);
+           
+           const drag_x = v > 1e-6 ? (drag_mag * (vx / v)) : 0;
+           const drag_y = v > 1e-6 ? (drag_mag * (vy / v)) : 0;
+           
+           ax = (thrust_x - drag_x) / mass;
+           ay = (thrust_y - drag_y - weight) / mass;
        }
 
-       v += dv;
+       const total_a = Math.sqrt(ax * ax + ay * ay);
 
-       if (v <= 0 && h <= 0) {
-           dx = 0;
-       } else {
-           dx = v * current_dt;
+       vx += ax * current_dt;
+       vy += ay * current_dt;
+       v = Math.sqrt(vx * vx + vy * vy);
+
+       x += vx * current_dt;
+       h += vy * current_dt;
+
+       if (h < 0) {
+           h = 0;
+           if (vy < 0) {
+               vy = 0;
+               v = Math.abs(vx);
+           }
        }
-
-       h += dx;
-       if (h < 0 && Math.abs(h) < 1e-9) h = 0;
 
        t = (idx < N) ? tt[idx] : t + current_dt;
 
        hist_t.push(t);
        hist_h.push(h);
        hist_v.push(v);
-       hist_a.push(acceleration);
+       hist_a.push(total_a);
        hist_mach.push(mach);
 
        if (h > maxApogee) {
@@ -220,11 +249,11 @@ export function calculateApogee(
            apogeeTime = t;
        }
        if (v > maxVelocity) maxVelocity = v;
-       if (acceleration > maxAcceleration) maxAcceleration = acceleration;
+       if (total_a > maxAcceleration) maxAcceleration = total_a;
 
        idx++;
 
-       if (v <= 0 && idx > N) {
+       if (vy <= 0 && idx > N) {
            break;
        }
        // Safeguard to prevent infinite loops

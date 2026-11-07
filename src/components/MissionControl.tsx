@@ -23,7 +23,7 @@ import {
 import { SimulationResults } from "../lib/types";
 import { calculateApogee, ApogeeResult, getExitMach, getTTIThrustCoefficient } from "../lib/apogee";
 import { Language, translations } from "../lib/i18n";
-import { Download, FileSpreadsheet, Sparkles, CheckCircle2, Layers } from "lucide-react";
+import { Download, FileSpreadsheet, Sparkles, CheckCircle2, Layers, UploadCloud, HelpCircle, X, Compass, ExternalLink } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const NumberInputMC = ({
@@ -111,13 +111,15 @@ export function MissionControl({
   const [rocketDiameter, setRocketDiameter] = useState(80); // mm
   const [launchAltitude, setLaunchAltitude] = useState(169); // m
   const [launchTemp, setLaunchTemp] = useState(28); // ºC
+  const [flightPathAngle, setFlightPathAngle] = useState(90); // º (elevation from horizontal, 90 = vertical)
   
-  // Aerodynamic Data
+  // Aerodynamic Data & Format Modal
   const [useAeroData, setUseAeroData] = useState(false);
   const [aeroDataRaw, setAeroDataRaw] = useState("");
   const [aeroParsed, setAeroParsed] = useState<{ mach: number[], cd: number[] } | null>(null);
   const [aeroInputTab, setAeroInputTab] = useState<"upload" | "manual">("upload");
   const [aeroFileName, setAeroFileName] = useState<string>("");
+  const [isAeroModalOpen, setIsAeroModalOpen] = useState<boolean>(false);
 
   const downloadAeroTemplate = () => {
     const headers = "Mach,Cd\n";
@@ -126,7 +128,7 @@ export function MissionControl({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "mach_cd_aerodynamics_template.csv");
+    link.setAttribute("download", "hermes_plantilla_mach_cd.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -255,6 +257,7 @@ export function MissionControl({
     rocketDiameter: 80,
     launchAltitude: 169,
     launchTemp: 28,
+    flightPathAngle: 90,
     useAeroData: false,
     aeroParsed: null as { mach: number[], cd: number[] } | null,
   });
@@ -264,11 +267,12 @@ export function MissionControl({
     rocketDiameter !== calcParams.rocketDiameter ||
     launchAltitude !== calcParams.launchAltitude ||
     launchTemp !== calcParams.launchTemp ||
+    flightPathAngle !== calcParams.flightPathAngle ||
     useAeroData !== calcParams.useAeroData ||
     aeroParsed !== calcParams.aeroParsed;
 
   const handleUpdate = () => {
-    setCalcParams({ dryMass, rocketDiameter, launchAltitude, launchTemp, useAeroData, aeroParsed });
+    setCalcParams({ dryMass, rocketDiameter, launchAltitude, launchTemp, flightPathAngle, useAeroData, aeroParsed });
   };
 
   // Simulated Apogee Result
@@ -364,7 +368,8 @@ export function MissionControl({
         calcParams.launchAltitude,
         calcParams.launchTemp,
         calcParams.aeroParsed ? calcParams.aeroParsed.mach : undefined,
-        calcParams.aeroParsed ? calcParams.aeroParsed.cd : undefined
+        calcParams.aeroParsed ? calcParams.aeroParsed.cd : undefined,
+        calcParams.flightPathAngle
       );
       setSimApogee(simResult);
       setIsUpdating(false);
@@ -451,7 +456,8 @@ export function MissionControl({
         calcParams.launchAltitude,
         calcParams.launchTemp,
         calcParams.aeroParsed ? calcParams.aeroParsed.mach : undefined,
-        calcParams.aeroParsed ? calcParams.aeroParsed.cd : undefined
+        calcParams.aeroParsed ? calcParams.aeroParsed.cd : undefined,
+        calcParams.flightPathAngle
       );
 
       setExpApogee(res);
@@ -839,19 +845,63 @@ export function MissionControl({
               onChange={setLaunchTemp}
               step="0.1"
             />
+            <div className="col-span-2 pt-1.5 border-t border-border/50 mt-1">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                  <Compass className="w-3 h-3 text-purple-500" />
+                  {t.flight_path_angle || "Flight Path Angle [º]"}
+                </span>
+                <span className="text-[9.5px] font-mono text-purple-600 dark:text-purple-400 font-semibold">
+                  {flightPathAngle === 90 ? (lang === "es" ? "Vertical (90º)" : "Vertical (90º)") : `${(90 - flightPathAngle).toFixed(1)}º ${lang === "es" ? "inclinación" : "tilt"}`}
+                </span>
+              </div>
+              <NumberInputMC
+                label=""
+                value={flightPathAngle}
+                onChange={(val: any) => {
+                  const num = Number(val);
+                  if (!isNaN(num)) {
+                    setFlightPathAngle(Math.max(45, Math.min(90, num)));
+                  }
+                }}
+                step="0.5"
+                tooltip={t.flight_path_angle_desc || "Elevación de la rampa respecto a la horizontal (90º = vertical, 87º = 3º de inclinación)"}
+              />
+            </div>
           </CardContent>
         </Card>
         
         {/* Aerodynamic Data */}
         <Card data-tour="mission-aero-card" className="bg-card border-border shadow-sm flex-1">
-          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
-            <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
-              {lang === "es" ? "Datos Aerodinámicos (Mach vs Cd)" : "Aerodynamic Data (Mach vs Cd)"}
-            </CardTitle>
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2">
+          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <CardTitle className="text-[12px] uppercase text-muted-foreground font-bold">
+                {lang === "es" ? "Datos Aerodinámicos (Mach vs Cd)" : lang === "fr" ? "Données Aérodynamiques (Mach vs Cd)" : lang === "it" ? "Dati Aerodinamici (Mach vs Cd)" : "Aerodynamic Data (Mach vs Cd)"}
+              </CardTitle>
+              {useAeroData && aeroParsed && aeroParsed.mach.length > 0 ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  {aeroParsed.mach.length} pts
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                  {lang === "es" ? "Cd Estándar" : "Standard Cd"}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center space-x-2 shrink-0">
+              <Button
+                size="sm"
+                onClick={() => setIsAeroModalOpen(true)}
+                variant="outline"
+                className="h-6 text-[10px] px-2.5 py-0 gap-1 font-bold border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 hover:border-purple-500"
+              >
+                <FileSpreadsheet className="w-3 h-3" />
+                {t.import_aero_btn || "Importar Curva Mach vs Cd"}
+              </Button>
+              <div className="flex items-center space-x-1.5 border-l border-border pl-2">
                 <UiLabel htmlFor="use-aero" className="text-[10px] uppercase font-bold text-muted-foreground cursor-pointer">
-                  {lang === "es" ? "Usar Personalizado" : "Use Custom"}
+                  {lang === "es" ? "Usar" : "Use"}
                 </UiLabel>
                 <Checkbox id="use-aero" checked={useAeroData} onCheckedChange={(v) => setUseAeroData(!!v)} />
               </div>
@@ -867,11 +917,46 @@ export function MissionControl({
             </div>
           </CardHeader>
           <CardContent className="p-3 flex flex-col gap-2.5">
-             <p className="text-[10px] text-muted-foreground leading-snug">
-               {lang === "es" 
-                 ? "Opcional. Importa o pega la curva de coeficiente de resistencia (Mach, Cd) desde Excel o CSV. Si no se especifican datos, se aplicará el modelo aerodinámico supersónico estándar." 
-                 : "Optional. Import or paste drag coefficient data (Mach, Cd) from Excel or CSV. If unselected or empty, a standard supersonic aerodynamic profile is used."}
-             </p>
+             <div className="flex items-start justify-between gap-3">
+               <p className="text-[10px] text-muted-foreground leading-snug flex-1">
+                 {lang === "es" 
+                   ? "Opcional. Configura o importa la curva de resistencia aerodinámica (Mach vs Cd). Si no se proporcionan datos personalizados, el simulador aplicará automáticamente el modelo supersónico estándar." 
+                   : lang === "fr"
+                   ? "Optionnel. Configurez ou importez la courbe de traînée (Mach vs Cd). Sans données personnalisées, le modèle supersonique standard est appliqué."
+                   : lang === "it"
+                   ? "Opzionale. Configura o importa la curva di resistenza aerodinamica (Mach vs Cd). Senza dati personalizzati, il modello standard viene applicato."
+                   : "Optional. Configure or import drag coefficient curve (Mach vs Cd). If unspecified, standard supersonic aerodynamic model is used."}
+               </p>
+               <Button
+                 size="sm"
+                 variant="ghost"
+                 onClick={() => setIsAeroModalOpen(true)}
+                 className="h-6 text-[10px] px-2 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 underline font-semibold shrink-0"
+               >
+                 <HelpCircle className="w-3 h-3 mr-1" />
+                 {t.view_format_btn || "Ver Formato / Ejemplo"}
+               </Button>
+             </div>
+
+             {!useAeroData && (
+               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border text-[11px] font-mono">
+                 <div className="flex items-center gap-2">
+                   <span className="w-2 h-2 rounded-full bg-slate-400" />
+                   <span className="text-muted-foreground">
+                     {lang === "es" ? "Modelo activo: Curva supersónica estándar (M 0.0 - 4.0)" : "Active model: Standard supersonic curve (M 0.0 - 4.0)"}
+                   </span>
+                 </div>
+                 <Button
+                   size="sm"
+                   variant="outline"
+                   onClick={() => setIsAeroModalOpen(true)}
+                   className="h-6 text-[10px] gap-1 px-2 border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 font-bold"
+                 >
+                   <FileSpreadsheet className="w-3 h-3" />
+                   {lang === "es" ? "Cargar personalizada" : "Upload custom"}
+                 </Button>
+               </div>
+             )}
              
              {useAeroData && (
                 <div className="space-y-2.5">
@@ -997,7 +1082,236 @@ export function MissionControl({
                     </div>
                   )}
                 </div>
-             )}
+              )}
+            {/* Modal Format & Importer for Mach vs Cd */}
+            {isAeroModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-card border border-border shadow-2xl rounded-xl max-w-xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+                  {/* Modal Header */}
+                  <div className="flex items-start justify-between border-b border-border pb-3">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-foreground flex items-center gap-2 font-mono uppercase tracking-wider">
+                        <FileSpreadsheet className="w-4 h-4 text-purple-500" />
+                        {lang === "es" 
+                          ? "Importador y Formato de Curva Aerodinámica (Mach vs Cd)" 
+                          : lang === "fr"
+                          ? "Importateur et Format de Courbe Aérodynamique (Mach vs Cd)"
+                          : lang === "it"
+                          ? "Importatore e Formato Curva Aerodinamica (Mach vs Cd)"
+                          : "Aerodynamic Drag Curve Importer & Format Guide (Mach vs Cd)"}
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        {lang === "es"
+                          ? "Importa los coeficientes de resistencia aerodinámica de tu cohete para calcular el apogeo 2D exacto con arrastre subsónico, transónico y supersónico."
+                          : "Import your rocket drag coefficients across Mach numbers to compute high-accuracy 2D ballistic apogee trajectory."}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setIsAeroModalOpen(false)}
+                      className="h-7 w-7 p-0 rounded-full text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  {/* Format Explanation & Table Preview */}
+                  <div className="bg-muted/40 border border-border/80 rounded-lg p-3 space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 uppercase font-mono text-[10px] tracking-wider">
+                        <HelpCircle className="w-3.5 h-3.5 text-purple-500" />
+                        {lang === "es" ? "Estructura Requerida de Archivo (2 Columnas)" : "Required File Format (2 Columns)"}
+                      </span>
+                      <Button
+                        size="sm"
+                        onClick={downloadAeroTemplate}
+                        variant="outline"
+                        className="h-6 text-[10px] gap-1 px-2 border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 font-bold"
+                      >
+                        <Download className="w-3 h-3" />
+                        {lang === "es" ? "Descargar Plantilla CSV" : "Download Template CSV"}
+                      </Button>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      {lang === "es"
+                        ? "El archivo (.csv, .xlsx, .xls o .txt) o el texto copiado de Excel debe contener 2 columnas: Columna 1 = Número de Mach (M ≥ 0) y Columna 2 = Coeficiente de Resistencia (Cd > 0). Reconoce automáticamente separadores por coma, punto y coma o tabulación."
+                        : "Your file (.csv, .xlsx, .xls, .txt) or pasted text must include 2 columns: Column 1 = Mach number (M ≥ 0) and Column 2 = Drag Coefficient (Cd > 0). Automatically accepts comma, semicolon, or tab delimiters."}
+                    </p>
+
+                    {/* Example Table */}
+                    <div className="overflow-x-auto rounded border border-border/60 bg-background/60">
+                      <table className="w-full text-left font-mono text-[10px]">
+                        <thead className="bg-muted/80 text-muted-foreground border-b border-border/60">
+                          <tr>
+                            <th className="py-1 px-2.5 font-bold">Col 1: Mach (M)</th>
+                            <th className="py-1 px-2.5 font-bold">Col 2: Cd ({lang === "es" ? "Arrastre" : "Drag"})</th>
+                            <th className="py-1 px-2.5 font-normal text-muted-foreground">{lang === "es" ? "Régimen de Vuelo" : "Flight Regime"}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/30">
+                          <tr>
+                            <td className="py-0.5 px-2.5 font-bold text-foreground">0.00</td>
+                            <td className="py-0.5 px-2.5 text-purple-500 font-semibold">0.45</td>
+                            <td className="py-0.5 px-2.5 text-muted-foreground">{lang === "es" ? "Subsónico inicial" : "Low subsonic"}</td>
+                          </tr>
+                          <tr>
+                            <td className="py-0.5 px-2.5 font-bold text-foreground">0.80</td>
+                            <td className="py-0.5 px-2.5 text-purple-500 font-semibold">0.46</td>
+                            <td className="py-0.5 px-2.5 text-muted-foreground">{lang === "es" ? "Transónico previo" : "Pre-transonic"}</td>
+                          </tr>
+                          <tr className="bg-purple-500/5">
+                            <td className="py-0.5 px-2.5 font-bold text-foreground">1.05</td>
+                            <td className="py-0.5 px-2.5 text-purple-500 font-bold">0.65</td>
+                            <td className="py-0.5 px-2.5 text-purple-600 dark:text-purple-400 font-medium">{lang === "es" ? "Pico transónico (barrera sónica)" : "Transonic peak drag"}</td>
+                          </tr>
+                          <tr>
+                            <td className="py-0.5 px-2.5 font-bold text-foreground">2.00</td>
+                            <td className="py-0.5 px-2.5 text-purple-500 font-semibold">0.48</td>
+                            <td className="py-0.5 px-2.5 text-muted-foreground">{lang === "es" ? "Supersónico" : "Supersonic"}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Mode Selector Tabs */}
+                  <div className="flex items-center gap-1.5 p-0.5 bg-muted/60 rounded-md border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setAeroInputTab("upload")}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1.5 ${
+                        aeroInputTab === "upload"
+                          ? "bg-background text-foreground shadow-xs border border-border/50"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-purple-500" />
+                      {lang === "es" ? "Cargar Archivo (CSV / Excel / TXT)" : "Upload File (CSV / Excel / TXT)"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAeroInputTab("manual")}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1.5 ${
+                        aeroInputTab === "manual"
+                          ? "bg-background text-foreground shadow-xs border border-border/50"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                      {lang === "es" ? "Pegar Celdas de Excel / Manual" : "Paste from Excel / Manual"}
+                    </button>
+                  </div>
+
+                  {/* Tab 1: Upload */}
+                  {aeroInputTab === "upload" ? (
+                    <div className="relative border-2 border-dashed border-border/80 hover:border-purple-500/60 p-6 rounded-lg text-center hover:bg-muted/20 transition-all cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".csv, .xlsx, .xls, .txt"
+                        onChange={handleAeroFileUpload}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <UploadCloud className="h-8 w-8 text-purple-500 mx-auto mb-2 opacity-80" />
+                      <p className="text-xs text-foreground font-semibold">
+                        {aeroParsed && aeroParsed.mach.length > 0 ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            {aeroFileName ? `${aeroFileName} (${aeroParsed.mach.length} puntos cargados)` : `${aeroParsed.mach.length} puntos procesados con éxito`}
+                          </span>
+                        ) : (
+                          lang === "es" ? "Haz clic o arrastra tu archivo CSV, Excel o TXT aquí" : "Click or drop your Excel/CSV/TXT file here"
+                        )}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1 font-mono">
+                        {lang === "es" ? "Detecta encabezados 'Mach', 'Cd', 'Drag' automáticamente" : "Auto-detects 'Mach', 'Cd', 'Drag' column headers"}
+                      </p>
+                    </div>
+                  ) : (
+                    /* Tab 2: Manual Paste */
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-mono text-muted-foreground font-bold">
+                        {lang === "es" ? "Pega aquí tus datos (filas de Mach y Cd separadas por tabulador o coma):" : "Paste your rows here (Mach and Cd separated by tab or comma):"}
+                      </label>
+                      <textarea
+                        className="w-full h-36 p-2.5 text-xs font-mono bg-muted/30 border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-y"
+                        placeholder={"0.00\t0.45\n0.20\t0.45\n0.50\t0.44\n0.80\t0.46\n1.00\t0.61\n1.20\t0.66\n2.00\t0.48\n3.00\t0.38"}
+                        value={aeroDataRaw}
+                        onChange={(e) => {
+                          setAeroDataRaw(e.target.value);
+                          setUseAeroData(true);
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Summary of Parsed Points */}
+                  {aeroParsed && aeroParsed.mach.length > 0 && (
+                    <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs font-mono">
+                      <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>{aeroParsed.mach.length} {lang === "es" ? "puntos válidos detectados" : "valid points detected"}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-muted-foreground text-[11px]">
+                        <span>Mach: <strong>{Math.min(...aeroParsed.mach).toFixed(2)} - {Math.max(...aeroParsed.mach).toFixed(2)}</strong></span>
+                        <span>Cd máx: <strong>{Math.max(...aeroParsed.cd).toFixed(2)}</strong></span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modal Footer Actions */}
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setUseAeroData(false);
+                        setAeroParsed(null);
+                        setAeroFileName("");
+                        setAeroDataRaw("");
+                        setCalcParams(prev => ({ ...prev, useAeroData: false, aeroParsed: null }));
+                        setIsAeroModalOpen(false);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-red-500"
+                    >
+                      {lang === "es" ? "Restablecer a Modelo Estándar" : "Reset to Default"}
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setIsAeroModalOpen(false)}
+                        className="text-xs"
+                      >
+                        {lang === "es" ? "Cerrar" : "Close"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setUseAeroData(true);
+                          setCalcParams(prev => ({
+                            ...prev,
+                            dryMass,
+                            rocketDiameter,
+                            launchAltitude,
+                            launchTemp,
+                            flightPathAngle,
+                            useAeroData: true,
+                            aeroParsed
+                          }));
+                          setIsAeroModalOpen(false);
+                        }}
+                        disabled={!aeroParsed || aeroParsed.mach.length === 0}
+                        className="text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white"
+                      >
+                        {lang === "es" ? "Guardar y Aplicar Curva" : "Save & Apply Curve"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
         </div>
@@ -1226,35 +1540,59 @@ export function MissionControl({
         <Card
           className={`bg-card border-border shadow-sm border-t-2 ${simApogee ? "border-t-primary" : "border-t-slate-700"}`}
         >
-          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border">
+          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
             <CardTitle className="text-[12px] uppercase text-primary font-bold">
               {t.sim_apogee || "Simulation Apogee"}
             </CardTitle>
+            <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold flex items-center gap-1">
+              <Compass className="w-2.5 h-2.5" />
+              FPA: {calcParams.flightPathAngle || 90}º
+            </span>
           </CardHeader>
           <CardContent className="p-3">
             {simApogee ? (
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Apogee
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase flex items-center justify-between">
+                    <span>
+                      {lang === "es" ? "Apogeo AGL (Sobre Plataforma)" :
+                       lang === "fr" ? "Apogée AGL (Au-dessus du Sol)" :
+                       lang === "it" ? "Apogeo AGL (Sopra la Piattaforma)" :
+                       "Apogee AGL (Above Ground Level)"}
+                    </span>
+                    <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold uppercase">AGL</span>
                   </span>
-                  <span className="text-xl font-mono text-foreground">
+                  <span className="text-xl font-mono font-bold text-foreground">
                     {simApogee.maxApogee.toFixed(1)}{" "}
-                    <span className="text-sm text-muted-foreground">m</span>
+                    <span className="text-sm font-normal text-muted-foreground">m</span>
+                  </span>
+                  <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                    <span className="font-semibold text-foreground/80">
+                      {lang === "es" ? "SNM (Nivel Mar):" :
+                       lang === "fr" ? "AMSL (Niveau Mer) :" :
+                       lang === "it" ? "s.l.m. (Livello Mare):" :
+                       "ASL (Sea Level):"}
+                    </span>
+                    <strong className="text-foreground">
+                      {(calcParams.launchAltitude + simApogee.maxApogee).toFixed(1)} m
+                    </strong>
                   </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Max Velocity
+                    {lang === "es" ? "Velocidad Máxima" : lang === "fr" ? "Vitesse Maximale" : lang === "it" ? "Velocità Massima" : "Max Velocity"}
                   </span>
                   <span className="text-xl font-mono text-foreground">
                     {simApogee.maxVelocity.toFixed(1)}{" "}
                     <span className="text-sm text-muted-foreground">m/s</span>
                   </span>
+                  <span className="text-[10.5px] font-mono text-muted-foreground">
+                    Mach {(simApogee.maxVelocity / 340).toFixed(2)}
+                  </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Time to Apogee
+                    {lang === "es" ? "Tiempo hasta Apogeo" : lang === "fr" ? "Temps jusqu'à Apogée" : lang === "it" ? "Tempo all'Apogeo" : "Time to Apogee"}
                   </span>
                   <span className="text-xl font-mono text-foreground">
                     {simApogee.apogeeTime.toFixed(2)}{" "}
@@ -1263,11 +1601,14 @@ export function MissionControl({
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Max Acceleration
+                    {lang === "es" ? "Aceleración Máxima" : lang === "fr" ? "Accélération Maximale" : lang === "it" ? "Accelerazione Massima" : "Max Acceleration"}
                   </span>
                   <span className="text-xl font-mono text-foreground">
                     {simApogee.maxAcceleration.toFixed(1)}{" "}
                     <span className="text-sm text-muted-foreground">m/s²</span>
+                  </span>
+                  <span className="text-[10.5px] font-mono text-muted-foreground">
+                    {(simApogee.maxAcceleration / 9.80665).toFixed(1)} G
                   </span>
                 </div>
               </div>
@@ -1283,35 +1624,59 @@ export function MissionControl({
         <Card
           className={`bg-card border-border shadow-sm border-t-2 ${expApogee ? "border-t-purple-500" : "border-t-slate-700"}`}
         >
-          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border">
+          <CardHeader className="py-2 px-3 bg-muted/50 border-b border-border flex flex-row items-center justify-between">
             <CardTitle className="text-[12px] uppercase text-purple-400 font-bold">
               {t.exp_apogee || "Experimental Apogee"}
             </CardTitle>
+            <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold flex items-center gap-1">
+              <Compass className="w-2.5 h-2.5" />
+              FPA: {calcParams.flightPathAngle || 90}º
+            </span>
           </CardHeader>
           <CardContent className="p-3">
             {expApogee ? (
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Apogee
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase flex items-center justify-between">
+                    <span>
+                      {lang === "es" ? "Apogeo AGL (Sobre Plataforma)" :
+                       lang === "fr" ? "Apogée AGL (Au-dessus du Sol)" :
+                       lang === "it" ? "Apogeo AGL (Sopra la Piattaforma)" :
+                       "Apogee AGL (Above Ground Level)"}
+                    </span>
+                    <span className="text-[9px] font-mono text-purple-400 font-semibold uppercase">AGL</span>
                   </span>
-                  <span className="text-xl font-mono text-foreground">
+                  <span className="text-xl font-mono font-bold text-foreground">
                     {expApogee.maxApogee.toFixed(1)}{" "}
-                    <span className="text-sm text-muted-foreground">m</span>
+                    <span className="text-sm font-normal text-muted-foreground">m</span>
+                  </span>
+                  <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                    <span className="font-semibold text-foreground/80">
+                      {lang === "es" ? "SNM (Nivel Mar):" :
+                       lang === "fr" ? "AMSL (Niveau Mer) :" :
+                       lang === "it" ? "s.l.m. (Livello Mare):" :
+                       "ASL (Sea Level):"}
+                    </span>
+                    <strong className="text-foreground">
+                      {(calcParams.launchAltitude + expApogee.maxApogee).toFixed(1)} m
+                    </strong>
                   </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Max Velocity
+                    {lang === "es" ? "Velocidad Máxima" : lang === "fr" ? "Vitesse Maximale" : lang === "it" ? "Velocità Massima" : "Max Velocity"}
                   </span>
                   <span className="text-xl font-mono text-foreground">
                     {expApogee.maxVelocity.toFixed(1)}{" "}
                     <span className="text-sm text-muted-foreground">m/s</span>
                   </span>
+                  <span className="text-[10.5px] font-mono text-muted-foreground">
+                    Mach {(expApogee.maxVelocity / 340).toFixed(2)}
+                  </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Time to Apogee
+                    {lang === "es" ? "Tiempo hasta Apogeo" : lang === "fr" ? "Temps jusqu'à Apogée" : lang === "it" ? "Tempo all'Apogeo" : "Time to Apogee"}
                   </span>
                   <span className="text-xl font-mono text-foreground">
                     {expApogee.apogeeTime.toFixed(2)}{" "}
@@ -1320,11 +1685,14 @@ export function MissionControl({
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Max Acceleration
+                    {lang === "es" ? "Aceleración Máxima" : lang === "fr" ? "Accélération Maximale" : lang === "it" ? "Accelerazione Massima" : "Max Acceleration"}
                   </span>
                   <span className="text-xl font-mono text-foreground">
                     {expApogee.maxAcceleration.toFixed(1)}{" "}
                     <span className="text-sm text-muted-foreground">m/s²</span>
+                  </span>
+                  <span className="text-[10.5px] font-mono text-muted-foreground">
+                    {(expApogee.maxAcceleration / 9.80665).toFixed(1)} G
                   </span>
                 </div>
               </div>
