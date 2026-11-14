@@ -33,14 +33,17 @@ const NumberInputMC = ({
   tooltip,
   step,
   decimals,
+  min,
+  max,
 }: any) => {
   const [internal, setInternal] = useState(
     decimals !== undefined ? Number(value).toFixed(decimals) : String(value),
   );
   const lastPushedValue = React.useRef(value);
+  const isFocusedRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (value !== lastPushedValue.current) {
+    if (!isFocusedRef.current && value !== lastPushedValue.current) {
       setInternal(
         decimals !== undefined
           ? Number(value).toFixed(decimals)
@@ -49,6 +52,31 @@ const NumberInputMC = ({
       lastPushedValue.current = value;
     }
   }, [value, decimals]);
+
+  const commitBlur = () => {
+    isFocusedRef.current = false;
+    const normalized = internal.replace(",", ".").trim();
+    const parsed = parseFloat(normalized);
+    if (normalized === "" || normalized === "-" || normalized === "." || isNaN(parsed)) {
+      const fallback =
+        decimals !== undefined && !isNaN(value)
+          ? Number(value).toFixed(decimals)
+          : String(value);
+      setInternal(fallback);
+      lastPushedValue.current = value;
+      return;
+    }
+    let clamped = parsed;
+    if (min !== undefined && clamped < min) clamped = min;
+    if (max !== undefined && clamped > max) clamped = max;
+    if (clamped !== value || clamped !== lastPushedValue.current) {
+      lastPushedValue.current = clamped;
+      onChange(clamped);
+    }
+    setInternal(
+      decimals !== undefined ? Number(clamped).toFixed(decimals) : String(clamped),
+    );
+  };
 
   return (
     <div
@@ -62,31 +90,40 @@ const NumberInputMC = ({
       <input
         type="number"
         step={step}
+        min={min}
+        max={max}
         value={internal}
         onChange={(e) => {
-          setInternal(e.target.value);
+          const raw = e.target.value;
+          setInternal(raw);
+          const normalized = raw.replace(",", ".").trim();
           if (
-            e.target.value !== "" &&
-            e.target.value !== "-" &&
-            e.target.value !== "."
+            normalized !== "" &&
+            normalized !== "-" &&
+            normalized !== "."
           ) {
-            const val = parseFloat(e.target.value);
+            const val = parseFloat(normalized);
             if (!isNaN(val)) {
-              lastPushedValue.current = val;
-              onChange(val);
+              const inBounds =
+                (min === undefined || val >= min) &&
+                (max === undefined || val <= max);
+              if (inBounds) {
+                lastPushedValue.current = val;
+                onChange(val);
+              }
             }
           }
         }}
-        onBlur={() => {
-          if (decimals !== undefined && !isNaN(value)) {
-            const formatted = Number(value).toFixed(decimals);
-            setInternal(formatted);
-            lastPushedValue.current = value;
-          } else if (internal === "" || internal === "-" || internal === ".") {
-            setInternal(String(value));
+        onBlur={commitBlur}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
           }
         }}
-        onFocus={(e) => e.target.select()}
+        onFocus={(e) => {
+          isFocusedRef.current = true;
+          e.target.select();
+        }}
         className="w-[65px] shrink-0 h-6 min-h-0 text-[11px] py-0 px-1.5 text-right bg-background border-transparent text-primary font-mono ring-offset-background outline-none rounded-sm transition-all z-10 focus:ring-0 focus:outline-none"
       />
     </div>
@@ -272,7 +309,9 @@ export function MissionControl({
     aeroParsed !== calcParams.aeroParsed;
 
   const handleUpdate = () => {
-    setCalcParams({ dryMass, rocketDiameter, launchAltitude, launchTemp, flightPathAngle, useAeroData, aeroParsed });
+    const safeAngle = Math.max(0, Math.min(90, isNaN(flightPathAngle) ? 90 : flightPathAngle));
+    if (safeAngle !== flightPathAngle) setFlightPathAngle(safeAngle);
+    setCalcParams({ dryMass, rocketDiameter, launchAltitude, launchTemp, flightPathAngle: safeAngle, useAeroData, aeroParsed });
   };
 
   // Simulated Apogee Result
@@ -852,18 +891,17 @@ export function MissionControl({
                   {t.flight_path_angle || "Flight Path Angle [º]"}
                 </span>
                 <span className="text-[9.5px] font-mono text-purple-600 dark:text-purple-400 font-semibold">
-                  {flightPathAngle === 90 ? (lang === "es" ? "Vertical (90º)" : "Vertical (90º)") : `${(90 - flightPathAngle).toFixed(1)}º ${lang === "es" ? "inclinación" : "tilt"}`}
+                  {flightPathAngle === 90
+                    ? (lang === "es" ? "Vertical (90º)" : lang === "fr" ? "Verticale (90º)" : lang === "it" ? "Verticale (90º)" : "Vertical (90º)")
+                    : `${(90 - flightPathAngle).toFixed(1)}º ${lang === "es" ? "inclinación" : lang === "fr" ? "inclinaison" : lang === "it" ? "inclinazione" : "tilt"}`}
                 </span>
               </div>
               <NumberInputMC
                 label=""
                 value={flightPathAngle}
-                onChange={(val: any) => {
-                  const num = Number(val);
-                  if (!isNaN(num)) {
-                    setFlightPathAngle(Math.max(45, Math.min(90, num)));
-                  }
-                }}
+                onChange={(val: number) => setFlightPathAngle(val)}
+                min={0}
+                max={90}
                 step="0.5"
                 tooltip={t.flight_path_angle_desc || "Elevación de la rampa respecto a la horizontal (90º = vertical, 87º = 3º de inclinación)"}
               />
@@ -1546,7 +1584,7 @@ export function MissionControl({
             </CardTitle>
             <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold flex items-center gap-1">
               <Compass className="w-2.5 h-2.5" />
-              FPA: {calcParams.flightPathAngle || 90}º
+              FPA: {calcParams.flightPathAngle ?? 90}º
             </span>
           </CardHeader>
           <CardContent className="p-3">
@@ -1630,7 +1668,7 @@ export function MissionControl({
             </CardTitle>
             <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold flex items-center gap-1">
               <Compass className="w-2.5 h-2.5" />
-              FPA: {calcParams.flightPathAngle || 90}º
+              FPA: {calcParams.flightPathAngle ?? 90}º
             </span>
           </CardHeader>
           <CardContent className="p-3">

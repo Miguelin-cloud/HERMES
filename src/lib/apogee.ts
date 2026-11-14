@@ -129,8 +129,8 @@ export function calculateApogee(
    const R_air = 287;
    const gamma = 1.4;
    
-   // Flight path angle convention: elevation above horizontal (90° = vertical, 87° = 3° tilt)
-   const angle_deg = Math.max(45, Math.min(90, isNaN(flight_path_angle_deg) ? 90 : flight_path_angle_deg));
+   // Flight path angle convention: elevation above horizontal (90° = vertical, 87° = 3° tilt, 0° = horizontal)
+   const angle_deg = Math.max(0, Math.min(90, isNaN(flight_path_angle_deg) ? 90 : flight_path_angle_deg));
    const theta_0 = (angle_deg * Math.PI) / 180;
    const cos_theta_0 = Math.cos(theta_0);
    const sin_theta_0 = Math.sin(theta_0);
