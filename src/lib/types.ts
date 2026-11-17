@@ -39,6 +39,13 @@ export interface GrainInput {
   rhorat: number;
 }
 
+export type MotorMaterialId = 'al6082' | 'ss174ph' | 'custom';
+
+export const MOTOR_MATERIALS: Record<'al6082' | 'ss174ph', { densityKgM3: number; yieldStrengthMPa: number }> = {
+  al6082: { densityKgM3: 2700, yieldStrengthMPa: 250 }, // EN AW-6082-T6
+  ss174ph: { densityKgM3: 7800, yieldStrengthMPa: 1000 }, // AISI 630 / 17-4PH (H1025) Stainless Steel
+};
+
 export interface MotorInput {
   Dc: number; // mm
   Lc: number; // mm
@@ -47,6 +54,17 @@ export interface MotorInput {
   etac: number;
   paso_de_tiempo: number;
   Pamb: number; // MPa
+  // V2.1.0 Structural, Material, Liner & Inhibitor definition
+  wallThickness?: number; // mm
+  materialId?: MotorMaterialId;
+  customMaterialName?: string;
+  customMaterialDensity?: number; // kg/m³
+  customMaterialYieldMPa?: number; // MPa
+  safetyFactor?: number;
+  hasLiner?: boolean;
+  linerThickness?: number; // mm
+  hasInhibitor?: boolean;
+  inhibitorThickness?: number; // mm
 }
 
 export interface NozzleInput {
@@ -63,6 +81,7 @@ export interface SimulationInputs {
   grains: GrainInput[];
   nozzle: NozzleInput;
   customPropellants?: CustomPropellant[];
+  geometryQuality?: 'fast' | 'high';
 }
 
 export interface SimulationResults {
@@ -80,6 +99,7 @@ export interface SimulationResults {
   grains_Abe: number[][]; // [grainIndex][timeStep] array of end burn area
   grains_Abs: number[][]; // [grainIndex][timeStep] array of external burn area
   grains_Ab: number[][];  // [grainIndex][timeStep] array of total burn area
+  grains_burnback?: (import('./grains/types').GrainBurnbackTable | null)[];
   propellantType: number; // Dominant propellant type for visual rendering
   customPropellants?: CustomPropellant[];
   

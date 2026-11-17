@@ -2,10 +2,10 @@ export type SmartSearchLang = 'es' | 'en' | 'fr' | 'it';
 
 export const SMART_SEARCH_TRANSLATIONS = {
   header_title: {
-    es: "HERMES SMART SEARCH v2.0.0",
-    en: "HERMES SMART SEARCH v2.0.0",
-    fr: "HERMES SMART SEARCH v2.0.0",
-    it: "HERMES SMART SEARCH v2.0.0"
+    es: "HERMES SMART SEARCH v2.1.0",
+    en: "HERMES SMART SEARCH v2.1.0",
+    fr: "HERMES SMART SEARCH v2.1.0",
+    it: "HERMES SMART SEARCH v2.1.0"
   },
   header_badge: {
     es: "Optimizador Balístico Inteligente",

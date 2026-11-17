@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
@@ -15,6 +16,8 @@
     --color-foreground: var(--foreground);
     --color-card: var(--card);
     --color-card-foreground: var(--card-foreground);
+    --color-card-header: var(--surface-card-header);
+    --color-card-header-foreground: var(--surface-card-header-foreground);
     --color-popover: var(--popover);
     --color-popover-foreground: var(--popover-foreground);
     --color-primary: var(--primary);
@@ -37,50 +40,64 @@
 
 @layer base {
   :root {
-    /* Violet Space Dark Theme - Modern 2.0 */
-    --background: #0b0914; /* Deep violet-black */
-    --foreground: #f8fafc; /* Slate 50 */
-    --card: #151226; /* Dark violet-slate */
-    --card-foreground: #f8fafc;
-    --popover: #151226;
-    --popover-foreground: #f8fafc;
-    --primary: #a855f7; /* Purple 500 */
-    --primary-foreground: #ffffff; 
-    --secondary: #3b82f6; /* Blue 500 */
-    --secondary-foreground: #ffffff;
-    --muted: #2e2842; /* Soft purple tint */
-    --muted-foreground: #a7a3b6; /* Lighter violet-gray */
-    --accent: #8b5cf6; /* Violet 500 */
-    --accent-foreground: #ffffff;
+    --background: #0d1117;
+    --foreground: #f1f5f9;
+    --card: #151b23;
+    --card-foreground: #f1f5f9;
+    --surface-card-header: #1c2430;
+    --surface-card-header-foreground: #f1f5f9;
+    --popover: #151b23;
+    --popover-foreground: #f1f5f9;
+    --primary: #3b82f6;
+    --primary-foreground: #ffffff;
+    --secondary: #06b6d4;
+    --secondary-foreground: #0f172a;
+    --muted: #212936;
+    --muted-foreground: #94a3b8;
+    --accent: #1e293b;
+    --accent-foreground: #f1f5f9;
     --destructive: #ef4444;
-    --border: #352e4d; /* Brightened border */
-    --input: #231f38;
-    --ring: #a855f7;
+    --border: #2b3544;
+    --input: #11161d;
+    --ring: #3b82f6;
+    --chart-pressure: #f43f5e;
+    --chart-thrust: #38bdf8;
+    --accent-chamber: #3b82f6;
+    --accent-structure: #14b8a6;
+    --accent-nozzle: #f59e0b;
+    --accent-grain: #64748b;
     --radius: 0.5rem;
   }
 
   .light {
-    --background: #faf8f5; /* Soft ivory/warm alabaster */
-    --foreground: #1c1917; /* Slate/stone 900 */
-    --card: #ffffff; /* Pure white cards */
-    --card-foreground: #1c1917;
+    --background: #f4f6f9;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    --surface-card-header: #eef2f6;
+    --surface-card-header-foreground: #0f172a;
     --popover: #ffffff;
-    --popover-foreground: #1c1917;
-    --primary: #9333ea; /* Purple 600 */
+    --popover-foreground: #0f172a;
+    --primary: #2563eb;
     --primary-foreground: #ffffff;
-    --secondary: #2563eb; /* Blue 600 */
+    --secondary: #0284c7;
     --secondary-foreground: #ffffff;
-    --muted: #f4f1ea; /* Soft cozy beige tint */
-    --muted-foreground: #6b6660; /* Soft warm-stone text color */
-    --accent: #7c3aed; /* Violet 600 */
-    --accent-foreground: #ffffff;
+    --muted: #edf1f6;
+    --muted-foreground: #475569;
+    --accent: #e7effd;
+    --accent-foreground: #0f172a;
     --destructive: #dc2626;
-    --border: #e4dfd5; /* Elegant premium soft beige border */
-    --input: #f4f1ea;
-    --ring: #9333ea;
+    --border: #d6dee8;
+    --input: #f8fafc;
+    --ring: #2563eb;
+    --chart-pressure: #dc2626;
+    --chart-thrust: #2563eb;
+    --accent-chamber: #2563eb;
+    --accent-structure: #0f766e;
+    --accent-nozzle: #d97706;
+    --accent-grain: #475569;
   }
 }
-
 
 @layer base {
   * {

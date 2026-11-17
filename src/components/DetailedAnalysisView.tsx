@@ -37,12 +37,15 @@ import {
   Gauge
 } from 'lucide-react';
 
+import { ThemeColors } from '../lib/theme';
+
 interface DetailedAnalysisViewProps {
   results: SimulationResults;
   lang: Language;
   motor?: MotorInput;
   nozzle?: NozzleInput;
   customPropellants?: CustomPropellant[];
+  themeColors?: ThemeColors;
 }
 
 type SubTab = 'areas' | 'kn' | 'burn_rate' | 'mass_flow';
@@ -52,13 +55,26 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
   lang,
   motor,
   nozzle,
-  customPropellants
+  customPropellants,
+  themeColors,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('areas');
   const [selectedGrainIdx, setSelectedGrainIdx] = useState<number | 'all'>('all');
   const [showTheoryInfo, setShowTheoryInfo] = useState<boolean>(false);
 
   const t = translations[lang] || translations.en;
+  const chartPrimaryColor = themeColors?.primary || 'var(--primary)';
+  const chartSecondaryColor = themeColors?.secondary || 'var(--secondary)';
+  const chartPressureColor = themeColors?.chartPressure || '#f43f5e';
+
+  const tooltipStyle = {
+    backgroundColor: 'var(--card)',
+    borderColor: 'var(--border)',
+    borderRadius: '6px',
+    color: 'var(--foreground)',
+    fontSize: '12px',
+    fontFamily: 'monospace',
+  };
 
   // ── Preparación y estructuración de datos para gráficas (Optimizado con muestreo ágil) ────
   const timeSeriesData = useMemo(() => {
@@ -196,7 +212,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
     if (delta > 1.2) {
       profileType = {
         label: t.progressive_burning,
-        color: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30',
+        color: 'bg-primary/12 text-primary border-primary/30',
         icon: TrendingUp
       };
     } else if (delta < -1.2) {
@@ -223,57 +239,57 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
   return (
     <div id="detailed-analysis-container" className="flex flex-col h-full w-full gap-3 pb-8">
       {/* ── Sub-navigation Switcher Header ── */}
-      <div id="detailed-subtabs-nav" className="flex flex-wrap items-center justify-between gap-2 p-1.5 rounded-xl bg-card border border-border shrink-0 shadow-sm">
-        <div className="flex flex-wrap items-center gap-1.5">
+      <div id="detailed-subtabs-nav" className="flex flex-wrap items-center justify-between gap-2 p-1.5 rounded-lg bg-card border border-border shrink-0">
+        <div className="flex flex-wrap items-center gap-1">
           <button
             id="subtab-btn-areas"
             onClick={() => setActiveSubTab('areas')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-mono font-semibold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
               activeSubTab === 'areas'
-                ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-400'
+                ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Layers size={15} />
+            <Layers size={14} />
             <span>{t.subtab_areas}</span>
           </button>
 
           <button
             id="subtab-btn-kn"
             onClick={() => setActiveSubTab('kn')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-mono font-semibold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
               activeSubTab === 'kn'
-                ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-400'
+                ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Activity size={15} />
+            <Activity size={14} />
             <span>{t.subtab_kn}</span>
           </button>
 
           <button
             id="subtab-btn-burnrate"
             onClick={() => setActiveSubTab('burn_rate')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-mono font-semibold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
               activeSubTab === 'burn_rate'
-                ? 'bg-amber-600 text-white shadow-sm ring-1 ring-amber-400'
+                ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Flame size={15} />
+            <Flame size={14} />
             <span>{t.subtab_burn_rate}</span>
           </button>
 
           <button
             id="subtab-btn-massflow"
             onClick={() => setActiveSubTab('mass_flow')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-mono font-semibold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
               activeSubTab === 'mass_flow'
-                ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400'
+                ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
             }`}
           >
-            <Weight size={15} />
+            <Weight size={14} />
             <span>{t.subtab_mass_flow}</span>
           </button>
         </div>
@@ -281,10 +297,10 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
         <button
           id="theory-info-toggle-btn"
           onClick={() => setShowTheoryInfo(!showTheoryInfo)}
-          className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-mono rounded-lg border transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-mono rounded-md border transition-colors cursor-pointer ${
             showTheoryInfo
-              ? 'bg-blue-500/20 text-blue-600 dark:text-blue-300 border-blue-500/40'
-              : 'bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:bg-muted'
+              ? 'bg-primary/15 text-primary border-primary/40'
+              : 'bg-background text-muted-foreground border-border hover:text-foreground hover:bg-muted/50'
           }`}
         >
           <Info size={14} />
@@ -294,9 +310,9 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
 
       {/* ── Optional Theoretical Explanation Box ── */}
       {showTheoryInfo && (
-        <div id="theory-info-banner" className="p-3.5 rounded-xl bg-slate-900 text-slate-100 text-xs leading-relaxed border border-slate-700 shadow-md animate-in fade-in duration-200">
-          <div className="flex items-center gap-2 font-bold text-blue-400 mb-1.5 text-sm">
-            <Sparkles size={16} />
+        <div id="theory-info-banner" className="p-3.5 rounded-lg bg-card-header text-foreground text-xs leading-relaxed border border-border">
+          <div className="flex items-center gap-2 font-semibold text-primary mb-1 text-sm">
+            <Sparkles size={15} />
             <span>
               {activeSubTab === 'areas' && t.areas_title}
               {activeSubTab === 'kn' && t.kn_title}
@@ -304,7 +320,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
               {activeSubTab === 'mass_flow' && t.mass_flow_title}
             </span>
           </div>
-          <p className="text-slate-300 font-sans text-[12px] leading-relaxed">
+          <p className="text-muted-foreground font-sans text-[12px] leading-relaxed">
             {activeSubTab === 'areas' && t.areas_desc}
             {activeSubTab === 'kn' && t.kn_desc}
             {activeSubTab === 'burn_rate' && t.burn_rate_desc}
@@ -320,14 +336,14 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
         <div id="subtab-content-areas" className="flex flex-col gap-4">
           {/* Controls: Grain selector filter */}
           <div className="flex items-center justify-between gap-3 bg-card p-2 px-3 rounded-lg border border-border">
-            <span className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-wider">{t.grain_selector}:</span>
+            <span className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t.grain_selector}:</span>
             <div className="flex flex-wrap gap-1.5">
               <button
                 onClick={() => setSelectedGrainIdx('all')}
-                className={`px-2.5 py-1 text-xs font-mono rounded-md border transition-all ${
+                className={`px-2.5 py-1 text-xs font-mono rounded-md border transition-colors cursor-pointer ${
                   selectedGrainIdx === 'all'
-                    ? 'bg-purple-600 text-white border-purple-500 font-bold'
-                    : 'bg-muted/40 text-muted-foreground border-border hover:text-foreground'
+                    ? 'bg-primary text-primary-foreground border-primary font-semibold'
+                    : 'bg-background text-muted-foreground border-border hover:text-foreground'
                 }`}
               >
                 {t.all_grains_sum}
@@ -336,10 +352,10 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                 <button
                   key={idx}
                   onClick={() => setSelectedGrainIdx(idx)}
-                  className={`px-2.5 py-1 text-xs font-mono rounded-md border transition-all ${
+                  className={`px-2.5 py-1 text-xs font-mono rounded-md border transition-colors cursor-pointer ${
                     selectedGrainIdx === idx
-                      ? 'bg-purple-600 text-white border-purple-500 font-bold'
-                      : 'bg-muted/40 text-muted-foreground border-border hover:text-foreground'
+                      ? 'bg-primary text-primary-foreground border-primary font-semibold'
+                      : 'bg-background text-muted-foreground border-border hover:text-foreground'
                   }`}
                 >
                   {t.grains} {idx + 1}
@@ -352,11 +368,11 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {/* Total Combined Area Chart */}
             {(selectedGrainIdx === 'all' || results.grains.length === 1) && (
-              <div className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-[420px]">
-                <div className="py-2.5 px-4 bg-muted/40 border-b border-border flex items-center justify-between">
+              <div className="flex flex-col bg-card rounded-lg border border-border overflow-hidden min-h-[420px]">
+                <div className="py-2 px-3.5 bg-card-header text-card-header-foreground border-b border-border flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Layers size={16} className="text-purple-500" />
-                    <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground">
+                    <Layers size={15} className="text-primary" />
+                    <span className="text-xs font-mono font-semibold uppercase tracking-wider text-card-header-foreground">
                       {t.total_area} ({t.all_grains_sum})
                     </span>
                   </div>
@@ -367,26 +383,24 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <AreaChart data={timeSeriesData} margin={{ top: 15, right: 30, left: 20, bottom: 30 }}>
                       <defs>
                         <linearGradient id="areaGradientTotal" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
+                          <stop offset="5%" stopColor={chartPrimaryColor} stopOpacity={0.35}/>
+                          <stop offset="95%" stopColor={chartPrimaryColor} stopOpacity={0.0}/>
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="2 4" stroke="currentColor" className="text-border" vertical={false} />
+                      <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                       <XAxis 
                         dataKey="time" 
                         type="number" 
                         domain={[0, 'dataMax']}
                         tickFormatter={(v) => Number(v).toFixed(2)}
-                        tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                        className="text-muted-foreground"
+                        tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                         height={40}
                       >
                         <ChartLabel value={t.axis_time} position="insideBottom" offset={-10} className="fill-muted-foreground font-mono text-[11px]" />
                       </XAxis>
                       <YAxis 
                         tickFormatter={(v) => Number(v).toFixed(0)}
-                        tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                        className="text-muted-foreground"
+                        tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                         width={55}
                       >
                         <ChartLabel value={t.axis_area} angle={-90} position="insideLeft" offset={10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -394,10 +408,10 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                       <Tooltip 
                         formatter={(val: any) => [`${val} cm²`, t.total_area]}
                         labelFormatter={(lbl) => `T+ ${Number(lbl).toFixed(3)}s`}
-                        contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#fff', fontSize: '12px', fontFamily: 'monospace' }}
+                        contentStyle={tooltipStyle}
                       />
                       <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace', paddingBottom: '8px' }} />
-                      <Area isAnimationActive={false} type="monotone" dataKey="Ab_total" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#areaGradientTotal)" name={t.total_area} />
+                      <Area isAnimationActive={false} type="monotone" dataKey="Ab_total" stroke={chartPrimaryColor} strokeWidth={2.2} fillOpacity={1} fill="url(#areaGradientTotal)" name={t.total_area} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -408,12 +422,12 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
             {results.grains.map((g, idx) => {
               if (selectedGrainIdx !== 'all' && selectedGrainIdx !== idx) return null;
               return (
-                <div key={g.id || idx} className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-[420px]">
-                  <div className="py-2.5 px-4 bg-muted/40 border-b border-border flex items-center justify-between">
+                <div key={g.id || idx} className="flex flex-col bg-card rounded-lg border border-border overflow-hidden min-h-[420px]">
+                  <div className="py-2 px-3.5 bg-card-header text-card-header-foreground border-b border-border flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Layers size={16} className="text-purple-400" />
-                      <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground">
-                        {t.grains} {idx + 1} • {g.shape === 1 ? 'BATES / Cyl' : g.shape === 2 ? 'Star Core' : 'Solid End'}
+                      <Layers size={15} className="text-primary" />
+                      <span className="text-xs font-mono font-semibold uppercase tracking-wider text-card-header-foreground">
+                        {t.grains} {idx + 1} · {g.shape === 1 ? 'BATES / Cyl' : g.shape === 2 ? 'Star Core' : 'Solid End'}
                       </span>
                     </div>
                     <span className="text-[11px] font-mono text-muted-foreground">cm² vs Time</span>
@@ -444,7 +458,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                         <Tooltip 
                           formatter={(val: any, name: any) => [`${val} cm²`, name]}
                           labelFormatter={(lbl) => `T+ ${Number(lbl).toFixed(3)}s`}
-                          contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#fff', fontSize: '12px', fontFamily: 'monospace' }}
+                          contentStyle={tooltipStyle}
                         />
                         <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace', paddingBottom: '8px' }} />
                         {g.ci === 1 && g.shape !== 3 && (
@@ -474,33 +488,33 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
         <div id="subtab-content-kn" className="flex flex-col gap-4">
           {/* KPI Metric Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.kn_initial}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-indigo-500">{knAnalysis.knInit.toFixed(1)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">Ab/At</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-primary">{knAnalysis.knInit.toFixed(1)}</span>
+                <span className="text-[10px] text-muted-foreground">Ab/At</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.kn_max}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-rose-500">{knAnalysis.knMax.toFixed(1)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">Ab/At</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-foreground">{knAnalysis.knMax.toFixed(1)}</span>
+                <span className="text-[10px] text-muted-foreground">Ab/At</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.kn_avg}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-foreground">{knAnalysis.knAvg.toFixed(1)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">Ab/At</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-foreground">{knAnalysis.knAvg.toFixed(1)}</span>
+                <span className="text-[10px] text-muted-foreground">Ab/At</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col justify-between">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col justify-between">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.burn_regime_type}</span>
-              <div className={`mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold font-mono border ${knAnalysis.regimeBadge.color}`}>
+              <div className={`mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold font-mono border ${knAnalysis.regimeBadge.color}`}>
                 <knAnalysis.regimeBadge.icon size={14} />
                 <span>{knAnalysis.regimeBadge.label}</span>
               </div>
@@ -508,31 +522,30 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
           </div>
 
           {/* Main Kn(t) and Pressure vs Time Synchronized Dual Chart */}
-          <div className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-[460px]">
-            <div className="py-2.5 px-4 bg-muted/40 border-b border-border flex items-center justify-between">
+          <div className="flex flex-col bg-card rounded-lg border border-border overflow-hidden min-h-[460px]">
+            <div className="py-2 px-3.5 bg-card-header text-card-header-foreground border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Gauge size={16} className="text-indigo-500" />
-                <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground">
+                <Gauge size={15} className="text-primary" />
+                <span className="text-xs font-mono font-semibold uppercase tracking-wider text-card-header-foreground">
                   {t.kn_vs_time} & {t.pressure_vs_time}
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-[11px] font-mono">
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span> Kn</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> P0 (MPa)</span>
+              <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-xs" style={{ backgroundColor: chartPrimaryColor }}></span> Kn</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-xs" style={{ backgroundColor: chartPressureColor }}></span> P0 (MPa)</span>
               </div>
             </div>
             <div className="p-2 pt-4 h-[440px] w-full min-h-[440px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={timeSeriesData} margin={{ top: 20, right: 45, left: 20, bottom: 30 }}>
-                  <CartesianGrid strokeDasharray="2 4" stroke="currentColor" className="text-border" vertical={false} />
+                  <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
 
                   <XAxis 
                     dataKey="time" 
                     type="number" 
                     domain={[0, 'dataMax']}
                     tickFormatter={(v) => Number(v).toFixed(2)}
-                    tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                    className="text-muted-foreground"
+                    tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                     height={40}
                   >
                     <ChartLabel value={t.axis_time} position="insideBottom" offset={-10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -543,10 +556,10 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     yAxisId="left"
                     domain={[0, (dataMax: number) => Math.max(250, Math.ceil(dataMax * 1.15))]}
                     tickFormatter={(v) => Number(v).toFixed(0)}
-                    tick={{ fontSize: 11, fontFamily: 'monospace', fill: '#6366f1' }}
+                    tick={{ fontSize: 11, fontFamily: 'monospace', fill: chartPrimaryColor }}
                     width={55}
                   >
-                    <ChartLabel value="Kn (Ab/At)" angle={-90} position="insideLeft" offset={10} fill="#6366f1" style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 600, textAnchor: 'middle' }} />
+                    <ChartLabel value="Kn (Ab/At)" angle={-90} position="insideLeft" offset={10} fill={chartPrimaryColor} style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 600, textAnchor: 'middle' }} />
                   </YAxis>
 
                   {/* Right Y Axis: Chamber Pressure P0 */}
@@ -555,10 +568,10 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     orientation="right"
                     domain={[0, (dataMax: number) => Math.max(1, Number((dataMax * 1.2).toFixed(1)))]}
                     tickFormatter={(v) => Number(v).toFixed(1)}
-                    tick={{ fontSize: 11, fontFamily: 'monospace', fill: '#f43f5e' }}
+                    tick={{ fontSize: 11, fontFamily: 'monospace', fill: chartPressureColor }}
                     width={55}
                   >
-                    <ChartLabel value="P0 (MPa)" angle={90} position="insideRight" offset={10} fill="#f43f5e" style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 600, textAnchor: 'middle' }} />
+                    <ChartLabel value="P0 (MPa)" angle={90} position="insideRight" offset={10} fill={chartPressureColor} style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 600, textAnchor: 'middle' }} />
                   </YAxis>
 
                   <Tooltip 
@@ -567,13 +580,13 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                       return [`${val} MPa`, t.kn_legend_p];
                     }}
                     labelFormatter={(lbl) => `T+ ${Number(lbl).toFixed(3)}s`}
-                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#fff', fontSize: '12px', fontFamily: 'monospace' }}
+                    contentStyle={tooltipStyle}
                   />
                   
                   <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace', paddingBottom: '8px' }} />
                   
-                  <Line isAnimationActive={false} yAxisId="left" type="monotone" dataKey="Kn" stroke="#6366f1" strokeWidth={2.5} dot={false} name={t.kn_legend_kn} />
-                  <Line isAnimationActive={false} yAxisId="right" type="monotone" dataKey="P0_MPa" stroke="#f43f5e" strokeWidth={2.5} dot={false} name={t.kn_legend_p} />
+                  <Line isAnimationActive={false} yAxisId="left" type="monotone" dataKey="Kn" stroke={chartPrimaryColor} strokeWidth={2.2} dot={false} name={t.kn_legend_kn} />
+                  <Line isAnimationActive={false} yAxisId="right" type="monotone" dataKey="P0_MPa" stroke={chartPressureColor} strokeWidth={2.2} dot={false} name={t.kn_legend_p} />
                   
                   {/* Reference Critical Line for Chuffing */}
                   <ReferenceLine yAxisId="left" y={150} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} label={{ value: 'Chuffing (150)', position: 'insideTopLeft', fill: '#f59e0b', fontSize: 10, fontFamily: 'monospace' }} />
@@ -591,33 +604,33 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
         <div id="subtab-content-burnrate" className="flex flex-col gap-4">
           {/* KPI Metric Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.r_initial}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-amber-500">{burnRateAnalysis.rInit.toFixed(2)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">{t.r_unit}</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-amber-500">{burnRateAnalysis.rInit.toFixed(2)}</span>
+                <span className="text-[10px] text-muted-foreground">{t.r_unit}</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.r_max}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-rose-500">{burnRateAnalysis.rMax.toFixed(2)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">{t.r_unit}</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-foreground">{burnRateAnalysis.rMax.toFixed(2)}</span>
+                <span className="text-[10px] text-muted-foreground">{t.r_unit}</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.r_avg}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-foreground">{burnRateAnalysis.rAvg.toFixed(2)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">{t.r_unit}</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-foreground">{burnRateAnalysis.rAvg.toFixed(2)}</span>
+                <span className="text-[10px] text-muted-foreground">{t.r_unit}</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col justify-between">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col justify-between">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.burn_regime_type}</span>
-              <div className={`mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold font-mono border ${burnRateAnalysis.profileType.color}`}>
+              <div className={`mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold font-mono border ${burnRateAnalysis.profileType.color}`}>
                 <burnRateAnalysis.profileType.icon size={14} />
                 <span>{burnRateAnalysis.profileType.label}</span>
               </div>
@@ -627,11 +640,11 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
           {/* Grid of 2 Charts: Burn Rate r(t) vs Time AND Saint-Robert Characteristic Law Curve r(P) */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {/* Chart 1: r(t) vs Time */}
-            <div className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-[420px]">
-              <div className="py-2.5 px-4 bg-muted/40 border-b border-border flex items-center justify-between">
+            <div className="flex flex-col bg-card rounded-lg border border-border overflow-hidden min-h-[420px]">
+              <div className="py-2 px-3.5 bg-card-header text-card-header-foreground border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Flame size={16} className="text-amber-500" />
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground">
+                  <Flame size={15} className="text-amber-500" />
+                  <span className="text-xs font-mono font-semibold uppercase tracking-wider text-card-header-foreground">
                     {t.burn_rate_vs_time}
                   </span>
                 </div>
@@ -640,14 +653,13 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
               <div className="p-2 pt-4 h-[380px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={timeSeriesData} margin={{ top: 15, right: 30, left: 20, bottom: 30 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="currentColor" className="text-border" vertical={false} />
+                    <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                     <XAxis 
                       dataKey="time" 
                       type="number" 
                       domain={[0, 'dataMax']}
                       tickFormatter={(v) => Number(v).toFixed(2)}
-                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                      className="text-muted-foreground"
+                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                       height={40}
                     >
                       <ChartLabel value={t.axis_time} position="insideBottom" offset={-10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -655,8 +667,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <YAxis 
                       domain={[0, 'auto']}
                       tickFormatter={(v) => Number(v).toFixed(1)}
-                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                      className="text-muted-foreground"
+                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                       width={55}
                     >
                       <ChartLabel value="r (mm/s)" angle={-90} position="insideLeft" offset={10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -664,39 +675,38 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <Tooltip 
                       formatter={(val: any) => [`${val} mm/s`, t.subtab_burn_rate]}
                       labelFormatter={(lbl) => `T+ ${Number(lbl).toFixed(3)}s`}
-                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#fff', fontSize: '12px', fontFamily: 'monospace' }}
+                      contentStyle={tooltipStyle}
                     />
                     <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace', paddingBottom: '8px' }} />
-                    <Line isAnimationActive={false} type="monotone" dataKey="r_burn" stroke="#f59e0b" strokeWidth={2.5} dot={false} name="r (mm/s)" />
+                    <Line isAnimationActive={false} type="monotone" dataKey="r_burn" stroke="#f59e0b" strokeWidth={2.2} dot={false} name="r (mm/s)" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Chart 2: Saint-Robert's Law Curve: r(P) = a * P^n */}
-            <div className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-[420px]">
-              <div className="py-2.5 px-4 bg-muted/40 border-b border-border flex items-center justify-between">
+            <div className="flex flex-col bg-card rounded-lg border border-border overflow-hidden min-h-[420px]">
+              <div className="py-2 px-3.5 bg-card-header text-card-header-foreground border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <TrendingUp size={16} className="text-amber-500" />
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground">
+                  <TrendingUp size={15} className="text-amber-500" />
+                  <span className="text-xs font-mono font-semibold uppercase tracking-wider text-card-header-foreground">
                     {t.burn_rate_law_curve}
                   </span>
                 </div>
-                <span className="text-[11px] font-mono text-muted-foreground font-mono">
+                <span className="text-[11px] font-mono tabular-nums text-muted-foreground">
                   a={burnRateAnalysis.a.toFixed(3)}, n={burnRateAnalysis.n.toFixed(3)}
                 </span>
               </div>
               <div className="p-2 pt-4 h-[380px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={saintRobertCurveData} margin={{ top: 15, right: 30, left: 20, bottom: 30 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="currentColor" className="text-border" vertical={false} />
+                    <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                     <XAxis 
                       dataKey="pressure" 
                       type="number" 
                       domain={[0, 'dataMax']}
                       tickFormatter={(v) => Number(v).toFixed(1)}
-                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                      className="text-muted-foreground"
+                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                       height={40}
                     >
                       <ChartLabel value="Chamber Pressure P0 (MPa)" position="insideBottom" offset={-10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -704,8 +714,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <YAxis 
                       domain={[0, 'auto']}
                       tickFormatter={(v) => Number(v).toFixed(1)}
-                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                      className="text-muted-foreground"
+                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                       width={55}
                     >
                       <ChartLabel value="Burn Rate r (mm/s)" angle={-90} position="insideLeft" offset={10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -713,10 +722,10 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <Tooltip 
                       formatter={(val: any) => [`${val} mm/s`, "r (Saint-Robert)"]}
                       labelFormatter={(lbl) => `P: ${Number(lbl).toFixed(2)} MPa`}
-                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#fff', fontSize: '12px', fontFamily: 'monospace' }}
+                      contentStyle={tooltipStyle}
                     />
                     <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace', paddingBottom: '8px' }} />
-                    <Line isAnimationActive={false} type="monotone" dataKey="r" stroke="#d97706" strokeWidth={2.5} dot={false} name="r = a · P^n" />
+                    <Line isAnimationActive={false} type="monotone" dataKey="r" stroke={chartSecondaryColor} strokeWidth={2.2} dot={false} name="r = a · P^n" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -725,7 +734,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
 
           {/* Table of Burn Rate vs Pressure Ranges for the simulated propellant */}
           {burnRateAnalysis.activePropellant && (
-            <div className="p-4 rounded-xl bg-card border border-border shadow-sm space-y-3">
+            <div className="p-4 rounded-lg bg-card border border-border space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Flame size={16} className="text-amber-500" />
@@ -791,35 +800,35 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
         <div id="subtab-content-massflow" className="flex flex-col gap-4">
           {/* KPI Metric Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.initial_propellant_mass}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-emerald-500">{massFlowAnalysis.initialMass_g.toFixed(1)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">g</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-primary">{massFlowAnalysis.initialMass_g.toFixed(1)}</span>
+                <span className="text-[10px] text-muted-foreground">g</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.mdot_max}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-teal-500">{massFlowAnalysis.mdotMax_gs.toFixed(1)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">g/s</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-foreground">{massFlowAnalysis.mdotMax_gs.toFixed(1)}</span>
+                <span className="text-[10px] text-muted-foreground">g/s</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.mdot_avg}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-foreground">{massFlowAnalysis.mdotAvg_gs.toFixed(1)}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">g/s</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-foreground">{massFlowAnalysis.mdotAvg_gs.toFixed(1)}</span>
+                <span className="text-[10px] text-muted-foreground">g/s</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-card border border-border shadow-sm flex flex-col">
+            <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.consumed_mass}</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">100.0</span>
-                <span className="text-[10px] text-muted-foreground font-mono">%</span>
+              <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
+                <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">100.0</span>
+                <span className="text-[10px] text-muted-foreground">%</span>
               </div>
             </div>
           </div>
@@ -827,11 +836,11 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
           {/* Grid of 2 Charts: Dual Mass Flow (ṁ_gen vs ṁ_noz) and Propellant Consumption (%) */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {/* Chart 1: Dual Mass Flow (ṁ_gen vs ṁ_noz) */}
-            <div className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-[420px]">
-              <div className="py-2.5 px-4 bg-muted/40 border-b border-border flex items-center justify-between">
+            <div className="flex flex-col bg-card rounded-lg border border-border overflow-hidden min-h-[420px]">
+              <div className="py-2 px-3.5 bg-card-header text-card-header-foreground border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Weight size={16} className="text-emerald-500" />
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground">
+                  <Weight size={15} className="text-primary" />
+                  <span className="text-xs font-mono font-semibold uppercase tracking-wider text-card-header-foreground">
                     {t.mass_flow_vs_time}
                   </span>
                 </div>
@@ -840,14 +849,13 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
               <div className="p-2 pt-4 h-[380px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={timeSeriesData} margin={{ top: 15, right: 30, left: 20, bottom: 30 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="currentColor" className="text-border" vertical={false} />
+                    <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                     <XAxis 
                       dataKey="time" 
                       type="number" 
                       domain={[0, 'dataMax']}
                       tickFormatter={(v) => Number(v).toFixed(2)}
-                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                      className="text-muted-foreground"
+                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                       height={40}
                     >
                       <ChartLabel value={t.axis_time} position="insideBottom" offset={-10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -855,8 +863,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <YAxis 
                       domain={[0, 'auto']}
                       tickFormatter={(v) => Number(v).toFixed(0)}
-                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                      className="text-muted-foreground"
+                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                       width={55}
                     >
                       <ChartLabel value="ṁ (g/s)" angle={-90} position="insideLeft" offset={10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -864,22 +871,22 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <Tooltip 
                       formatter={(val: any, name: any) => [`${val} g/s`, name]}
                       labelFormatter={(lbl) => `T+ ${Number(lbl).toFixed(3)}s`}
-                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#fff', fontSize: '12px', fontFamily: 'monospace' }}
+                      contentStyle={tooltipStyle}
                     />
                     <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace', paddingBottom: '8px' }} />
-                    <Line isAnimationActive={false} type="monotone" dataKey="mdot_gen" stroke="#10b981" strokeWidth={2.5} dot={false} name={t.mdot_gen} />
-                    <Line isAnimationActive={false} type="monotone" dataKey="mdot_noz" stroke="#06b6d4" strokeWidth={2} strokeDasharray="4 4" dot={false} name={t.mdot_noz} />
+                    <Line isAnimationActive={false} type="monotone" dataKey="mdot_gen" stroke={chartPrimaryColor} strokeWidth={2.2} dot={false} name={t.mdot_gen} />
+                    <Line isAnimationActive={false} type="monotone" dataKey="mdot_noz" stroke={chartSecondaryColor} strokeWidth={2} strokeDasharray="4 4" dot={false} name={t.mdot_noz} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Chart 2: Propellant Mass Consumption vs Time (g & %) */}
-            <div className="flex flex-col bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-[420px]">
-              <div className="py-2.5 px-4 bg-muted/40 border-b border-border flex items-center justify-between">
+            <div className="flex flex-col bg-card rounded-lg border border-border overflow-hidden min-h-[420px]">
+              <div className="py-2 px-3.5 bg-card-header text-card-header-foreground border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Weight size={16} className="text-teal-500" />
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-foreground">
+                  <Weight size={15} className="text-primary" />
+                  <span className="text-xs font-mono font-semibold uppercase tracking-wider text-card-header-foreground">
                     {t.mass_consumption_vs_time}
                   </span>
                 </div>
@@ -890,18 +897,17 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                   <AreaChart data={timeSeriesData} margin={{ top: 15, right: 30, left: 20, bottom: 30 }}>
                     <defs>
                       <linearGradient id="propellantMassGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0d9488" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#0d9488" stopOpacity={0.0}/>
+                        <stop offset="5%" stopColor={chartPrimaryColor} stopOpacity={0.35}/>
+                        <stop offset="95%" stopColor={chartPrimaryColor} stopOpacity={0.0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="2 4" stroke="currentColor" className="text-border" vertical={false} />
+                    <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
                     <XAxis 
                       dataKey="time" 
                       type="number" 
                       domain={[0, 'dataMax']}
                       tickFormatter={(v) => Number(v).toFixed(2)}
-                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                      className="text-muted-foreground"
+                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                       height={40}
                     >
                       <ChartLabel value={t.axis_time} position="insideBottom" offset={-10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -909,8 +915,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <YAxis 
                       domain={[0, 'auto']}
                       tickFormatter={(v) => Number(v).toFixed(0)}
-                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'currentColor' }}
-                      className="text-muted-foreground"
+                      tick={{ fontSize: 11, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
                       width={55}
                     >
                       <ChartLabel value="Masa (g)" angle={-90} position="insideLeft" offset={10} className="fill-muted-foreground font-mono text-[11px]" />
@@ -918,10 +923,10 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <Tooltip 
                       formatter={(val: any, name: any) => [name === t.mass_percentage ? `${val}%` : `${val} g`, name]}
                       labelFormatter={(lbl) => `T+ ${Number(lbl).toFixed(3)}s`}
-                      contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#fff', fontSize: '12px', fontFamily: 'monospace' }}
+                      contentStyle={tooltipStyle}
                     />
                     <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace', paddingBottom: '8px' }} />
-                    <Area isAnimationActive={false} type="monotone" dataKey="mass_g" stroke="#0d9488" strokeWidth={2.5} fillOpacity={1} fill="url(#propellantMassGrad)" name={t.remaining_mass} />
+                    <Area isAnimationActive={false} type="monotone" dataKey="mass_g" stroke={chartPrimaryColor} strokeWidth={2.2} fillOpacity={1} fill="url(#propellantMassGrad)" name={t.remaining_mass} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

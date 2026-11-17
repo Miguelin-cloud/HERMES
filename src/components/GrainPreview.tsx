@@ -1,4 +1,5 @@
 import React from 'react';
+import { getGrainModule } from '../lib/grains';
 
 export function GrainPreview({ 
   grain, 
@@ -18,42 +19,30 @@ export function GrainPreview({
   let pathStr = "";
   let corePathStr = "";
 
-  if (grain.shape === 1) {
-    const r_out = Math.max(0, (grain.D0 / 2)) * scale;
-    const r_in = (grain.d0 / 2) * scale;
+  const primitives = getGrainModule(grain.shape).getCrossSectionPrimitives(grain, 0);
+  const r_out = Math.max(0, primitives.outerRadiusMm) * scale;
+
+  if (primitives.innerCircleRadiusMm !== null) {
+    const r_in = Math.max(0, primitives.innerCircleRadiusMm) * scale;
     if (r_out > r_in) {
       pathStr = `M ${drawSize/2+r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2-r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2+r_out} ${drawSize/2}`;
       if (r_in > 0) {
         corePathStr = `M ${drawSize/2+r_in} ${drawSize/2} A ${r_in} ${r_in} 0 1 1 ${drawSize/2-r_in} ${drawSize/2} A ${r_in} ${r_in} 0 1 1 ${drawSize/2+r_in} ${drawSize/2}`;
       }
     }
-  } else if (grain.shape === 3) {
-    const r_out = Math.max(0, (grain.D0 / 2)) * scale;
-    if (r_out > 0) {
-       pathStr = `M ${drawSize/2+r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2-r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2+r_out} ${drawSize/2}`;
-    }
-  } else if (grain.shape === 2) {
-    const r_out = Math.max(0, (grain.D0 / 2)) * scale;
-    const base_tip = grain.d0 / 2;
-    const base_valley = grain.d0mayor / 2;
-    
-    const pts = [];
-    const Np = grain.Np || 5;
-    for (let k = 0; k < Np * 2; k++) {
-      const angle = (Math.PI * 2 * k) / (Np * 2);
-      const isTip = k % 2 === 0;
-      const current_r = Math.min(grain.D0/2, (isTip ? base_tip : base_valley));
-      
-      const px = drawSize/2 + current_r * scale * Math.cos(angle);
-      const py = drawSize/2 + current_r * scale * Math.sin(angle);
-      pts.push(`${px},${py}`);
-    }
-
+  } else if (primitives.innerPolygonMm) {
     if (r_out > 0) {
       pathStr = `M ${drawSize/2+r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2-r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2+r_out} ${drawSize/2}`;
     }
-    if (pts.length > 0) {
-        corePathStr = `M ${pts[0]} L ${pts.slice(1).join(' L ')} Z`;
+    if (primitives.innerPolygonMm.length > 0) {
+      const pts = primitives.innerPolygonMm.map(
+        (p) => `${drawSize / 2 + p.x * scale},${drawSize / 2 + p.y * scale}`
+      );
+      corePathStr = `M ${pts[0]} L ${pts.slice(1).join(' L ')} Z`;
+    }
+  } else {
+    if (r_out > 0) {
+      pathStr = `M ${drawSize/2+r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2-r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2+r_out} ${drawSize/2}`;
     }
   }
 

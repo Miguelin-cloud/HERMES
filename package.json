@@ -1,8 +1,8 @@
 {
   "name": "hermes-simulator",
   "private": true,
-  "version": "2.0.0",
-  "description": "HERMES Solid Rocket Motor Numerical Simulator & Smart Search Engine v2.0.0",
+  "version": "2.1.0",
+  "description": "HERMES Solid Rocket Motor Numerical Simulator & Smart Search Engine v2.1.0",
   "author": "HERMES Aerospace Team",
   "type": "module",
   "main": "electron/main.cjs",
@@ -27,6 +27,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "class-variance-authority": "^0.7.1",
+    "clipper2-ts": "^2.0.1-19",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
@@ -56,19 +57,34 @@
   },
   "build": {
     "appId": "com.hermes.simulator",
-    "productName": "HERMES V2.0.0",
+    "productName": "HERMES V2.1.0",
     "copyright": "Copyright © 2024",
+    "asar": true,
+    "beforeBuild": "./electron/beforeBuild.cjs",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
+      "!dist/assets/aistudio/**/*",
+      "!dist/hermes_icon.jpg",
       "electron/**/*",
+      "!electron/beforeBuild.cjs",
       "package.json"
     ],
     "win": {
       "target": "nsis",
       "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HERMES Simulator",
+      "include": "build/installer.nsh"
     }
   }
 }

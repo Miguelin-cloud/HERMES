@@ -82,7 +82,6 @@ export function Logo({ size = 48, className = '', theme = 'dark' }: LogoProps) {
       <path
         d="M88 122 Q100 188 100 192 Q100 188 112 122 Z"
         fill="url(#hermesPlasmaFlame)"
-        className="animate-pulse"
       />
       <path
         d="M93 122 Q100 168 100 172 Q100 168 107 122 Z"
@@ -181,18 +180,16 @@ export function Logo({ size = 48, className = '', theme = 'dark' }: LogoProps) {
         strokeWidth="1.8"
       />
 
-      {/* Version Badge "2.0" Accent */}
+      {/* Version Badge "2.1" Accent */}
       <rect x="85" y="98" width="30" height="12" rx="6" fill="#a855f7" />
-      <text x="100" y="107" textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="900" fontFamily="monospace">v2.0</text>
+      <text x="100" y="107" textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="900" fontFamily="monospace">v2.1</text>
     </svg>
   );
 }
 
 export function AppIcon({ size = 120, className = '' }: { size?: number; className?: string }) {
   return (
-    <div className={`relative flex items-center justify-center rounded-[32px] overflow-hidden shadow-[0_0_35px_rgba(168,85,247,0.4)] bg-gradient-to-b from-[#0f172a] via-[#090d1a] to-[#020617] border border-purple-500/50 p-3 ${className}`} style={{ width: size, height: size }}>
-      {/* Ambient glowing flame light */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_70%,rgba(168,85,247,0.25),transparent_70%)] pointer-events-none animate-pulse" />
+    <div className={`relative flex items-center justify-center rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 p-3 ${className}`} style={{ width: size, height: size }}>
       <Logo size={size * 0.8} className="relative z-10" theme="dark" />
     </div>
   );

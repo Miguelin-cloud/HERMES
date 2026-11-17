@@ -49,21 +49,23 @@ npm run electron:build
 ## 5️⃣ ¡Ya lo tienes!
 Cuando el proceso termine (verás que pone "Done" o vuelve a aparecer el cursor), ve a tu carpeta del proyecto. 
 *   Verás que ha aparecido una carpeta nueva llamada **`release`**.
-*   Dentro de `release` encontrarás un archivo llamado **`HERMES Rocket Simulator Setup.exe`**.
+*   Dentro de `release` encontrarás el instalador **`HERMES V2.1.0 Setup 2.1.0.exe`**.
 
-**¡Ese es tu instalador!** Puedes enviárselo a quien quieras, subirlo a una web o mandarlo por correo. Al ejecutarlo, se instalará en el PC con el icono de HERMES.
+**¡Ese es tu instalador!** Puedes enviárselo a quien quieras, subirlo a una web o mandarlo por correo. Al ejecutarlo, se instalará en el PC con el icono de HERMES y el selector de módulos opcionales.
 
 ---
 
 ## 🎨 Personalización Final
 Si quieres cambiar el icono antes de crear el `.exe`:
-1.  Reemplaza el archivo `public/icon.png` por cualquier otro con el mismo nombre.
+1.  Reemplaza los archivos `public/icon.png` y `public/icon.ico` por otros con el mismo nombre.
 2.  Vuelve a ejecutar `npm run electron:build`.
 
 ---
 
-## 💡 Consejos de Profesional
-*   **Aviso de Windows**: Como tu app es nueva, Windows dirá "Protegió su PC". No te asustes, pulsa en *"Más información"* y luego en *"Ejecutar de todas formas"*.
-*   **Probar sin instalar**: Si solo quieres ver cómo queda la ventana sin instalarla, usa el comando `npm run electron:dev` (teniendo en otra terminal abierto el comando `npm run dev`).
+## 🛡️ Compatibilidad Automática en Windows (GPU / Sandbox)
+*   **Intel Arc / Drivers estrictos / Windows 11**: HERMES incorpora arranque adaptativo automático. Si el proceso gráfico falla en un equipo, el sistema limpia las cachés gráficas y escala automáticamente al modo compatible (`--no-sandbox` manteniendo aceleración 3D, o renderizado SwiftShader por software si el controlador lo bloquea), sin necesidad de modificar accesos directos manualmente.
+*   **Diagnóstico opcional por línea de comandos**: Si un usuario desea forzar o restablecer un modo manualmente, puede abrir la app con `--software-gl` (modo seguro CPU) o `--reset-gpu` (restablecer perfil gráfico).
+*   **Aviso de Windows SmartScreen**: Como la aplicación no está firmada con un certificado comercial, Windows puede mostrar "Windows protegió su PC". Pulsa en *"Más información"* y luego en *"Ejecutar de todas formas"*.
+*   **Probar sin instalar**: Si solo quieres ver cómo queda la ventana sin generar el `.exe`, ejecuta `npm run dev` en una terminal y `npm run electron:dev` en otra.
 
 ¡Disfruta de tu nueva aplicación de escritorio de HERMES! 🚀

@@ -279,7 +279,7 @@ export function SplashScreen({ lang, onComplete }: { lang: Language; onComplete:
             HERMES SIMULATOR
           </h1>
           <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-mono text-xs font-extrabold border border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.8)]">
-            v2.0
+            v2.1
           </span>
         </div>
 

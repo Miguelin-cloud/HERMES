@@ -1,4 +1,5 @@
 import { GrainInput, MotorInput, NozzleInput, SimulationInputs, SimulationResults, getPropellantData, getBurnRate, classifyMotor } from './types';
+import { getGrainModule, GrainRuntimeState } from './grains';
 import { fzeroSearch } from './math';
 
 /**
@@ -64,7 +65,7 @@ export function calculateThroatErosion(
   return { Dt, At, ydero };
 }
 
-export function runSimulation({ motor, grains, nozzle, customPropellants }: SimulationInputs): SimulationResults {
+export function runSimulation({ motor, grains, nozzle, customPropellants, geometryQuality }: SimulationInputs): SimulationResults {
   const t: number[] = [];
   const P0_MPa: number[] = [];
   const P0_gage: number[] = [];
@@ -80,102 +81,17 @@ export function runSimulation({ motor, grains, nozzle, customPropellants }: Simu
   
   if (Ntipos === 0) throw new Error("No grains defined");
 
-  // Estructura de estado inicial para cada grano de propelente
-  let state = grains.map(g => {
-    let Vg = 0;
-    let d0_mayor = g.shape === 2 ? g.d0mayor : 0;
-    let tweb0 = 0;
-    let Aduct = 0;
-
-    let pablo = 1;
-    let miguel = 1;
-    let alpha_deg = nozzle.alpha || 12;
-
-    if (g.shape === 1) { // Geometría Cilíndrica
-      Vg = (Math.PI / 4) * (Math.pow(g.D0, 2) - Math.pow(g.d0, 2)) * g.L0;
-      tweb0 = (g.D0 - g.d0) / 2;
-      Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * (Math.pow(g.D0, 2) - Math.pow(g.d0, 2));
-    } else if (g.shape === 2) { // Geometría en Estrella
-      const Np = g.Np || 5;
-      const Mx = g.d0mayor / 2;
-      
-      const term_pablo_atan = Math.atan( (Mx - (g.d0/2) * Math.cos(Math.PI / Np)) / ((g.d0/2) * Math.sin(Math.PI / Np)) );
-      pablo = Math.cos(-Math.PI / Np + term_pablo_atan);
-      
-      const term_miguel_atan = Math.atan( ((g.d0/2) * Math.sin(Math.PI / Np)) / (Mx - (g.d0/2) * Math.cos(Math.PI / Np)) );
-      miguel = Math.cos(Math.PI/2 - term_miguel_atan);
-
-      const star_hole_area = Np * 0.5 * (g.d0mayor / 2 - g.d0 / 2 * Math.cos(Math.PI / Np)) * g.d0 * Math.sin(Math.PI / Np) + 
-                            Np * 0.5 * Math.pow(g.d0 / 2, 2) * Math.sin(2 * Math.PI / Np);
-      
-      Vg = ( (Math.PI / 4) * Math.pow(g.D0, 2) - star_hole_area ) * g.L0;
-      tweb0 = (g.D0 - g.d0) / 2; 
-      Aduct = (Math.PI/4) * Math.pow(motor.Dc, 2) - ( (Math.PI/4)*Math.pow(g.D0, 2) - star_hole_area );
-    } else { // Grano Macizo (Solid)
-      Vg = (Math.PI / 4) * Math.pow(g.D0, 2) * g.L0;
-      tweb0 = g.D0 / 2;
-      Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * Math.pow(g.D0, 2);
-    }
-    
-    // Dimensionado de masa y longitudes para el bloque completo (N bloques)
-    let Lg0 = g.L0 * g.N;
-    let Vg0 = Vg * g.N;
-    
+  // Estructura de estado inicial para cada grano de propelente (delegada por geometría: analítica o Clipper2)
+  const state: GrainRuntimeState[] = grains.map((g) => {
     const prop = getPropellantData(g.propellantType, customPropellants);
-    const rhoreal = prop.rho * g.rhorat; // g/cm3 
-    const mg0 = rhoreal * Vg0 / 1e6; // kg
-    
-    return {
-      ...g,
-      tweb0,
-      d: g.d0,
-      D: g.D0,
-      L: Lg0,
-      tweb: tweb0,
-      Vg: Vg0,
-      mg: mg0,
-      dmayor: d0_mayor,
-      dmenor: g.d0,
-      Abe: 0,
-      Abc: 0,
-      Abs: 0,
-      Ab: 0,
+    return getGrainModule(g.shape).createRuntimeState(g, {
+      motor,
+      nozzle,
       prop,
-      rhoreal,
-      Aduct,
-      xincp: 0,
-      x: 0,
-      betha: g.shape === 2 ? 2 * Math.PI / g.Np : 0,
-      pablo,
-      miguel,
-      alpha_deg,
-      At: (Math.PI / 4) * Math.pow(nozzle.Dt0, 2),
-    };
+      customPropellants,
+      geometryQuality,
+    });
   });
-
-  // Cálculo preciso de áreas iniciales t=0 para cada grano
-  for (let s of state) {
-    if (s.shape === 1) {
-      s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * (Math.pow(s.D0, 2) - Math.pow(s.d0, 2));
-      s.Abc = s.ci * Math.PI * s.d0 * s.L;
-      s.Abs = s.osi * Math.PI * s.D0 * s.L;
-      s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
-    } else if (s.shape === 2) {
-      const Np = s.Np || 5;
-      const star_hole_area = Np * 0.5 * (s.d0mayor / 2 - s.d0 / 2 * Math.cos(Math.PI / Np)) * s.d0 * Math.sin(Math.PI / Np) + 
-                            Np * 0.5 * Math.pow(s.d0 / 2, 2) * Math.sin(2 * Math.PI / Np);
-      const arm_length = Math.sqrt(Math.pow(s.d0mayor / 2 - s.d0 / 2 * Math.cos(Math.PI / Np), 2) + Math.pow(s.d0 / 2 * Math.sin(Math.PI / Np), 2));
-      s.Abe = s.ei * 2 * s.N * ((Math.PI / 4) * Math.pow(s.D0, 2) - star_hole_area);
-      s.Abc = s.ci * 2 * Np * s.N * arm_length * s.L;
-      s.Abs = s.osi * Math.PI * s.D0 * s.L;
-      s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
-    } else {
-      s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * Math.pow(s.D0, 2);
-      s.Abc = 0;
-      s.Abs = s.osi * Math.PI * s.D0 * s.L;
-      s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
-    }
-  }
 
   const At0 = (Math.PI / 4) * Math.pow(nozzle.Dt0, 2); // mm2
   const Ae = (Math.PI / 4) * Math.pow(nozzle.Ds, 2); // mm2
@@ -251,129 +167,31 @@ export function runSimulation({ motor, grains, nozzle, customPropellants }: Simu
 
       let prev_mg = s.mg;
 
-      // GEOMETRÍA Y QUEMADO DE GRANOS
-      if (s.shape === 1) { // Grano Cilíndrico
-        s.d = s.d0 + s.ci * 2 * s.x;
-        s.D = s.D0 - s.osi * 2 * s.x;
-        s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
-        
-        s.tweb = (s.D - s.d) / 2;
-
-        if (s.d >= s.D || s.L <= 0) { 
-          s.D = 0; s.d = 0; s.L = 0; s.tweb = 0; 
-          s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
-          s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
-          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, 1, nozzle.ero_model || 1);
-          s.At = At;
-        } else {
-          s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2));
-          s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2));
-          s.Abc = s.ci * Math.PI * s.d * s.L;
-          s.Abs = s.osi * Math.PI * s.D * s.L;
-          s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
-          s.Vg = (Math.PI / 4) * (Math.pow(s.D, 2) - Math.pow(s.d, 2)) * s.L;
-          const xdero = s.tweb0 > 0 ? (s.tweb0 - s.tweb) / s.tweb0 : 0;
-          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
-          s.At = At;
-        }
-      } else if (s.shape === 3) { // Grano Macizo (Solid)
-        s.D = s.D0 - s.osi * 2 * s.x;
-        s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
-        
-        s.tweb = s.D / 2;
-
-        if (s.D <= 0 || s.L <= 0) {
-          s.D = 0; s.L = 0; s.tweb = 0;
-          s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
-          s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
-          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, 1, nozzle.ero_model || 1);
-          s.At = At;
-        } else {
-          s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Math.PI / 4) * Math.pow(s.D, 2);
-          s.Abe = s.ei * 2 * s.N * (Math.PI / 4) * Math.pow(s.D, 2);
-          s.Abs = s.osi * Math.PI * s.D * s.L;
-          s.Abc = 0;
-          s.Ab = Math.max(0, s.Abe + s.Abs);
-          s.Vg = (Math.PI / 4) * Math.pow(s.D, 2) * s.L;
-          const xdero = s.tweb0 > 0 ? (s.tweb0 - s.tweb) / s.tweb0 : 0;
-          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
-          s.At = At;
-        }
-      } else { // Grano en Estrella (2)
-        const Np = s.Np || 5;
-        s.D = s.D0 - s.osi * 2 * s.x;
-        s.L = s.L0 * s.N - s.ei * 2 * s.N * s.x;
-        
-        s.dmenor = s.d0 + s.ci * (2 * s.x / s.pablo);
-        s.dmayor = s.d0mayor + s.ci * (2 * s.x / s.miguel);
-        s.d = s.dmenor; 
-
-        let stopFlag = false;
-        if (s.D <= 0 || s.L <= 0 || s.dmenor >= s.D) stopFlag = true;
-
-        if (stopFlag) {
-          s.dmenor = 0; s.dmayor = 0; s.D = 0; s.L = 0; s.tweb = 0;
-          s.Vg = 0; s.Abe = 0; s.Abc = 0; s.Abs = 0; s.Ab = 1e-4;
-          s.Aduct = (Math.PI / 4) * Math.pow(motor.Dc, 2);
-          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, 1, nozzle.ero_model || 1);
-          s.At = At;
-        } else if (s.dmayor < s.D) {
-          // Fase 1: Ambas puntas están dentro del límite exterior D
-          s.tweb = (s.D - s.dmenor) / 2;
-          const xdero = s.tweb0 > 0 ? (s.tweb0 - s.tweb) / s.tweb0 : 0;
-          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
-          s.At = At;
-          
-          const area_hole = Np * 0.5 * (s.dmayor/2 - s.dmenor/2 * Math.cos(Math.PI/Np)) * s.dmenor * Math.sin(Math.PI/Np) + 
-                            Np * 0.5 * Math.pow(s.dmenor/2, 2) * Math.sin(2 * Math.PI/Np);
-          const arm_length = Math.sqrt(Math.pow(s.dmayor/2 - s.dmenor/2 * Math.cos(Math.PI/Np), 2) + Math.pow(s.dmenor/2 * Math.sin(Math.PI/Np), 2));
-          
-          s.Vg = ((Math.PI/4) * Math.pow(s.D, 2) - area_hole) * s.L;
-          s.Abe = s.ei * 2 * s.N * ((Math.PI/4) * Math.pow(s.D, 2) - area_hole);
-          s.Abc = s.ci * 2 * Np * s.N * arm_length * s.L;
-          s.Abs = s.osi * Math.PI * s.D * s.L;
-          s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
-          if (s.Ab <= 0) s.Ab = 1e-4;
-          
-          s.Aduct = Math.max(1e-6, (Math.PI / 4) * Math.pow(motor.Dc, 2) - ((Math.PI/4)*Math.pow(s.D,2) - area_hole));
-        } else {
-          // Fase 2: Las puntas de la estrella alcanzan el límite D, pero dmenor sigue quemando por dentro
-          s.tweb = (s.D - s.dmenor) / 2;
-          const xdero = s.tweb0 > 0 ? (s.tweb0 - s.tweb) / s.tweb0 : 0;
-          const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
-          s.At = At;
-          
-          const alpha_rad = s.alpha_deg * Math.PI / 180;
-          const target_fun = (beta: number) => {
-            return (s.D - s.dmenor)/2 - (s.D/2)*(1 - Math.cos(beta/2)) - (s.D/4)*Math.sqrt(Math.max(1e-12, 2*(1 - Math.cos(beta)))) / Math.tan(alpha_rad/2);
-          };
-          
-          let betha = s.betha || (2 * Math.PI / Np);
-          try {
-            betha = fzeroSearch(target_fun, [1e-6, 2 * Math.PI / Np], 50);
-            if (isNaN(betha) || betha <= 0) betha = s.betha || (2 * Math.PI / Np);
-          } catch (err) {
-            betha = s.betha || (2 * Math.PI / Np);
-          }
-          s.betha = betha;
-          
-          const clip_dmayor = s.D;
-          const ae_val = (s.D / 2) * Math.sin(betha / 2) / Math.tan(alpha_rad / 2);
-          const c_val = 2 * (clip_dmayor / 2) * Math.sin(betha / 2);
-          const lado_val = ae_val / Math.cos(alpha_rad / 2);
-          
-          const term_segment = (s.D*s.D/8) * (betha - Math.sin(betha)) + (c_val * ae_val / 2);
-          s.Vg = Np * term_segment * s.L;
-          
-          s.Abe = s.N * 2 * s.ei * Np * term_segment;
-          s.Abc = s.N * s.ci * Np * 2 * lado_val * s.L;
-          s.Abs = s.N * s.osi * Np * betha * (s.D / 2) * s.L;
-          s.Ab = Math.max(0, s.Abe + s.Abc + s.Abs);
-          if (s.Ab <= 0) s.Ab = 1e-4;
-          
-          s.Aduct = Math.max(1e-6, (Math.PI / 4) * Math.pow(motor.Dc, 2) - (Np * term_segment));
-        }
+      // GEOMETRÍA Y QUEMADO DE GRANOS (delegado al módulo propio de cada geometría)
+      const grainEval = getGrainModule(s.shape).evaluateAtBurnDepth(s, s.x, motor.Dc);
+      s.d = grainEval.d;
+      s.D = grainEval.D;
+      s.L = grainEval.L;
+      s.dmenor = grainEval.dmenor;
+      s.dmayor = grainEval.dmayor;
+      s.tweb = grainEval.tweb;
+      s.Vg = grainEval.Vg;
+      s.Abe = grainEval.Abe;
+      s.Abc = grainEval.Abc;
+      s.Abs = grainEval.Abs;
+      s.Ab = grainEval.Ab;
+      s.Aduct = grainEval.Aduct;
+      if (grainEval.betha !== undefined) {
+        s.betha = grainEval.betha;
       }
+
+      const xdero = grainEval.isConsumed
+        ? 1
+        : s.tweb0 > 0
+          ? (s.tweb0 - s.tweb) / s.tweb0
+          : 0;
+      const { At } = calculateThroatErosion(nozzle.Dt0, nozzle.e, xdero, nozzle.ero_model || 1);
+      s.At = At;
 
       s.mg = s.rhoreal * s.Vg / 1e6; // kg
       let mgen = (prev_mg - s.mg) / dt; // kg/s
@@ -802,6 +620,7 @@ export function runSimulation({ motor, grains, nozzle, customPropellants }: Simu
     t, P0_MPa, P0_gage, mgra_total, F_N, F_kg, E_N, E_kg,
     grains, grains_x, 
     grains_Abc, grains_Abe, grains_Abs, grains_Ab,
+    grains_burnback: state.map((s) => s.burnbackTable ?? null),
     propellantType: dominantPropellantType,
     customPropellants,
     Kn: Kn_arr,

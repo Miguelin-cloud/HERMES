@@ -190,6 +190,32 @@ export function getTourSequences(
           ]
         },
         {
+          id: 'chamber_structure_protection',
+          targetSelector: '[data-tour="chamber-structure-card"]',
+          title: loc('Estructura de Cámara, Liner, Inhibidor y Padm', 'Chamber Structure, Liner, Inhibitor & Padm', 'Structure de Chambre, Liner, Inhibiteur & Padm', 'Struttura Camera, Liner, Inibitore e Padm'),
+          category: loc('Estructura y Protección', 'Structure & Protection', 'Structure & Protection', 'Struttura e Protezione'),
+          tab: 'inputs',
+          description: loc(
+            'Define el espesor de pared, el material del cilindro y las capas de protección térmica para calcular en vivo la presión máxima admisible de la cámara (Padm), las holguras radiales y la masa del motor.',
+            'Define cylinder wall thickness, casing material, and thermal protection layers to compute live cylinder max admissible pressure (Padm), radial clearances, and motor mass.',
+            'Définissez l\'épaisseur de paroi, le matériau et les protections thermiques pour calculer en direct la pression admissible (Padm), le jeu radial et la masse du moteur.',
+            'Definisci spessore parete, materiale e protezioni termiche per calcolare in tempo reale la pressione ammissibile (Padm), il gioco radiale e la massa del motore.'
+          ),
+          bulletPoints: [
+            loc('Espesor de Cámara y Material: Configura el grosor de pared [mm], el Factor de Seguridad (FS) y elige Aluminio 6082-T6 (250 MPa), Acero Inox. 17-4PH H1025 (1000 MPa) o Material Personalizado (nombre, ρ y σy).', 'Wall Thickness & Material: Set casing thickness [mm], Safety Factor (SF), and choose Aluminum 6082-T6 (250 MPa), Stainless Steel 17-4PH H1025 (1000 MPa), or Custom Material (name, ρ, σy).', 'Épaisseur & Matériau : Définissez la paroi [mm], le facteur de sécurité (FS) et le matériau (Al 6082-T6, Acier Inox 17-4PH 1000 MPa ou Personnalisé).', 'Spessore & Materiale: Imposta spessore [mm], Fattore di Sicurezza (FS) e materiale (Al 6082-T6, Acciaio Inox 17-4PH 1000 MPa o Personalizzato).'),
+            loc('Presión Máx. Admisible (Padm): Se calcula por Lamé para la pared cilíndrica y lanza alertas si Pmáx la supera. Nota: evalúa solo la pared del tubo; los tornillos o pasadores de tobera y cierre deben dimensionarse aparte.', 'Max Admissible Pressure (Padm): Computed via Lamé hoop stress for the cylinder wall and flags overpressure if Pmax exceeds Padm. Note: covers cylinder wall only — size nozzle & closure bolts separately.', 'Pression Max Admissible (Padm) : Calculée par Lamé pour la paroi cylindrique seule (vérifiez séparément les vis de tuyère/fond).', 'Pressione Max Ammissibile (Padm): Calcolata con Lamé per la sola parete cilindrica (verificare separatamente viti di ugello e fondello).'),
+            loc('Liner Térmico (opcional): Aislante interior adherido al tubo. Se dibuja en el esquema y reduce el diámetro libre, sin modificar el solver balístico interno.', 'Thermal Liner (optional): Internal insulating sleeve inside Dc. Rendered on the blueprint and reduces radial clearance without altering internal ballistics.', 'Liner Thermique (optionnel) : Isolant interne affiché sur le schéma et réduisant le jeu radial sans modifier la balistique.', 'Liner Termico (opzionale): Isolante interno mostrato nello schema che riduce il gioco radiale senza alterare la balistica.'),
+            loc('Inhibidor de Grano (2 mm por defecto): Camisa exterior sobre el grano; actualiza el esquema en vivo y comprueba que D₀ + 2·liner + 2·inhibidor ≤ Dc.', 'Grain Inhibitor (2 mm default): Outer sleeve around the grain; updates the schematic live and verifies D₀ + 2·liner + 2·inhibitor ≤ Dc.', 'Inhibiteur de Grain (2 mm par défaut) : Manchon externe vérifiant que D₀ + 2·liner + 2·inhibiteur ≤ Dc.', 'Inibitore di Grano (2 mm predefinito): Guaina esterna che verifica D₀ + 2·liner + 2·inibitore ≤ Dc.'),
+            loc('Masa del Motor (1.3× m_cil): Estima cilindro + 10% cierre + 20% tobera y la sincroniza automáticamente en Mission Control para el cálculo de apogeo.', 'Motor Mass (1.3× m_cyl): Estimates cylinder + 10% closure + 20% nozzle and auto-syncs into Mission Control for apogee integration.', 'Masse Moteur (1.3× m_cyl) : Estime cylindre + 10% fond + 20% tuyère et synchronise Mission Control.', 'Massa Motore (1.3× m_cil): Stima cilindro + 10% fondello + 20% ugello e sincronizza Mission Control.')
+          ],
+          tip: loc(
+            'Pulsa el botón (i) junto a la Presión Máx. Admisible para ver la ecuación exacta con tus valores actuales y el aviso completo sobre tornillos y materiales.',
+            'Click the (i) icon next to Max Admissible Pressure to inspect the exact equation with live values and the full bolt/material notes.',
+            'Cliquez sur l\'icône (i) à côté de Padm pour afficher l\'équation détaillée et les notes sur les vis et matériaux.',
+            'Clicca sull\'icona (i) accanto a Padm per vedere l\'equazione dettagliata e le note su viti e materiali.'
+          )
+        },
+        {
           id: 'nozzle_inputs',
           targetSelector: '[data-tour="nozzle-card"]',
           title: loc('Dimensionado de la Tobera Laval (Dt₀, Ds, α)', 'De Laval Nozzle Sizing (Dt₀, Ds, α)', 'Dimensionnement Tuyère Laval (Dt₀, Ds, α)', 'Dimensionamento Ugello Laval (Dt₀, Ds, α)'),

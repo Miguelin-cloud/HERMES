@@ -18,7 +18,8 @@ import {
   Rocket, 
   Calendar,
   ListOrdered,
-  ArrowRight
+  ArrowRight,
+  ShieldCheck
 } from 'lucide-react';
 import { Language } from '../lib/i18n';
 
@@ -260,8 +261,8 @@ export const VERSIONS_LOG: VersionData[] = [
     version: '2.0',
     codename: 'Smart Search & Aerospace v2.0',
     date: '2026-11-04',
-    isLatest: true,
-    badge: { en: 'Active Version v2.0', es: 'Versión Activa v2.0', fr: 'Version Active v2.0', it: 'Versione Attiva v2.0' },
+    isLatest: false,
+    badge: { en: 'Release v2.0', es: 'Lanzamiento v2.0', fr: 'Version v2.0', it: 'Rilascio v2.0' },
     title: {
       en: 'HERMES v2.0: Smart Search (It Max), Dual Solvers & Aerospace Redesign',
       es: 'HERMES v2.0: Smart Search (Máximo Rendimiento It), Algoritmos Duales y Rediseño Aeroespacial',
@@ -318,6 +319,102 @@ export const VERSIONS_LOG: VersionData[] = [
           es: 'Directorio completo de notas de ingeniería que documenta los modelos balísticos, la guía para compilar el ejecutable (.exe), la química y los algoritmos de telemetría.',
           fr: 'Dossier complet de notes techniques documentant la balistique, la compilation (.exe), la chimie et la télémétrie.',
           it: 'Cartella completa di note tecniche che documenta la balistica, la compilazione (.exe), la chimica e la telemetria.'
+        }
+      }
+    ]
+  },
+  {
+    version: '2.1.0',
+    codename: 'Structural Chamber & Mission Sync v2.1.0',
+    date: '2026-11-14',
+    isLatest: true,
+    badge: { en: 'Active Version v2.1.0', es: 'Versión Activa v2.1.0', fr: 'Version Active v2.1.0', it: 'Versione Attiva v2.1.0' },
+    title: {
+      en: 'HERMES V2.1.0: Structural Motor Definition, Thermal Protection & Mission Auto-Sync',
+      es: 'HERMES V2.1.0: Definición Estructural de Cámara, Protección Térmica y Sincronización de Misión',
+      fr: 'HERMES V2.1.0 : Définition Structurelle de Chambre, Protection Thermique & Synchro Mission',
+      it: 'HERMES V2.1.0: Definizione Strutturale della Camera, Protezione Termica e Sincronizzazione Missione'
+    },
+    summary: {
+      en: 'Version 2.1.0 introduces full structural and material engineering for the combustion chamber (wall thickness, Aluminum 6082-T6 / Stainless Steel 17-4PH H1025 / custom materials, safety factor, live Lamé admissible pressure Padm with overpressure alerts), optional thermal liner and grain inhibitor, automatic 1.3x motor mass sync to Mission Control (full 2D trajectory 0°–90°, AGL/ASL, Mach vs Cd), Phase 1 PBR/HDRI + volumetric GLSL motor viewer & 2D grain regression evolution, Phase 2 full 3D flight simulation (tilting TEL tower, parametric rocket, dynamic sky), and Phase 3 Broadcast Cameras (Onboard Rocket Cam, Pad Cam, Chase, Trajectory Arc), coastal COHETEROS Hangar with mountains & animated seaward ocean, Mission Milestones (MAX-Q, MACH 1, BURNOUT, APOGEE), simultaneous Sim vs Exp 3D comparison, and independent Motor & Flight playback controls.',
+      es: 'La versión 2.1.0 incorpora ingeniería estructural y de materiales de cámara (Aluminio 6082-T6 / Acero Inox. 17-4PH H1025 / personalizado, FS, Padm en vivo), liner térmico e inhibidor, sincronización de masa (1.3×) con Mission Control (trayectoria 2D 0°–90°), Fase 1 visor 3D PBR/HDRI + pluma GLSL y evolución 2D de granos, Fase 2 vuelo 3D completo (torre TEL inclinable, cohete paramétrico, cielo dinámico) y Fase 3 con Cámaras Broadcast (A Bordo, Rampa, Persecución, Arco), entorno costero con Hangar COHETEROS y logo, montañas y mar hacia donde apuntan las trayectorias no verticales, Hitos de Misión (MAX-Q, MACH 1, BURNOUT, APOGEO), comparativa simultánea Sim vs Exp en 3D y reproducción independiente de Motor y Vuelo.',
+      fr: 'La version 2.1.0 introduit l\'ingénierie structurelle (Al 6082-T6 / Acier Inox 17-4PH H1025 / personnalisé, FS, Padm), liner thermique et inhibiteur, synchro masse (1.3×) Mission Control, Phase 1 moteur 3D PBR/HDRI + panache GLSL/CFD et évolution 2D des grains, Phase 2 vol 3D complet (tour TEL, fusée paramétrique, ciel dynamique) et Phase 3 avec Caméras Broadcast (Caméra Embarquée, Pas de Tir, Poursuite, Arc), complexe côtier avec Hangar COHETEROS, montagnes et océan, Jalons (MAX-Q, MACH 1, BURNOUT, APOGÉE), comparatif simultané Sim vs Exp 3D et contrôle indépendant Moteur et Vol.',
+      it: 'La versione 2.1.0 introduce ingegneria strutturale (Alluminio 6082-T6 / Acciaio Inox 17-4PH H1025 / personalizzato, FS, Padm), liner termico e inibitore, sincronizzazione massa (1.3×) Mission Control, Fase 1 motore 3D PBR/HDRI + plume GLSL/CFD ed evoluzione 2D dei grani, Fase 2 volo 3D completo (torre TEL, razzo parametrico, cielo dinamico) e Fase 3 con Camere Broadcast (Onboard Cam, Rampa, Inseguimento, Arco), scenario costiero con Hangar COHETEROS, montagne e mare, Pietre Miliari (MAX-Q, MACH 1, BURNOUT, APOGEO), confronto simultaneo Sim vs Exp 3D e riproduzione indipendente Motore e Volo.'
+    },
+    highlights: [
+      {
+        icon: ShieldCheck,
+        title: {
+          en: 'Structural Chamber Materials (17-4PH & Al 6082), Safety Factor & Padm',
+          es: 'Materiales de Cámara (17-4PH y Al 6082), Factor de Seguridad y Padm',
+          fr: 'Matériaux (17-4PH & Al 6082), Facteur de Sécurité et Padm',
+          it: 'Materiali Camera (17-4PH e Al 6082), Fattore di Sicurezza e Padm'
+        },
+        desc: {
+          en: 'Configure casing wall thickness, Aluminum 6082-T6 (250 MPa), high-strength Stainless Steel 17-4PH H1025 (1000 MPa), or custom material properties and safety factor. Live hoop-stress Padm updates instantaneously in Inputs and triggers overpressure alerts in Results.',
+          es: 'Configura el espesor de pared, Aluminio 6082-T6 (250 MPa), Acero Inox. 17-4PH H1025 de alta resistencia (1000 MPa) o material personalizado junto al FS. Padm se actualiza en vivo en Inputs y alerta en Resultados si Pmáx la supera.',
+          fr: 'Configurez l\'épaisseur de paroi, Aluminium 6082-T6 (250 MPa), Acier Inox 17-4PH H1025 (1000 MPa) ou matériau personnalisé et FS. Padm se met à jour en direct et alerte en cas de surpression.',
+          it: 'Configura spessore parete, Alluminio 6082-T6 (250 MPa), Acciaio Inox 17-4PH H1025 (1000 MPa) o materiale personalizzato e FS. Padm si aggiorna in tempo reale e segnala sovrapressioni.'
+        }
+      },
+      {
+        icon: Layers,
+        title: {
+          en: 'Thermal Liner, Grain Inhibitor & Realistic Blueprint Schematic',
+          es: 'Liner Térmico, Inhibidor de Grano y Esquema Técnico Realista',
+          fr: 'Liner Thermique, Inhibiteur de Grain et Schéma Technique Réaliste',
+          it: 'Liner Termico, Inibitore di Grano e Schema Tecnico Realistico'
+        },
+        desc: {
+          en: 'Toggle optional thermal liner and grain inhibitor with custom thicknesses. The schematic dynamically renders casing wall, bulkhead + O-rings, throat insert, liner, and inhibitor while checking radial clearance against grain outer diameter D0.',
+          es: 'Activa opcionalmente el liner térmico e inhibidor exterior con sus espesores. El esquema renderiza dinámicamente pared, cierre con juntas tóricas, inserto de garganta, liner e inhibidor, comprobando la holgura radial frente al diámetro D0.',
+          fr: 'Activez en option le liner thermique et l\'inhibiteur avec leurs épaisseurs. Le schéma affiche paroi, fond avant, insert de col, liner et inhibiteur tout en vérifiant le jeu radial face à D0.',
+          it: 'Attiva opzionalmente il liner termico e l\'inibitore con i rispettivi spessori. Lo schema mostra parete, fondello, inserto di gola, liner e inibitore verificando il gioco radiale rispetto a D0.'
+        }
+      },
+      {
+        icon: Flame,
+        title: {
+          en: 'Phase 1 3D Test Stand: PBR/HDRI, Volumetric GLSL Plume & CFD Modes',
+          es: 'Fase 1 Motor 3D: PBR/HDRI, Pluma GLSL con Diamantes de Choque y Modos CFD',
+          fr: 'Phase 1 Moteur 3D : PBR/HDRI, Panache GLSL & Modes CFD Thermique/Mach',
+          it: 'Fase 1 Motore 3D: PBR/HDRI, Plume GLSL Supersonico e Mappe CFD'
+        },
+        desc: {
+          en: 'Modernized Motor3DViewer with procedural HDRI studio reflections, true solid-wall cutaway with thermal liner, Viton O-rings, graphite throat insert, grounded static test stand with load cell, GLSL volumetric exhaust plume with Pe/Pa shock diamonds, and Thermal/Mach CFD overlays.',
+          es: 'Visor 3D renovado con reflejos HDRI PBR reales, corte sólido con espesor de pared, liner térmico, juntas tóricas, inserto de grafito, banco de pruebas estático con célula de carga, shader GLSL volumétrico de pluma con ondas de choque según Pe/Pa y mapas térmico/Mach CFD.',
+          fr: 'Visionneuse 3D modernisée : reflets HDRI PBR, coupe solide avec liner thermique, joints toriques, insert en graphite, banc d\'essai statique, shader GLSL volumétrique avec diamants de choc selon Pe/Pa et cartes CFD Thermique/Mach.',
+          it: 'Visualizzatore 3D modernizzato: riflessi HDRI PBR, spaccato solido con liner termico, O-ring, inserto in grafite, banco prova statico, shader GLSL volumetrico con diamanti d\'urto Pe/Pa e mappe CFD Termica/Mach.'
+        }
+      },
+      {
+        icon: Rocket,
+        title: {
+          en: 'Phase 2 & 3 Coastal 3D Flight: Broadcast Cams, COHETEROS Hangar & Milestones',
+          es: 'Fases 2 y 3 Vuelo 3D Costero: Cámaras Broadcast, Hangar COHETEROS e Hitos',
+          fr: 'Phases 2 & 3 Vol 3D Côtier : Caméras Broadcast, Hangar COHETEROS & Jalons',
+          it: 'Fasi 2 e 3 Volo 3D Costiero: Camere Broadcast, Hangar COHETEROS e Pietre Miliari'
+        },
+        desc: {
+          en: 'Full 3D coastal launch complex with COHETEROS logo Hangar, mountains inland, animated seaward ocean (+X downrange), tilting TEL tower, Broadcast Cameras (Onboard Rocket Cam, Pad Cam tracking, Chase, Trajectory Arc), MAX-Q / MACH 1 / BURNOUT / APOGEE 3D beacons & timeline pins, simultaneous Sim vs Exp comparison, and independent Motor & Flight playback controls.',
+          es: 'Complejo costero 3D con Hangar COHETEROS y logotipo, montañas y mar animado en la dirección de disparo (+X), torre móvil TEL inclinable, Cámaras Broadcast (A Bordo, Pad Cam con seguimiento continuo, Persecución, Arco), balizas e hitos interactivos (MAX-Q, MACH 1, BURNOUT, APOGEO), comparativa simultánea Sim vs Exp en 3D y control independiente de Motor y Vuelo.',
+          fr: 'Complexe côtier 3D avec Hangar COHETEROS et logo, montagnes et océan animé dans l\'axe de tir (+X), tour TEL inclinable, Caméras Broadcast (Embarquée, Pad Cam avec suivi continu, Poursuite, Arc), jalons 3D (MAX-Q, MACH 1, BURNOUT, APOGÉE), comparatif simultané Sim vs Exp et contrôle indépendant Moteur et Vol.',
+          it: 'Complesso costiero 3D con Hangar COHETEROS e logo, montagne e mare animato in direzione di lancio (+X), torre TEL inclinabile, Camere Broadcast (Onboard, Pad Cam con inseguimento continuo, Inseguimento, Arco), marcatori 3D (MAX-Q, MACH 1, BURNOUT, APOGEO), confronto simultaneo Sim vs Exp e controllo indipendente Motore e Volo.'
+        }
+      },
+      {
+        icon: Weight,
+        title: {
+          en: 'Automatic Motor Mass (1.3×) & Full 2D Mission Trajectory Sync',
+          es: 'Masa del Motor (1.3×) y Trayectoria 2D Completa en Mission Control',
+          fr: 'Masse Moteur (1.3×) & Trajectoire 2D Complète en Mission Control',
+          it: 'Massa Motore (1.3×) e Traiettoria 2D Completa in Mission Control'
+        },
+        desc: {
+          en: 'Estimates total motor hardware mass (1.3× m_cyl) alongside propellant mass, syncs automatically to Mission Control, and exposes full 2D flight trajectory vectors (x, h, vx, vy, γ, 0°–90°), Mach vs Cd importer, and 4-language Smart Search.',
+          es: 'Estima la masa del motor (1.3× m_cil) junto al propulsante, sincroniza con Mission Control y expone la trayectoria 2D completa (x, h, vx, vy, γ, 0°–90°), importador Mach vs Cd y Smart Search en 4 idiomas.',
+          fr: 'Estime la masse du moteur (1.3× m_cyl) avec le propergol, synchronise Mission Control et expose la trajectoire 2D complète (x, h, vx, vy, γ, 0°–90°), importateur Mach vs Cd et Smart Search en 4 langues.',
+          it: 'Stima la massa del motore (1.3× m_cyl) con il propellente, sincronizza Mission Control ed espone la traiettoria 2D completa (x, h, vx, vy, γ, 0°–90°), importatore Mach vs Cd e Smart Search in 4 lingue.'
         }
       }
     ]
@@ -390,7 +487,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
     book_title: { en: 'Version History Log', es: 'Historial de Versiones', fr: 'Historique des Versions', it: 'Cronologia Versioni' },
     book_subtitle: { en: 'HERMES Engineering Release Notes', es: 'Registro de Lanzamientos y Cambios HERMES', fr: 'Notes de Version et Évolutions HERMES', it: 'Note di Rilascio HERMES' },
     index_title: { en: 'Table of Contents', es: 'Índice de Versiones', fr: 'Table des Matières', it: 'Indice delle Versioni' },
-    open_latest: { en: 'View Latest Version (v2.0)', es: 'Ver Última Versión (v2.0)', fr: 'Voir Dernière Version (v2.0)', it: 'Vedi Ultima Versione (v2.0)' },
+    open_latest: { en: 'View Latest Version (v2.1.0)', es: 'Ver Última Versión (v2.1.0)', fr: 'Voir Dernière Version (v2.1.0)', it: 'Vedi Ultima Versione (v2.1.0)' },
     prev_page: { en: 'Previous Page', es: 'Página Anterior', fr: 'Page Précédente', it: 'Pagina Precedente' },
     next_page: { en: 'Next Page', es: 'Página Siguiente', fr: 'Page Suivante', it: 'Pagina Successiva' },
     back_to_index: { en: 'Index', es: 'Índice', fr: 'Sommaire', it: 'Indice' },
@@ -441,28 +538,21 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
       <div className="absolute inset-0 -z-10" onClick={onClose}></div>
 
       {/* Book Container */}
-      <div className={`relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border overflow-hidden ${
-        theme === 'light' 
-          ? 'bg-stone-50 border-amber-800/30 text-stone-900' 
-          : 'bg-[#0b101b] border-slate-700/60 text-slate-100'
-      }`}>
+      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-border bg-card text-foreground overflow-hidden">
         
         {/* Book Header Bar (Spine ribbon) */}
-        <div className={`flex items-center justify-between px-5 py-3 border-b shrink-0 ${
-          theme === 'light'
-            ? 'bg-gradient-to-r from-amber-100 via-stone-100 to-amber-100 border-amber-300/40 text-stone-800'
-            : 'bg-gradient-to-r from-slate-900 via-[#131b2e] to-slate-900 border-slate-800 text-slate-200'
-        }`}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-card-header text-card-header-foreground shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-purple-600/20 text-purple-400 border border-purple-500/30 flex items-center justify-center shadow-inner">
+            <div className="w-8 h-8 rounded-lg bg-primary/15 text-primary border border-primary/30 flex items-center justify-center">
               <BookOpen size={18} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-mono font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400">HERMES ARCHIVE</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 font-mono">v{VERSIONS_LOG[VERSIONS_LOG.length - 1].version}</span>
+              <div className="flex items-center gap-2 font-mono text-[11px]">
+                <span className="font-bold uppercase tracking-widest text-primary">HERMES ARCHIVE</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground tabular-nums">v{VERSIONS_LOG[VERSIONS_LOG.length - 1].version}</span>
               </div>
-              <h3 className="font-bold text-sm sm:text-base leading-tight">
+              <h3 className="font-bold text-sm sm:text-base leading-tight text-foreground">
                 {getT('book_title')}
               </h3>
             </div>
@@ -476,11 +566,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                   setDirection(-1);
                   setCurrentPage(0);
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg border transition-all ${
-                  theme === 'light'
-                    ? 'bg-white/80 border-stone-300 hover:bg-stone-100 text-stone-700'
-                    : 'bg-slate-800/80 border-slate-700 hover:bg-slate-700 text-slate-200'
-                }`}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded-lg border border-border bg-background hover:bg-muted text-foreground transition-all cursor-pointer"
                 title={getT('back_to_index')}
               >
                 <ListOrdered size={14} />
@@ -491,11 +577,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
             {/* Close modal button */}
             <button
               onClick={onClose}
-              className={`p-1.5 rounded-lg border transition-all ${
-                theme === 'light'
-                  ? 'bg-white hover:bg-stone-100 text-stone-600 border-stone-300'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-              }`}
+              className="p-1.5 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-all cursor-pointer"
               title="Close (Esc)"
             >
               <X size={18} />
@@ -518,15 +600,11 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                 className="flex flex-col h-full gap-6 max-w-3xl mx-auto"
               >
                 {/* Hero Cover Header */}
-                <div className={`p-6 sm:p-8 rounded-2xl border text-center relative overflow-hidden shadow-inner ${
-                  theme === 'light'
-                    ? 'bg-gradient-to-b from-amber-50 to-orange-50/40 border-amber-200/80 text-amber-950'
-                    : 'bg-gradient-to-b from-slate-900/90 to-[#0e1626] border-purple-500/20 text-slate-100'
-                }`}>
-                  <div className="w-16 h-16 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30 flex items-center justify-center mx-auto mb-4 shadow-lg">
-                    <Rocket size={32} className="text-purple-500 animate-pulse" />
+                <div className="p-6 sm:p-8 rounded-2xl border border-primary/25 bg-primary/5 text-center relative overflow-hidden">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/15 text-primary border border-primary/30 flex items-center justify-center mx-auto mb-4">
+                    <Rocket size={32} className="text-primary" />
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-2">
+                  <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-2 text-foreground">
                     {getT('book_title')}
                   </h1>
                   <p className="text-xs sm:text-sm text-muted-foreground font-mono max-w-xl mx-auto">
@@ -536,7 +614,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                   <div className="mt-5 flex justify-center">
                     <button
                       onClick={() => jumpToVersion(VERSIONS_LOG.length - 1)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold shadow-md shadow-purple-600/25 transition-all hover:scale-105"
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary hover:opacity-90 text-primary-foreground font-mono text-xs font-bold shadow-sm transition-all cursor-pointer"
                     >
                       <Sparkles size={16} />
                       <span>{getT('open_latest')}</span>
@@ -562,46 +640,37 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                         onClick={() => jumpToVersion(idx)}
                         className={`group p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between hover:shadow-md ${
                           ver.isLatest
-                            ? theme === 'light'
-                              ? 'bg-purple-50/80 border-purple-300 hover:border-purple-500'
-                              : 'bg-purple-950/20 border-purple-500/40 hover:border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
-                            : theme === 'light'
-                              ? 'bg-white border-stone-200 hover:border-stone-400'
-                              : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                            ? 'bg-primary/10 border-primary/40 hover:border-primary'
+                            : 'bg-muted/20 border-border hover:border-primary/40'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-base font-black font-mono text-purple-600 dark:text-purple-400">
+                            <span className="text-base font-black font-mono text-primary tabular-nums">
                               v{ver.version}
                             </span>
                             <span className="text-xs font-semibold text-foreground/80 group-hover:text-foreground">
                               {ver.codename}
                             </span>
                           </div>
-                          {ver.isLatest ? (
-                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
-                              {ver.badge[lang] || ver.badge.en}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                              {ver.badge[lang] || ver.badge.en}
-                            </span>
-                          )}
+                          <span className={`text-[10px] font-mono ${
+                            ver.isLatest ? 'font-bold text-primary' : 'text-muted-foreground'
+                          }`}>
+                            {ver.badge[lang] || ver.badge.en}
+                          </span>
                         </div>
 
                         <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
                           {ver.title[lang] || ver.title.en}
                         </p>
 
-                        <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground pt-2 border-t border-border/50">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground pt-2 border-t border-border/50 tabular-nums">
                           <span className="flex items-center gap-1">
                             <Calendar size={12} />
                             {ver.date}
                           </span>
-                          <span className="text-purple-600 dark:text-purple-400 font-bold group-hover:translate-x-1 transition-transform flex items-center gap-0.5">
-                            {lang === 'es' ? 'Leer' : 'Read'} ➡
+                          <span className="text-primary font-bold group-hover:translate-x-1 transition-transform flex items-center gap-0.5">
+                            {lang === 'es' ? 'Leer' : 'Read'} <ArrowRight size={12} />
                           </span>
                         </div>
                       </div>
@@ -623,25 +692,20 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                 {/* Version Title Header */}
                 <div className={`p-5 sm:p-6 rounded-2xl border flex flex-wrap items-start justify-between gap-4 shadow-sm ${
                   currentVersionData.isLatest
-                    ? theme === 'light'
-                      ? 'bg-purple-50/70 border-purple-300'
-                      : 'bg-gradient-to-r from-purple-950/30 to-indigo-950/20 border-purple-500/30'
-                    : theme === 'light'
-                      ? 'bg-white border-stone-200'
-                      : 'bg-slate-900/70 border-slate-800'
+                    ? 'bg-primary/10 border-primary/35'
+                    : 'bg-muted/20 border-border'
                 }`}>
                   <div className="space-y-1.5 flex-1 min-w-[240px]">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-2xl sm:text-3xl font-black font-mono text-purple-600 dark:text-purple-400">
+                      <span className="text-2xl sm:text-3xl font-black font-mono text-primary tabular-nums">
                         Version {currentVersionData.version}
                       </span>
                       <span className="text-xs font-mono uppercase tracking-wider px-2 py-0.5 rounded font-bold bg-muted text-muted-foreground border border-border">
                         {currentVersionData.codename}
                       </span>
                       {currentVersionData.isLatest && (
-                        <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
-                          {getT('latest_badge')}
+                        <span className="text-[10px] font-mono font-bold text-primary uppercase tracking-wider">
+                          · {getT('latest_badge')}
                         </span>
                       )}
                     </div>
@@ -653,7 +717,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                     </p>
                   </div>
 
-                  <div className="px-3 py-1.5 rounded-lg text-xs font-mono bg-background border border-border text-muted-foreground shrink-0 flex items-center gap-1.5">
+                  <div className="px-3 py-1.5 rounded-lg text-xs font-mono bg-background border border-border text-muted-foreground shrink-0 flex items-center gap-1.5 tabular-nums">
                     <Calendar size={14} />
                     <span>{currentVersionData.date}</span>
                   </div>
@@ -662,7 +726,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                 {/* Detailed Highlights Cards */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-muted-foreground px-1 flex items-center gap-2">
-                    <Bookmark size={15} className="text-purple-500" />
+                    <Bookmark size={15} className="text-primary" />
                     <span>{getT('whats_new')}</span>
                   </h4>
 
@@ -672,14 +736,10 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                       return (
                         <div
                           key={hIdx}
-                          className={`p-4 rounded-xl border flex flex-col gap-2 transition-all ${
-                            theme === 'light'
-                              ? 'bg-white border-stone-200/90 shadow-sm hover:border-purple-300'
-                              : 'bg-[#0f172a]/70 border-slate-800 shadow-sm hover:border-slate-700'
-                          }`}
+                          className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 flex flex-col gap-2 transition-all shadow-xs"
                         >
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary border border-primary/25 flex items-center justify-center shrink-0">
                               <IconComp size={16} />
                             </div>
                             <h5 className="font-bold text-xs sm:text-sm text-foreground leading-tight">
@@ -700,11 +760,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
         </div>
 
         {/* ── Book Bottom Navigation & Page Turner Controls ── */}
-        <div className={`px-5 py-3 border-t shrink-0 flex items-center justify-between gap-3 ${
-          theme === 'light'
-            ? 'bg-stone-100 border-amber-300/40 text-stone-800'
-            : 'bg-slate-900 border-slate-800 text-slate-200'
-        }`}>
+        <div className="px-5 py-3 border-t border-border bg-card-header text-card-header-foreground shrink-0 flex items-center justify-between gap-3">
           {/* Previous Page Button */}
           <button
             onClick={goToPrevPage}
@@ -712,9 +768,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition-all ${
               currentPage === 0
                 ? 'opacity-40 cursor-not-allowed border-transparent'
-                : theme === 'light'
-                  ? 'bg-white border-stone-300 text-stone-700 hover:bg-stone-50 hover:border-purple-400 shadow-sm'
-                  : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 hover:border-purple-500 shadow-sm'
+                : 'bg-background border-border text-foreground hover:border-primary shadow-xs cursor-pointer'
             }`}
           >
             <ChevronLeft size={16} />
@@ -723,7 +777,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
 
           {/* Page Indicators */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-semibold text-muted-foreground">
+            <span className="text-xs font-mono font-semibold text-muted-foreground tabular-nums">
               {getT('page_of')} {currentPage === 0 ? 'Cover' : `v${VERSIONS_LOG[currentPage - 1].version}`} {getT('of')} {totalPages - 1}
             </span>
             <div className="hidden sm:flex items-center gap-1">
@@ -734,9 +788,9 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
                     setDirection(pIdx > currentPage ? 1 : -1);
                     setCurrentPage(pIdx);
                   }}
-                  className={`h-2 rounded-full transition-all ${
+                  className={`h-1.5 rounded-xs transition-all cursor-pointer ${
                     currentPage === pIdx
-                      ? 'w-6 bg-purple-600'
+                      ? 'w-6 bg-primary'
                       : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/60'
                   }`}
                   title={pIdx === 0 ? 'Index' : `v${VERSIONS_LOG[pIdx - 1].version}`}
@@ -752,7 +806,7 @@ export const VersionHistoryBook: React.FC<VersionHistoryBookProps> = ({
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition-all ${
               currentPage >= totalPages - 1
                 ? 'opacity-40 cursor-not-allowed border-transparent'
-                : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-500 shadow-sm shadow-purple-600/20'
+                : 'bg-primary hover:opacity-90 text-primary-foreground border-primary shadow-xs cursor-pointer'
             }`}
           >
             <span className="hidden sm:inline">{getT('next_page')}</span>

@@ -119,7 +119,7 @@ export function GuideBookModal({
       difficulty: 'Básico',
       estimatedMinutes: 4,
       icon: Layers,
-      color: 'from-purple-500 to-indigo-600',
+      color: 'from-primary to-secondary',
       summaryEs: 'Aprende paso a paso cómo añadir nuevos bloques de grano (+ Nuevo Grano), seleccionar combustible, configurar formas (BATES, Estrella, Macizo), calcular web thickness e inhibir caras.',
       summaryEn: 'Step-by-step tutorial on adding new grain segments (+ New Grain), selecting fuels, configuring shapes (BATES, Star, Solid), sizing web thickness, and setting inhibitors.',
       summaryFr: 'Guide pas à pas pour ajouter de nouveaux grains, choisir la géométrie et inhiber les faces.',
@@ -154,21 +154,33 @@ export function GuideBookModal({
       estimatedMinutes: 4,
       icon: Compass,
       color: 'from-blue-500 to-cyan-600',
-      summaryEs: 'Domina el dimensionado crítico de la garganta (Dt0), relación de expansión (Ds/Dt0), ángulo de divergencia y fenómenos reales de erosión y acumulación de escoria.',
-      summaryEn: 'Master critical throat sizing (Dt0), expansion ratio (Ds/Dt0), divergence angle, and real-world throat erosion and slag buildup phenomena.',
-      summaryFr: 'Dimensionnez le col Dt0, le rapport d\'expansion et simulez l\'érosion et les scories.',
-      summaryIt: 'Dimensiona la gola Dt0, il rapporto di espansione e modella erosione e scorie.',
+      summaryEs: 'Domina el diseño estructural de la cámara (espesor, material, liner, inhibidor y presión admisible Padm), el dimensionado de garganta (Dt0), relación de expansión y erosión/escoria.',
+      summaryEn: 'Master chamber structural design (wall thickness, material, liner, inhibitor, and admissible pressure Padm), critical throat sizing (Dt0), expansion ratio, and erosion/slag.',
+      summaryFr: 'Maîtrisez la structure de chambre (paroi, matériau, liner, inhibiteur, Padm), le col Dt0, l\'expansion et l\'érosion.',
+      summaryIt: 'Padroneggia la struttura della camera (parete, materiale, liner, inibitore, Padm), gola Dt0, espansione ed erosione.',
       bulletPointsEs: [
-        'Diámetro de garganta (Dt0): el regulador principal de la presión de cámara y Kn.',
-        'Diámetro de salida (Ds) y relación de expansión óptima a 1 atm.',
-        'Rendimientos reales: eficiencia de cámara (ηc) y eficiencia de tobera (ηnoz).',
+        'Cámara y estructura: espesor de pared, Aluminio 6082-T6 / Acero Inox. 17-4PH (1000 MPa) / personalizado y Factor de Seguridad.',
+        'Presión Máx. Admisible (Padm) de pared, liner térmico, inhibidor (2 mm por defecto) y holgura radial.',
+        'Diámetro de garganta (Dt0) y relación de expansión óptima (Ds/Dt0) a 1 atm.',
         'Modelado de erosión ablativa (+) o acumulación de escoria (-) en tiempo real.'
       ],
       bulletPointsEn: [
-        'Throat diameter (Dt0): the primary controller of chamber pressure and Kn.',
-        'Exit diameter (Ds) and optimal expansion ratio at 1 atm sea level.',
-        'Real efficiencies: chamber thermal factor (ηc) and nozzle efficiency (ηnoz).',
+        'Chamber structure: wall thickness, Aluminum 6082-T6 / Stainless Steel 17-4PH (1000 MPa) / custom material, and Safety Factor.',
+        'Cylinder wall Padm, optional thermal liner, grain inhibitor (2 mm default), and radial clearance checks.',
+        'Throat diameter (Dt0) and optimal expansion ratio (Ds/Dt0) at 1 atm sea level.',
         'Ablative throat erosion (+) and slag deposition (-) dynamic modeling.'
+      ],
+      bulletPointsFr: [
+        'Structure de chambre : épaisseur de paroi, Aluminium 6082-T6 / Acier Inox 17-4PH (1000 MPa) / personnalisé et facteur de sécurité.',
+        'Pression admissible (Padm), liner thermique, inhibiteur (2 mm par défaut) et contrôle du jeu radial.',
+        'Diamètre au col (Dt0) et rapport d\'expansion optimal à 1 atm.',
+        'Modélisation dynamique de l\'érosion (+) ou des scories (-).'
+      ],
+      bulletPointsIt: [
+        'Struttura camera: spessore parete, Alluminio 6082-T6 / Acciaio Inox 17-4PH (1000 MPa) / personalizzato e Fattore di Sicurezza.',
+        'Pressione ammissibile (Padm), liner termico, inibitore (2 mm predefinito) e verifica del gioco radiale.',
+        'Diametro di gola (Dt0) e rapporto di espansione ottimale a 1 atm.',
+        'Modellazione dinamica di erosione (+) o deposito di scorie (-).'
       ],
       presetLabelEs: 'Tobera Óptima Nivel Mar',
       presetLabelEn: 'Optimal Sea-Level Nozzle',
@@ -185,7 +197,7 @@ export function GuideBookModal({
       difficulty: 'Intermedio',
       estimatedMinutes: 4,
       icon: Beaker,
-      color: 'from-purple-600 to-pink-600',
+      color: 'from-teal-600 to-cyan-600',
       summaryEs: 'Aprende a localizar el botón en Inputs para abrir el gestor, explorar los propulsantes existentes y sus rangos de presión, y formular un nuevo combustible con tabla r(P).',
       summaryEn: 'Learn where to find the manager button on Inputs, inspect existing fuels and piecewise pressure ranges, and synthesize custom propellants with r(P) tables.',
       summaryFr: 'Localisez le bouton dans les Entrées, examinez les propergols existants et créez votre propre carburant.',
@@ -366,7 +378,7 @@ export function GuideBookModal({
       difficulty: 'Avanzado',
       estimatedMinutes: 5,
       icon: Cpu,
-      color: 'from-violet-500 to-purple-700',
+      color: 'from-sky-600 to-blue-700',
       summaryEs: 'Diseño automático inverso: especifica límites de cámara y metas de empuje, y deja que el optimizador global unificado Differential Evolution encuentre la mejor geometría.',
       summaryEn: 'Inverse automated motor design: set casing limits and flight goals, and let the unified Differential Evolution global engine find optimal geometries.',
       summaryFr: 'Conception inverse automatique guidée en 3 phases par Differential Evolution.',
@@ -461,27 +473,23 @@ export function GuideBookModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-950/80 backdrop-blur-md animate-fade-in font-sans">
+    <div className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
       <div 
-        className={`w-full max-w-5xl rounded-2xl border shadow-2xl flex flex-col max-h-[92vh] overflow-hidden transition-all ${
-          isDark
-            ? 'bg-slate-900 border-purple-500/30 text-slate-100 shadow-[0_0_50px_rgba(0,0,0,0.8),0_0_20px_rgba(168,85,247,0.15)]'
-            : 'bg-white border-purple-200 text-slate-900 shadow-[0_20px_50px_rgba(79,70,229,0.12)]'
-        }`}
+        className="w-full max-w-5xl rounded-2xl border border-border bg-card text-foreground shadow-2xl flex flex-col max-h-[92vh] overflow-hidden transition-all"
       >
         {/* Top Header */}
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-muted/20 shrink-0">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-card-header text-card-header-foreground shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]">
+            <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-xs">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg font-bold tracking-tight text-foreground">
                   {isSpanish ? 'Libro de Guías del Simulador' : isFrench ? 'Livre des Guides du Simulateur' : isItalian ? 'Libro delle Guide del Simulatore' : 'Simulator Guide Hub'}
                 </h2>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
-                  {isSpanish ? '10 Tours Interactivos' : '10 Interactive Tours'}
+                <span className="text-[11px] font-mono font-semibold text-primary">
+                  · {isSpanish ? '10 Tours Interactivos' : '10 Interactive Tours'}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -496,7 +504,7 @@ export function GuideBookModal({
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+            className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
           >
             <X className="w-5 h-5" />
           </Button>
@@ -534,7 +542,7 @@ export function GuideBookModal({
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`h-7 text-[11px] px-2.5 rounded-lg whitespace-nowrap transition-all ${
                   selectedCategory === cat.id
-                    ? 'bg-purple-600 hover:bg-purple-500 text-white font-bold'
+                    ? 'bg-primary hover:opacity-90 text-primary-foreground font-bold'
                     : 'bg-background hover:bg-muted text-muted-foreground'
                 }`}
               >
@@ -547,11 +555,9 @@ export function GuideBookModal({
         {/* Guides Grid Container */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 no-scrollbar">
           {/* Quick Presets Banner */}
-          <div className={`p-3 rounded-xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-3 ${
-            isDark ? 'bg-indigo-950/20 border-indigo-900/50' : 'bg-purple-50/70 border-purple-200'
-          }`}>
+          <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <span className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400">
+              <span className="p-1.5 rounded-lg bg-primary/15 text-primary border border-primary/25">
                 <Wand2 className="w-4 h-4" />
               </span>
               <div>
@@ -572,9 +578,9 @@ export function GuideBookModal({
                   onApplyPresetMotor('bates_j');
                   onClose();
                 }}
-                className="h-7 text-[10px] font-bold px-2.5 bg-background border-purple-500/40 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10"
+                className="h-7 text-[10px] font-bold px-2.5 bg-background border-primary/40 text-primary hover:bg-primary/10 cursor-pointer"
               >
-                🚀 {isSpanish ? 'BATES J-Class (54mm)' : 'BATES J-Class (54mm)'}
+                {isSpanish ? 'BATES J-Class (54mm)' : 'BATES J-Class (54mm)'}
               </Button>
               <Button
                 size="sm"
@@ -583,9 +589,9 @@ export function GuideBookModal({
                   onApplyPresetMotor('star_k');
                   onClose();
                 }}
-                className="h-7 text-[10px] font-bold px-2.5 bg-background border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                className="h-7 text-[10px] font-bold px-2.5 bg-background border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 cursor-pointer"
               >
-                ⭐ {isSpanish ? 'Estrella Neutra K-Class' : 'Neutral Star K-Class'}
+                {isSpanish ? 'Estrella Neutra K-Class' : 'Neutral Star K-Class'}
               </Button>
               <Button
                 size="sm"
@@ -594,9 +600,9 @@ export function GuideBookModal({
                   onApplyPresetMotor('apcp_l');
                   onClose();
                 }}
-                className="h-7 text-[10px] font-bold px-2.5 bg-background border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+                className="h-7 text-[10px] font-bold px-2.5 bg-background border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 cursor-pointer"
               >
-                ⚡ {isSpanish ? 'APCP L-Class Militar' : 'APCP L-Class Military'}
+                {isSpanish ? 'APCP L-Class Militar' : 'APCP L-Class Military'}
               </Button>
             </div>
           </div>
@@ -610,17 +616,13 @@ export function GuideBookModal({
               return (
                 <div
                   key={guide.id}
-                  className={`rounded-xl border p-4 flex flex-col justify-between transition-all hover:shadow-lg relative group ${
-                    isDark 
-                      ? 'bg-slate-900/60 border-border hover:border-purple-500/50' 
-                      : 'bg-white border-slate-200 hover:border-purple-300'
-                  }`}
+                  className="rounded-xl border border-border bg-card hover:border-primary/45 p-4 flex flex-col justify-between transition-all hover:shadow-md relative group"
                 >
                   <div>
                     {/* Card Header & Completion Badge */}
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2.5">
-                        <div className={`p-2 rounded-lg bg-gradient-to-br ${guide.color} text-white shadow-sm shrink-0`}>
+                        <div className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/25 shrink-0">
                           <Icon className="w-4 h-4" />
                         </div>
                         <div>
@@ -629,11 +631,12 @@ export function GuideBookModal({
                               {isSpanish ? guide.titleEs : guide.titleEn}
                             </h3>
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] font-mono font-semibold text-purple-400">
-                              ⏱ {guide.estimatedMinutes} min
+                          <div className="flex items-center gap-2 mt-0.5 font-mono text-[10px] tabular-nums">
+                            <span className="font-semibold text-primary">
+                              {guide.estimatedMinutes} min
                             </span>
-                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border">
+                            <span className="text-muted-foreground">·</span>
+                            <span className="text-muted-foreground">
                               {guide.difficulty}
                             </span>
                             {completed && (
@@ -643,11 +646,11 @@ export function GuideBookModal({
                                   e.stopPropagation();
                                   handleUnmarkSingle(guide.tourSequenceId);
                                 }}
-                                className="text-[10px] font-mono font-bold px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 hover:bg-red-500/20 hover:text-red-500 hover:border-red-500/40 flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+                                className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/35 hover:bg-red-500/15 hover:text-red-500 hover:border-red-500/40 flex items-center gap-1 transition-colors cursor-pointer"
                                 title={isSpanish ? 'Haz clic para desmarcar esta guía' : 'Click to unmark this guide'}
                               >
                                 <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                                <span>{isSpanish ? 'Completada ✓' : isFrench ? 'Complétée ✓' : isItalian ? 'Completata ✓' : 'Completed ✓'}</span>
+                                <span>{isSpanish ? 'Completada' : isFrench ? 'Complétée' : isItalian ? 'Completata' : 'Completed'}</span>
                               </button>
                             )}
                           </div>
@@ -664,7 +667,7 @@ export function GuideBookModal({
                     <ul className="mt-3 space-y-1 bg-muted/30 p-2.5 rounded-lg border border-border/40 text-[11px]">
                       {(isSpanish ? guide.bulletPointsEs : guide.bulletPointsEn).map((pt, idx) => (
                         <li key={idx} className="flex items-start gap-1.5 text-foreground/80">
-                          <CheckCircle2 className="w-3 h-3 text-purple-500 shrink-0 mt-0.5" />
+                          <CheckCircle2 className="w-3 h-3 text-primary shrink-0 mt-0.5" />
                           <span className="leading-tight">{pt}</span>
                         </li>
                       ))}
@@ -678,7 +681,7 @@ export function GuideBookModal({
                         size="sm"
                         variant="ghost"
                         onClick={guide.onApplyPreset}
-                        className="h-8 text-[11px] text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 px-2 font-medium"
+                        className="h-8 text-[11px] text-primary hover:bg-primary/10 px-2 font-medium cursor-pointer"
                       >
                         <Wand2 className="w-3 h-3 mr-1" />
                         {isSpanish ? guide.presetLabelEs : guide.presetLabelEn}
@@ -693,10 +696,10 @@ export function GuideBookModal({
                         onClose();
                         onStartTour(guide.tourSequenceId);
                       }}
-                      className={`h-8 text-xs font-bold px-3 text-white gap-1.5 shadow-sm transition-all ${
+                      className={`h-8 text-xs font-bold px-3 gap-1.5 shadow-sm transition-all cursor-pointer ${
                         completed
-                          ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
-                          : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                          : 'bg-primary hover:opacity-90 text-primary-foreground'
                       }`}
                     >
                       <Play className="w-3 h-3 fill-current" />

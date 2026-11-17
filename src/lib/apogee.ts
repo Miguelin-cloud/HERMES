@@ -1,13 +1,23 @@
 export interface ApogeeResult {
    t: number[];
+   x: number[];
    h: number[];
    v: number[];
+   vx: number[];
+   vy: number[];
    a: number[];
    mach: number[];
+   pitch: number[]; // body/velocity elevation pitch above horizontal [rad]
+   gammaDeg: number[];
    maxApogee: number;
+   maxRange: number;
    maxVelocity: number;
    maxAcceleration: number;
    apogeeTime: number;
+   burnoutTime: number;
+   flightPathAngleDeg: number;
+   rocketDiameterM: number;
+   launchAltitudeM: number;
 }
 
 // Minimal Mach-Cd reference data (If not provided by Excel, we use a basic curve)
@@ -149,16 +159,23 @@ export function calculateApogee(
    const default_dt = (tt.length > 1) ? (tt[1] - tt[0]) : 0.001;
    
    const hist_t: number[] = [];
+   const hist_x: number[] = [];
    const hist_h: number[] = [];
    const hist_v: number[] = [];
+   const hist_vx: number[] = [];
+   const hist_vy: number[] = [];
    const hist_a: number[] = [];
    const hist_mach: number[] = [];
+   const hist_pitch: number[] = [];
+   const hist_gamma: number[] = [];
 
    let idx = 0;
    let maxApogee = 0;
+   let maxRange = 0;
    let maxVelocity = 0;
    let maxAcceleration = 0;
    let apogeeTime = 0;
+   const burnoutTime = N > 0 ? (tt[N - 1] || 0) : 0;
 
    while (true) {
        let thrust = 0;
@@ -190,20 +207,22 @@ export function calculateApogee(
 
        let ax = 0;
        let ay = 0;
+       const dist_along_rail = Math.sqrt(x * x + h * h);
+       const on_launch_rail = dist_along_rail < 2.0 && idx >= 0;
 
-       if (h <= 0 && v <= 1e-4) {
-           // On launch pad / rail: along rail motion
-           const F_rail = thrust - weight * sin_theta_0;
-           if (F_rail > 0) {
+       if (on_launch_rail) {
+           // Guided along tilted launch rail at theta_0 for 2.0 m
+           const F_rail = thrust - drag_mag - weight * sin_theta_0;
+           if (v <= 1e-6 && F_rail <= 0) {
+               ax = 0;
+               ay = 0;
+           } else {
                const a_rail = F_rail / mass;
                ax = a_rail * cos_theta_0;
                ay = a_rail * sin_theta_0;
-           } else {
-               ax = 0;
-               ay = 0;
            }
        } else {
-           // In 2D flight: thrust aligns with body/velocity pitch angle
+           // In free 2D flight: thrust aligns with velocity vector
            let pitch = theta_0;
            if (v > 0.1) {
                pitch = Math.atan2(vy, vx);
@@ -223,6 +242,19 @@ export function calculateApogee(
 
        vx += ax * current_dt;
        vy += ay * current_dt;
+
+       if (on_launch_rail) {
+           // Project velocity strictly along the launch rail axis; clamp against sliding backward down pad stop
+           const v_rail = vx * cos_theta_0 + vy * sin_theta_0;
+           if (v_rail <= 0) {
+               vx = 0;
+               vy = 0;
+           } else {
+               vx = v_rail * cos_theta_0;
+               vy = v_rail * sin_theta_0;
+           }
+       }
+
        v = Math.sqrt(vx * vx + vy * vy);
 
        x += vx * current_dt;
@@ -237,17 +269,24 @@ export function calculateApogee(
        }
 
        t = (idx < N) ? tt[idx] : t + current_dt;
+       const currentGammaRad = on_launch_rail ? theta_0 : (v > 0.1 ? Math.atan2(vy, vx) : theta_0);
 
        hist_t.push(t);
+       hist_x.push(x);
        hist_h.push(h);
        hist_v.push(v);
+       hist_vx.push(vx);
+       hist_vy.push(vy);
        hist_a.push(total_a);
        hist_mach.push(mach);
+       hist_pitch.push(currentGammaRad);
+       hist_gamma.push((currentGammaRad * 180) / Math.PI);
 
        if (h > maxApogee) {
            maxApogee = h;
            apogeeTime = t;
        }
+       if (Math.abs(x) > maxRange) maxRange = Math.abs(x);
        if (v > maxVelocity) maxVelocity = v;
        if (total_a > maxAcceleration) maxAcceleration = total_a;
 
@@ -260,5 +299,25 @@ export function calculateApogee(
        if (idx > 1000000) break;
    }
 
-   return { t: hist_t, h: hist_h, v: hist_v, a: hist_a, mach: hist_mach, maxApogee, maxVelocity, maxAcceleration, apogeeTime };
+   return {
+       t: hist_t,
+       x: hist_x,
+       h: hist_h,
+       v: hist_v,
+       vx: hist_vx,
+       vy: hist_vy,
+       a: hist_a,
+       mach: hist_mach,
+       pitch: hist_pitch,
+       gammaDeg: hist_gamma,
+       maxApogee,
+       maxRange,
+       maxVelocity,
+       maxAcceleration,
+       apogeeTime,
+       burnoutTime,
+       flightPathAngleDeg: angle_deg,
+       rocketDiameterM: d_rocket,
+       launchAltitudeM: h_launch,
+   };
 }

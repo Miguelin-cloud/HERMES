@@ -487,7 +487,7 @@ export function InteractiveTourOverlay({
         />
       )}
 
-      {/* 2. Target Spotlight Border & Pulsing Corner Accents */}
+      {/* 2. Target Spotlight Border & Crisp Corner Accents */}
       {rect && (
         <div
           style={{
@@ -496,19 +496,13 @@ export function InteractiveTourOverlay({
             width: Math.max(20, Math.min(window.innerWidth - Math.max(8, rect.left - pad) - 16, rect.width + pad * 2)),
             height: Math.max(20, Math.min(window.innerHeight - Math.max(8, rect.top - pad) - 16, rect.height + pad * 2)),
           }}
-          className="absolute pointer-events-none transition-all duration-200 rounded-lg ring-2 ring-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.65)]"
+          className="absolute pointer-events-none transition-all duration-200 rounded-lg ring-2 ring-primary shadow-lg"
         >
-          {/* Animated corner accents */}
-          <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-purple-400 rounded-tl" />
-          <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-purple-400 rounded-tr" />
-          <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-purple-400 rounded-bl" />
-          <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-purple-400 rounded-br" />
-          
-          {/* Pulsing ring beacon */}
-          <span className="absolute -top-2 -right-2 flex h-4 w-4">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-purple-600 border border-white"></span>
-          </span>
+          {/* Corner calibration ticks */}
+          <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-primary rounded-tl" />
+          <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-primary rounded-tr" />
+          <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-primary rounded-bl" />
+          <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-primary rounded-br" />
         </div>
       )}
 
@@ -530,46 +524,42 @@ export function InteractiveTourOverlay({
           className="absolute z-[10000] pointer-events-none transition-all duration-200"
         >
           {tooltipPos.placement === 'bottom' && (
-            <div className="flex flex-col items-center animate-bounce">
-              <ArrowDown className="w-6 h-6 text-purple-400 drop-shadow-[0_2px_8px_rgba(168,85,247,0.8)] fill-purple-500/20" />
+            <div className="flex flex-col items-center">
+              <ArrowDown className="w-6 h-6 text-primary fill-primary/20" />
             </div>
           )}
           {tooltipPos.placement === 'top' && (
-            <div className="flex flex-col items-center animate-bounce">
-              <ArrowUp className="w-6 h-6 text-purple-400 drop-shadow-[0_2px_8px_rgba(168,85,247,0.8)] fill-purple-500/20" />
+            <div className="flex flex-col items-center">
+              <ArrowUp className="w-6 h-6 text-primary fill-primary/20" />
             </div>
           )}
           {tooltipPos.placement === 'right' && (
-            <div className="flex items-center animate-pulse">
-              <ArrowLeft className="w-6 h-6 text-purple-400 drop-shadow-[0_2px_8px_rgba(168,85,247,0.8)] fill-purple-500/20" />
+            <div className="flex items-center">
+              <ArrowLeft className="w-6 h-6 text-primary fill-primary/20" />
             </div>
           )}
           {tooltipPos.placement === 'left' && (
-            <div className="flex items-center animate-pulse">
-              <ArrowRight className="w-6 h-6 text-purple-400 drop-shadow-[0_2px_8px_rgba(168,85,247,0.8)] fill-purple-500/20" />
+            <div className="flex items-center">
+              <ArrowRight className="w-6 h-6 text-primary fill-primary/20" />
             </div>
           )}
         </div>
       )}
 
-      {/* 4. MINIMIZED FLOATING DOCKED PILL TOOLBAR */}
+      {/* 4. MINIMIZED FLOATING DOCKED TOOLBAR */}
       {isMinimized ? (
         <div 
-          className={`fixed bottom-4 right-4 z-[10002] pointer-events-auto rounded-full px-3.5 py-2 shadow-2xl flex items-center gap-2.5 border backdrop-blur-md transition-all animate-in fade-in slide-in-from-bottom-2 ${
-            isDark 
-              ? 'bg-slate-900/95 border-purple-500/60 text-white shadow-[0_10px_35px_rgba(0,0,0,0.8),0_0_20px_rgba(168,85,247,0.3)]' 
-              : 'bg-white/95 border-purple-300 text-slate-900 shadow-xl'
-          }`}
+          className="fixed bottom-4 right-4 z-[10002] pointer-events-auto rounded-lg px-3.5 py-2 shadow-xl flex items-center gap-2.5 border border-primary/40 bg-card/95 text-foreground backdrop-blur-md transition-all animate-in fade-in slide-in-from-bottom-2"
         >
           <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-600/20 text-purple-400 border border-purple-500/30">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-spin-slow" />
+            <span className="flex items-center justify-center w-6 h-6 rounded-md bg-primary/15 text-primary border border-primary/30">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
             </span>
             <div className="flex flex-col pr-1">
               <span className="text-[11px] font-bold text-foreground leading-tight max-w-[180px] truncate">
                 {step.title}
               </span>
-              <span className="text-[9px] font-mono text-purple-500 dark:text-purple-400 font-bold">
+              <span className="text-[9px] font-mono text-primary font-bold tabular-nums">
                 {tStrings.stepOf}
               </span>
             </div>
@@ -577,7 +567,7 @@ export function InteractiveTourOverlay({
 
           <div className="h-5 w-px bg-border/60" />
 
-          {/* Quick Nav Controls inside pill */}
+          {/* Quick Nav Controls inside docked bar */}
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
@@ -592,7 +582,7 @@ export function InteractiveTourOverlay({
               <Button
                 size="sm"
                 onClick={handleFinishTour}
-                className="h-7 px-2.5 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-full"
+                className="h-7 px-2.5 text-[11px] bg-primary hover:opacity-90 text-primary-foreground font-bold rounded-md"
               >
                 <CheckCircle2 className="w-3 h-3 mr-1" />
                 {tStrings.done}
@@ -602,7 +592,7 @@ export function InteractiveTourOverlay({
                 variant="ghost"
                 size="icon"
                 onClick={onNextStep}
-                className="h-7 w-7 text-purple-400 hover:bg-purple-500/10"
+                className="h-7 w-7 text-primary hover:bg-primary/10"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
@@ -613,7 +603,7 @@ export function InteractiveTourOverlay({
               size="icon"
               onClick={() => setIsMinimized(false)}
               title={tStrings.restore}
-              className="h-7 w-7 text-purple-400 hover:bg-purple-500/10"
+              className="h-7 w-7 text-primary hover:bg-primary/10"
             >
               <Maximize2 className="w-3.5 h-3.5" />
             </Button>
@@ -623,7 +613,7 @@ export function InteractiveTourOverlay({
               size="icon"
               onClick={onCloseTour}
               title={tStrings.close}
-              className="h-7 w-7 text-muted-foreground hover:text-red-400"
+              className="h-7 w-7 text-muted-foreground hover:text-red-500"
             >
               <X className="w-3.5 h-3.5" />
             </Button>
@@ -637,13 +627,9 @@ export function InteractiveTourOverlay({
             left: dragPos ? dragPos.x : tooltipPos.left,
             width: Math.min(440, window.innerWidth - 32),
           }}
-          className={`absolute z-[10001] pointer-events-auto rounded-xl p-4 shadow-2xl ${
-            isDragging ? 'transition-none ring-2 ring-purple-400 shadow-[0_15px_45px_rgba(168,85,247,0.35)]' : 'transition-all duration-300'
-          } border ${
-            isDark
-              ? 'bg-slate-900/95 border-purple-500/40 text-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.8),0_0_20px_rgba(168,85,247,0.2)]'
-              : 'bg-white/95 border-purple-300 text-slate-900 shadow-[0_10px_30px_rgba(79,70,229,0.15)]'
-          } backdrop-blur-md`}
+          className={`absolute z-[10001] pointer-events-auto rounded-xl p-4 shadow-2xl border border-primary/40 bg-card/95 text-foreground backdrop-blur-md ${
+            isDragging ? 'transition-none ring-2 ring-primary' : 'transition-all duration-300'
+          }`}
         >
           {/* Card Header: Tour Name, Drag Handle, Minimize & Close */}
           <div 
@@ -653,22 +639,22 @@ export function InteractiveTourOverlay({
             title={isSpanish ? 'Arrastra desde el encabezado para mover esta tarjeta' : 'Drag header to move this card'}
           >
             <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-6 h-6 rounded-md bg-purple-600/20 text-purple-400 border border-purple-500/30 group-hover:scale-105 transition-transform">
-                <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-spin-slow" />
+              <span className="flex items-center justify-center w-6 h-6 rounded-md bg-primary/15 text-primary border border-primary/30 group-hover:scale-105 transition-transform">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
               </span>
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-purple-400">
+                  <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-primary">
                     {activeTour.title}
                   </span>
                   <div className="flex items-center gap-0.5 text-[9px] text-muted-foreground/80 font-mono px-1 py-0.2 rounded bg-muted/50 border border-border/40">
-                    <GripHorizontal className="w-3 h-3 text-purple-400/80" />
+                    <GripHorizontal className="w-3 h-3 text-primary/80" />
                     <span className="text-[8px] font-bold uppercase tracking-wider hidden sm:inline">
                       {isSpanish ? 'Mover' : 'Move'}
                     </span>
                   </div>
                 </div>
-                <span className="text-[9px] text-muted-foreground font-mono">
+                <span className="text-[9px] text-muted-foreground font-mono tabular-nums">
                   {tStrings.stepOf}
                 </span>
               </div>
@@ -682,7 +668,7 @@ export function InteractiveTourOverlay({
                   size="icon"
                   onClick={() => setDragPos(null)}
                   title={isSpanish ? 'Restablecer posición inicial' : 'Reset initial position'}
-                  className="h-7 w-7 text-muted-foreground hover:text-purple-400 hover:bg-purple-500/10"
+                  className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </Button>
@@ -693,7 +679,7 @@ export function InteractiveTourOverlay({
                 size="icon"
                 onClick={() => setIsMinimized(true)}
                 title={tStrings.minimize}
-                className="h-7 w-7 text-muted-foreground hover:text-purple-400 hover:bg-purple-500/10"
+                className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
               >
                 <Minimize2 className="w-3.5 h-3.5" />
               </Button>
@@ -702,7 +688,7 @@ export function InteractiveTourOverlay({
                 size="icon"
                 onClick={onOpenGuideBook}
                 title={tStrings.guideBook}
-                className="h-7 w-7 text-muted-foreground hover:text-purple-400 hover:bg-purple-500/10"
+                className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
               >
                 <BookOpen className="w-3.5 h-3.5" />
               </Button>
@@ -711,7 +697,7 @@ export function InteractiveTourOverlay({
                 size="icon"
                 onClick={onCloseTour}
                 title={tStrings.close}
-                className="h-7 w-7 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -740,7 +726,7 @@ export function InteractiveTourOverlay({
               <ul className="space-y-1 my-2 bg-muted/30 p-2.5 rounded-lg border border-border/50 text-xs">
                 {step.bulletPoints.map((pt, i) => (
                   <li key={i} className="flex items-start gap-2 text-foreground/90">
-                    <span className="text-purple-500 font-bold mt-0.5 leading-none">•</span>
+                    <span className="text-primary font-bold mt-0.5 leading-none">•</span>
                     <span className="leading-tight text-[11px]">{pt}</span>
                   </li>
                 ))}
@@ -764,8 +750,8 @@ export function InteractiveTourOverlay({
                   onClick={handleAutofill}
                   className={`w-full h-8 text-xs font-semibold gap-2 transition-all ${
                     autofillSuccess
-                      ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/50'
-                      : 'bg-purple-600/15 hover:bg-purple-600/25 text-purple-700 dark:text-purple-300 border-purple-500/40 hover:border-purple-400'
+                      ? 'bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/50'
+                      : 'bg-primary/10 hover:bg-primary/20 text-primary border-primary/40 hover:border-primary'
                   }`}
                 >
                   {autofillSuccess ? (
@@ -775,7 +761,7 @@ export function InteractiveTourOverlay({
                     </>
                   ) : (
                     <>
-                      <Wand2 className="w-3.5 h-3.5 text-purple-400" />
+                      <Wand2 className="w-3.5 h-3.5 text-primary" />
                       <span>{step.autofillLabel || tStrings.autofill}</span>
                     </>
                   )}
@@ -786,16 +772,16 @@ export function InteractiveTourOverlay({
 
           {/* Card Footer: Step progress bar & Navigation */}
           <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between">
-            {/* Progress dots */}
+            {/* Progress segments */}
             <div className="flex items-center gap-1">
               {activeTour.steps.map((_, idx) => (
                 <span
                   key={idx}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                  className={`h-1.5 rounded-xs transition-all duration-300 ${
                     idx === currentStepIndex
-                      ? 'w-5 bg-purple-500 shadow-[0_0_6px_rgba(168,85,247,0.8)]'
+                      ? 'w-5 bg-primary'
                       : idx < currentStepIndex
-                      ? 'w-1.5 bg-purple-700/60'
+                      ? 'w-1.5 bg-primary/50'
                       : 'w-1.5 bg-muted-foreground/30'
                   }`}
                 />
@@ -819,7 +805,7 @@ export function InteractiveTourOverlay({
                 <Button
                   size="sm"
                   onClick={handleFinishTour}
-                  className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1 shadow-sm"
+                  className="h-7 px-3 text-xs bg-primary hover:opacity-90 text-primary-foreground font-bold gap-1 shadow-sm"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   {tStrings.done}
@@ -828,7 +814,7 @@ export function InteractiveTourOverlay({
                 <Button
                   size="sm"
                   onClick={onNextStep}
-                  className="h-7 px-3 text-xs bg-purple-600 hover:bg-purple-500 text-white font-bold gap-1 shadow-[0_0_10px_rgba(168,85,247,0.3)]"
+                  className="h-7 px-3 text-xs bg-primary hover:opacity-90 text-primary-foreground font-bold gap-1 shadow-sm"
                 >
                   {tStrings.next}
                   <ChevronRight className="w-3.5 h-3.5" />

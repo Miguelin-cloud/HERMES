@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label as UiLabel } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Sparkles, 
   Lock, 
@@ -19,9 +20,11 @@ import {
   Layers, 
   Check, 
   BarChart3,
+  Shield,
   ShieldCheck,
   Send,
   Info,
+  Star,
   TrendingUp,
   Activity,
   SlidersHorizontal,
@@ -55,6 +58,9 @@ import {
   ZAxis
 } from 'recharts';
 import { smartLoc } from '../lib/smartSearchI18n';
+import { ThemeColors } from '../lib/theme';
+import { calculateMotorStructure } from '../lib/motorStructure';
+import { getMinStarValleyDiameterMm } from '../lib/grains';
 import { 
   SmartSearchGoal, 
   CandidateResult, 
@@ -80,6 +86,7 @@ interface SmartSearchEngineProps {
   customPropellants?: CustomPropellant[];
   lang: string;
   theme: string;
+  themeColors?: ThemeColors;
   onApplyConfiguration: (motor: MotorInput, nozzle: NozzleInput, grains: GrainInput[]) => void;
 }
 
@@ -90,12 +97,28 @@ export function SmartSearchEngine({
   customPropellants = [],
   lang,
   theme,
+  themeColors,
   onApplyConfiguration
 }: SmartSearchEngineProps) {
   const isSpanish = lang === 'es';
   const isFrench = lang === 'fr';
   const isItalian = lang === 'it';
   const isLight = theme === 'light';
+
+  const chartThrustColor = themeColors?.chartThrust || '#059669';
+  const chartPressureColor = themeColors?.chartPressure || '#2563eb';
+  const chartImpulseColor = themeColors?.primary || '#0f766e';
+  const chartSecondaryColor = themeColors?.secondary || '#d97706';
+
+  const tooltipStyle = useMemo(() => ({
+    fontSize: '11px',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    backgroundColor: 'var(--card)',
+    color: 'var(--foreground)',
+    borderColor: 'var(--border)',
+    borderRadius: '8px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+  }), []);
 
   const loc = (es: string, en: string, fr?: string, it?: string): string => {
     return smartLoc(es, en, lang, fr, it);
@@ -136,11 +159,24 @@ export function SmartSearchEngine({
   // Diagram tab in results: 'curves' | 'scatter' | 'convergence'
   const [diagramTab, setDiagramTab] = useState<'curves' | 'scatter' | 'convergence'>('curves');
 
+  // Optional thermal insulation layers in Phase 1 (synced initially from main motor inputs)
+  const [hasLiner, setHasLiner] = useState<boolean>(() => Boolean(initialMotor.hasLiner));
+  const [hasInhibitor, setHasInhibitor] = useState<boolean>(() => Boolean(initialMotor.hasInhibitor));
+
+  // Initial structural clearance helper for clean non-conflicting default bounds
+  const initialAvailableD0 = useMemo(() => {
+    const struct = calculateMotorStructure(initialMotor);
+    return Math.max(12, struct.availableGrainDiameterMm || (initialMotor.Dc || 50) - 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // String-based inputs state to allow natural empty string on backspace without forcing '1'
   const [inputValues, setInputValues] = useState({
     Dc: (initialMotor.Dc || 50).toString(),
     Lc: (initialMotor.Lc || 250).toString(),
     Pmax_lim: '6.0',
+    linerThickness: (initialMotor.linerThickness ?? 2.0).toString(),
+    inhibitorThickness: (initialMotor.inhibitorThickness ?? 2.0).toString(),
     Dt0: (initialNozzle.Dt0 || 8.0).toString(),
     Ds: (initialNozzle.Ds || 18.0).toString(),
     alpha: (initialNozzle.alpha || 15).toString(),
@@ -153,14 +189,25 @@ export function SmartSearchEngine({
     e: (initialNozzle.e !== undefined ? initialNozzle.e : 0).toString(),
     maxGrainCount: '5',
     fixedGrainCount: '3',
-    // D0 modes
-    valD0: ((initialMotor.Dc || 50) - 1.0).toString(),
-    minD0: ((initialMotor.Dc || 50) - 2.5).toString(),
-    maxD0: ((initialMotor.Dc || 50) - 0.8).toString(),
+    // D0 modes (respecting liner/inhibitor available inner diameter)
+    valD0: Math.max(10, parseFloat((initialAvailableD0 - 0.5).toFixed(1))).toString(),
+    minD0: Math.max(10, parseFloat((initialAvailableD0 - 3.0).toFixed(1))).toString(),
+    maxD0: Math.max(10.5, parseFloat(initialAvailableD0.toFixed(1))).toString(),
     // d0 modes
-    vald0: '10.0',
+    vald0: (initialGrains[0]?.d0 && initialGrains[0].d0 > 0 ? initialGrains[0].d0 : 10.0).toString(),
     mind0: '6.0',
     maxd0: '16.0',
+    // Star valley diameter (d0mayor / Dp) modes
+    vald0mayor: (initialGrains[0]?.shape === 2 && initialGrains[0]?.d0mayor > 0
+      ? initialGrains[0].d0mayor
+      : Math.max(16, parseFloat((initialAvailableD0 * 0.65).toFixed(1)))
+    ).toString(),
+    mind0mayor: Math.max(14, parseFloat((initialAvailableD0 * 0.45).toFixed(1))).toString(),
+    maxd0mayor: Math.max(20, parseFloat((initialAvailableD0 - 4.0).toFixed(1))).toString(),
+    // Star points count (Np) modes
+    valNp: (initialGrains[0]?.shape === 2 && initialGrains[0]?.Np >= 3 ? initialGrains[0].Np : 5).toString(),
+    minNp: '3',
+    maxNp: '8',
     // L0 modes
     valL0: '50.0',
     minL0: '30.0',
@@ -181,12 +228,17 @@ export function SmartSearchEngine({
   const [propellantId, setPropellantId] = useState<number>(() => {
     return initialGrains[0]?.propellantType || 1;
   });
-  const [shape, setShape] = useState<1 | 2 | 3>(1); // 1: BATES/Tubular, 2: Star, 3: Solid
+  const [shape, setShape] = useState<1 | 2 | 3>(() => {
+    const s = initialGrains[0]?.shape;
+    return s === 2 ? 2 : s === 3 ? 3 : 1;
+  }); // 1: BATES/Tubular, 2: Star, 3: Solid
   const [grainCountMode, setGrainCountMode] = useState<'range' | 'fixed'>('range');
   
   // Advanced Variable Constraint Modes: 'free' | 'fixed' | 'range'
   const [modeD0, setModeD0] = useState<VariableConstraintMode>('free');
   const [moded0, setModed0] = useState<VariableConstraintMode>('free');
+  const [moded0mayor, setModed0mayor] = useState<VariableConstraintMode>('free');
+  const [modeNp, setModeNp] = useState<VariableConstraintMode>('range');
   const [modeL0, setModeL0] = useState<VariableConstraintMode>('free');
   const [modeMprop, setModeMprop] = useState<VariableConstraintMode>('free');
 
@@ -216,9 +268,26 @@ export function SmartSearchEngine({
     setTouched(prev => ({ ...prev, [field]: true }));
   };
 
-  // Derived values for live hardware preview
+  // Derived values for live hardware preview & radial clearance after Liner/Inhibitor
   const DcVal = parseFloat(inputValues.Dc) || 50;
   const LcVal = parseFloat(inputValues.Lc) || 250;
+  const linerThicknessVal = Math.max(0, parseFloat(inputValues.linerThickness) || 0);
+  const inhibitorThicknessVal = Math.max(0, parseFloat(inputValues.inhibitorThickness) || 0);
+
+  const liveMotorStruct = useMemo(() => calculateMotorStructure({
+    ...initialMotor,
+    Dc: DcVal,
+    Lc: LcVal,
+    hasLiner,
+    linerThickness: linerThicknessVal,
+    hasInhibitor,
+    inhibitorThickness: inhibitorThicknessVal,
+  }), [initialMotor, DcVal, LcVal, hasLiner, linerThicknessVal, hasInhibitor, inhibitorThicknessVal]);
+
+  const availableD0 = liveMotorStruct.availableGrainDiameterMm;
+  const radialDeductionDiamMm = 2 * liveMotorStruct.linerThicknessMm + 2 * liveMotorStruct.inhibitorThicknessMm;
+  const isClearanceCollapsed = availableD0 <= 0;
+
   const Dt0Val = parseFloat(inputValues.Dt0) || 8;
   const DsVal = parseFloat(inputValues.Ds) || 18;
   const AtVal = Math.PI * Math.pow(Dt0Val / 2, 2);
@@ -239,7 +308,8 @@ export function SmartSearchEngine({
       : (!inputValues.fixedGrainCount.trim() || parseInt(inputValues.fixedGrainCount) < 1)
   );
   const isD0EmptyOrInvalid = modeD0 === 'fixed' && touched['valD0'] && (!inputValues.valD0.trim() || parseFloat(inputValues.valD0) <= 0);
-  const isd0EmptyOrInvalid = moded0 === 'fixed' && touched['vald0'] && (!inputValues.vald0.trim() || parseFloat(inputValues.vald0) < 0);
+  const isd0EmptyOrInvalid = shape !== 3 && moded0 === 'fixed' && touched['vald0'] && (!inputValues.vald0.trim() || parseFloat(inputValues.vald0) <= 0);
+  const isd0mayorEmptyOrInvalid = shape === 2 && moded0mayor === 'fixed' && touched['vald0mayor'] && (!inputValues.vald0mayor.trim() || parseFloat(inputValues.vald0mayor) <= 0);
   const isL0EmptyOrInvalid = modeL0 === 'fixed' && touched['valL0'] && (!inputValues.valL0.trim() || parseFloat(inputValues.valL0) <= 0);
 
   // Geometric & Physical validation helpers for Phase 1 & 2
@@ -256,29 +326,144 @@ export function SmartSearchEngine({
   const mind0Num = parseFloat(inputValues.mind0) || 0;
   const maxd0Num = parseFloat(inputValues.maxd0) || 0;
 
+  const vald0mayorNum = parseFloat(inputValues.vald0mayor) || 0;
+  const mind0mayorNum = parseFloat(inputValues.mind0mayor) || 0;
+  const maxd0mayorNum = parseFloat(inputValues.maxd0mayor) || 0;
+
+  const valNpNum = parseInt(inputValues.valNp) || 0;
+  const minNpNum = parseInt(inputValues.minNp) || 0;
+  const maxNpNum = parseInt(inputValues.maxNp) || 0;
+
   const valL0Num = parseFloat(inputValues.valL0) || 0;
   const minL0Num = parseFloat(inputValues.minL0) || 0;
   const maxL0Num = parseFloat(inputValues.maxL0) || 0;
 
   const fixedNNum = parseInt(inputValues.fixedGrainCount) || 1;
 
-  // D0 checks:
-  const isD0GeDc = modeD0 === 'fixed' && valD0Num >= DcVal && valD0Num > 0;
-  const isMaxD0GeDc = modeD0 === 'range' && maxD0Num >= DcVal && maxD0Num > 0;
+  // D0 checks against available inner diameter (Dc - 2*liner - 2*inhibitor)
+  const isD0ExceedsClearance = !isClearanceCollapsed && modeD0 === 'fixed' && valD0Num > availableD0 + 1e-6 && valD0Num > 0;
+  const isMaxD0ExceedsClearance = !isClearanceCollapsed && modeD0 === 'range' && maxD0Num > availableD0 + 1e-6 && maxD0Num > 0;
+  const isMinD0ExceedsClearance = !isClearanceCollapsed && modeD0 === 'range' && minD0Num > availableD0 + 1e-6 && minD0Num > 0;
   const isD0RangeInverted = modeD0 === 'range' && minD0Num > 0 && maxD0Num > 0 && minD0Num >= maxD0Num;
 
   // d0 checks:
-  const effectiveOuterD = modeD0 === 'fixed' && valD0Num > 0 ? valD0Num : DcVal;
+  const effectiveOuterD = modeD0 === 'fixed' && valD0Num > 0
+    ? Math.min(valD0Num, Math.max(0, availableD0))
+    : modeD0 === 'range' && maxD0Num > 0
+      ? Math.min(maxD0Num, Math.max(0, availableD0))
+      : Math.max(0, availableD0);
   const isd0GeD0 = shape !== 3 && moded0 === 'fixed' && vald0Num > 0 && vald0Num >= effectiveOuterD;
   const isd0RangeInverted = shape !== 3 && moded0 === 'range' && mind0Num > 0 && maxd0Num > 0 && mind0Num >= maxd0Num;
   const isMind0GeD0 = shape !== 3 && moded0 === 'range' && mind0Num > 0 && mind0Num >= effectiveOuterD;
+
+  // Star checks (d0mayor & Np when shape === 2):
+  // Concave star condition matching Inputs tab: d0mayor > d0 / cos(pi / Np)
+  const starMaxNpPossible =
+    modeNp === 'fixed'
+      ? Math.max(3, valNpNum)
+      : modeNp === 'range'
+        ? Math.max(3, maxNpNum)
+        : 10;
+  const starRefNpForDisplay =
+    modeNp === 'fixed'
+      ? Math.max(3, valNpNum)
+      : modeNp === 'range'
+        ? Math.max(3, minNpNum || 3)
+        : 5;
+  const starMinD0Ref =
+    moded0 === 'fixed'
+      ? vald0Num
+      : moded0 === 'range'
+        ? mind0Num
+        : 0;
+  const minStarD0mayorStrict =
+    shape === 2 && starMinD0Ref > 0 && starMaxNpPossible >= 3
+      ? getMinStarValleyDiameterMm(starMinD0Ref, starMaxNpPossible)
+      : 0;
+  const minStarD0mayorDisplay =
+    shape === 2 && starMinD0Ref > 0 && starRefNpForDisplay >= 3
+      ? getMinStarValleyDiameterMm(starMinD0Ref, starRefNpForDisplay)
+      : 0;
+
+  const isd0mayorLeqd0 = shape === 2 && moded0mayor === 'fixed' && moded0 === 'fixed' && vald0mayorNum > 0 && vald0Num > 0 && vald0mayorNum <= vald0Num;
+  const isStarDpBelowGeomMin =
+    shape === 2 &&
+    moded0mayor === 'fixed' &&
+    vald0mayorNum > 0 &&
+    minStarD0mayorStrict > 0 &&
+    vald0mayorNum <= minStarD0mayorStrict + 1e-6;
+  const isd0mayorGeD0 = shape === 2 && moded0mayor === 'fixed' && vald0mayorNum > 0 && vald0mayorNum >= effectiveOuterD;
+  const isd0mayorRangeInverted = shape === 2 && moded0mayor === 'range' && mind0mayorNum > 0 && maxd0mayorNum > 0 && mind0mayorNum >= maxd0mayorNum;
+  const isMaxd0mayorGeD0 = shape === 2 && moded0mayor === 'range' && maxd0mayorNum > 0 && maxd0mayorNum >= effectiveOuterD;
+  const isMind0mayorGeD0 = shape === 2 && moded0mayor === 'range' && mind0mayorNum > 0 && mind0mayorNum >= effectiveOuterD;
+  const isMaxd0mayorLeqd0 = shape === 2 && moded0mayor === 'range' && moded0 === 'fixed' && maxd0mayorNum > 0 && vald0Num > 0 && maxd0mayorNum <= vald0Num;
+  const isMaxd0mayorLeqMind0 = shape === 2 && moded0mayor === 'range' && moded0 === 'range' && maxd0mayorNum > 0 && mind0Num > 0 && maxd0mayorNum <= mind0Num;
+  const isStarMaxDpBelowGeomMin =
+    shape === 2 &&
+    moded0mayor === 'range' &&
+    maxd0mayorNum > 0 &&
+    minStarD0mayorStrict > 0 &&
+    maxd0mayorNum <= minStarD0mayorStrict + 1e-6;
+  const isStarRangeMinDpPartial =
+    shape === 2 &&
+    moded0mayor === 'range' &&
+    !isStarMaxDpBelowGeomMin &&
+    mind0mayorNum > 0 &&
+    minStarD0mayorDisplay > 0 &&
+    mind0mayorNum <= minStarD0mayorDisplay + 1e-6;
+  const isStarGeomExceedsD0 =
+    shape === 2 &&
+    !isClearanceCollapsed &&
+    minStarD0mayorStrict > 0 &&
+    effectiveOuterD > 0 &&
+    minStarD0mayorStrict >= effectiveOuterD - 0.5;
+  const isNpInvalid = shape === 2 && modeNp === 'fixed' && valNpNum < 3;
+  const isNpRangeInvalid = shape === 2 && modeNp === 'range' && (minNpNum < 3 || maxNpNum < 3 || minNpNum > maxNpNum);
+  const hasStarGeometricAlert =
+    shape === 2 &&
+    (isNpInvalid ||
+      isNpRangeInvalid ||
+      isd0mayorLeqd0 ||
+      isStarDpBelowGeomMin ||
+      isd0mayorGeD0 ||
+      isd0mayorRangeInverted ||
+      isMaxd0mayorGeD0 ||
+      isMind0mayorGeD0 ||
+      isMaxd0mayorLeqd0 ||
+      isMaxd0mayorLeqMind0 ||
+      isStarMaxDpBelowGeomMin ||
+      isStarGeomExceedsD0);
 
   // L0 checks:
   const isL0ExceedsLc = modeL0 === 'fixed' && grainCountMode === 'fixed' && valL0Num > 0 && (valL0Num * fixedNNum) > LcVal;
   const isL0RangeInverted = modeL0 === 'range' && minL0Num > 0 && maxL0Num > 0 && minL0Num >= maxL0Num;
 
   // Critical geometric conflict preventing launch
-  const hasGeometricConflict = isDt0GeDs || isDt0GeDc || isD0GeDc || isMaxD0GeDc || isD0RangeInverted || isd0GeD0 || isd0RangeInverted || isMind0GeD0 || isL0ExceedsLc || isL0RangeInverted;
+  const hasGeometricConflict =
+    isClearanceCollapsed ||
+    isDt0GeDs ||
+    isDt0GeDc ||
+    isD0ExceedsClearance ||
+    isMaxD0ExceedsClearance ||
+    isMinD0ExceedsClearance ||
+    isD0RangeInverted ||
+    isd0GeD0 ||
+    isd0RangeInverted ||
+    isMind0GeD0 ||
+    isd0mayorLeqd0 ||
+    isStarDpBelowGeomMin ||
+    isd0mayorGeD0 ||
+    isd0mayorRangeInverted ||
+    isMaxd0mayorGeD0 ||
+    isMind0mayorGeD0 ||
+    isMaxd0mayorLeqd0 ||
+    isMaxd0mayorLeqMind0 ||
+    isStarMaxDpBelowGeomMin ||
+    isStarGeomExceedsD0 ||
+    isNpInvalid ||
+    isNpRangeInvalid ||
+    isL0ExceedsLc ||
+    isL0RangeInverted;
 
 
   // Available Propellants List
@@ -391,6 +576,8 @@ export function SmartSearchEngine({
       const DcNum = parseFloat(inputValues.Dc) || 50;
       const LcNum = parseFloat(inputValues.Lc) || 250;
       const PmaxNum = parseFloat(inputValues.Pmax_lim) || 6.0;
+      const linerThicknessNum = Math.max(0, parseFloat(inputValues.linerThickness) || 0);
+      const inhibitorThicknessNum = Math.max(0, parseFloat(inputValues.inhibitorThickness) || 0);
       const Dt0Num = parseFloat(inputValues.Dt0) || 8.0;
       const DsNum = parseFloat(inputValues.Ds) || 18.0;
       const alphaNum = parseFloat(inputValues.alpha) || 15;
@@ -398,19 +585,27 @@ export function SmartSearchEngine({
       const fixedNNum = parseInt(inputValues.fixedGrainCount) || 3;
       
       // D0
-      const valD0Num = parseFloat(inputValues.valD0) || (DcNum - 1);
-      const minD0Num = parseFloat(inputValues.minD0) || (DcNum - 2.5);
-      const maxD0Num = parseFloat(inputValues.maxD0) || (DcNum - 0.8);
+      const valD0NumExec = parseFloat(inputValues.valD0) || Math.max(10, availableD0 - 0.5);
+      const minD0NumExec = parseFloat(inputValues.minD0) || Math.max(10, availableD0 - 3.0);
+      const maxD0NumExec = parseFloat(inputValues.maxD0) || Math.max(10.5, availableD0);
       
       // d0
-      const vald0Num = parseFloat(inputValues.vald0) || 10.0;
-      const mind0Num = parseFloat(inputValues.mind0) || 6.0;
-      const maxd0Num = parseFloat(inputValues.maxd0) || 16.0;
+      const vald0NumExec = parseFloat(inputValues.vald0) || 10.0;
+      const mind0NumExec = parseFloat(inputValues.mind0) || 6.0;
+      const maxd0NumExec = parseFloat(inputValues.maxd0) || 16.0;
+
+      // d0mayor & Np (Star)
+      const vald0mayorNumExec = parseFloat(inputValues.vald0mayor) || Math.max(16, availableD0 * 0.65);
+      const mind0mayorNumExec = parseFloat(inputValues.mind0mayor) || Math.max(14, availableD0 * 0.45);
+      const maxd0mayorNumExec = parseFloat(inputValues.maxd0mayor) || Math.max(20, availableD0 - 3.0);
+      const valNpNumExec = Math.max(3, parseInt(inputValues.valNp) || 5);
+      const minNpNumExec = Math.max(3, parseInt(inputValues.minNp) || 3);
+      const maxNpNumExec = Math.max(minNpNumExec, parseInt(inputValues.maxNp) || 8);
       
       // L0
-      const valL0Num = parseFloat(inputValues.valL0) || 50.0;
-      const minL0Num = parseFloat(inputValues.minL0) || 30.0;
-      const maxL0Num = parseFloat(inputValues.maxL0) || 70.0;
+      const valL0NumExec = parseFloat(inputValues.valL0) || 50.0;
+      const minL0NumExec = parseFloat(inputValues.minL0) || 30.0;
+      const maxL0NumExec = parseFloat(inputValues.maxL0) || 70.0;
       
       const targetItNum = parseFloat(inputValues.targetImpulseVal) || 250;
       const targetAltNum = parseFloat(inputValues.targetAltitudeVal) || 1500;
@@ -431,6 +626,13 @@ export function SmartSearchEngine({
         Dc: DcNum,
         Lc: LcNum,
         Pmax_lim: PmaxNum,
+        hasLiner,
+        linerThickness: linerThicknessNum,
+        hasInhibitor,
+        inhibitorThickness: inhibitorThicknessNum,
+        wallThickness: initialMotor.wallThickness,
+        materialId: initialMotor.materialId,
+        safetyFactor: initialMotor.safetyFactor,
         Dt0: Dt0Num,
         Ds: DsNum,
         alpha: alphaNum,
@@ -447,17 +649,25 @@ export function SmartSearchEngine({
         fixedGrainCount: fixedNNum,
         // Advanced constraint modes
         modeD0,
-        valD0: valD0Num,
-        minD0: minD0Num,
-        maxD0: maxD0Num,
+        valD0: valD0NumExec,
+        minD0: minD0NumExec,
+        maxD0: maxD0NumExec,
         moded0,
-        vald0: vald0Num,
-        mind0: mind0Num,
-        maxd0: maxd0Num,
+        vald0: vald0NumExec,
+        mind0: mind0NumExec,
+        maxd0: maxd0NumExec,
+        moded0mayor,
+        vald0mayor: vald0mayorNumExec,
+        mind0mayor: mind0mayorNumExec,
+        maxd0mayor: maxd0mayorNumExec,
+        modeNp,
+        valNp: valNpNumExec,
+        minNp: minNpNumExec,
+        maxNp: maxNpNumExec,
         modeL0,
-        valL0: valL0Num,
-        minL0: minL0Num,
-        maxL0: maxL0Num,
+        valL0: valL0NumExec,
+        minL0: minL0NumExec,
+        maxL0: maxL0NumExec,
         // Propellant mass constraints
         modeMprop,
         valMprop: valMpropNum,
@@ -502,19 +712,17 @@ export function SmartSearchEngine({
     <div className="space-y-4">
       
       {/* ================= TOP HEADER & STEP TRACKER ================= */}
-      <div className={`p-4 rounded-xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs ${
-        isLight ? 'bg-white border-stone-200' : 'bg-slate-900/90 border-slate-800'
-      }`}>
+      <div className="p-4 rounded-xl border border-border bg-card flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary border border-primary/25 flex items-center justify-center font-bold">
               <Sparkles size={18} />
             </div>
             <div>
-              <h2 className="text-sm md:text-base font-bold text-foreground flex items-center gap-2 font-mono">
-                HERMES SMART SEARCH v2.0.0
-                <span className="text-[10px] uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  {loc('Optimizador Balístico Inteligente', 'Intelligent Ballistic Optimizer', 'Optimiseur Balistique Intelligent', 'Ottimizzatore Balistico Intelligente')}
+              <h2 className="text-sm md:text-base font-bold text-foreground flex flex-wrap items-center gap-2 font-mono">
+                HERMES SMART SEARCH v2.1.0
+                <span className="text-[11px] uppercase tracking-wider text-primary font-semibold">
+                  · {loc('Optimizador Balístico Inteligente', 'Intelligent Ballistic Optimizer', 'Optimiseur Balistique Intelligent', 'Ottimizzatore Balistico Intelligente')}
                 </span>
               </h2>
               <p className="text-xs text-muted-foreground">
@@ -536,18 +744,18 @@ export function SmartSearchEngine({
             size="sm"
             data-tour="smart-search-algorithm-btn"
             onClick={() => setShowAlgorithmInfo(!showAlgorithmInfo)}
-            className="h-8 text-xs font-mono flex items-center gap-1.5 border-border"
+            className="h-8 text-xs font-mono flex items-center gap-1.5 border-border cursor-pointer"
           >
-            <Info size={14} className="text-emerald-600 dark:text-emerald-400" />
+            <Info size={14} className="text-primary" />
             {loc('Algoritmo & Formulación', 'Algorithm & Formulation', 'Algorithme & Formulation', 'Algoritmo & Formulazione')}
           </Button>
 
-          <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border">
+          <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border flex-wrap">
             <button
               onClick={() => setActiveStep(0)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeStep === 0 
-                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  ? 'bg-primary text-primary-foreground shadow-xs' 
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
             >
@@ -562,11 +770,11 @@ export function SmartSearchEngine({
               data-tour="smart-search-phase-1-btn"
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeStep === 1 
-                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  ? 'bg-primary text-primary-foreground shadow-xs' 
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
             >
-              <span className="w-4 h-4 rounded-full bg-black/20 flex items-center justify-center text-[10px]">1</span>
+              <span className="w-4 h-4 rounded bg-black/15 dark:bg-white/15 flex items-center justify-center text-[10px] font-mono tabular-nums">1</span>
               {loc('Fase 1: Hardware', 'Phase 1: Hardware', 'Phase 1 : Matériel', 'Fase 1: Hardware')}
             </button>
             
@@ -577,11 +785,11 @@ export function SmartSearchEngine({
               data-tour="smart-search-phase-2-btn"
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeStep === 2 
-                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  ? 'bg-primary text-primary-foreground shadow-xs' 
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
             >
-              <span className="w-4 h-4 rounded-full bg-black/20 flex items-center justify-center text-[10px]">2</span>
+              <span className="w-4 h-4 rounded bg-black/15 dark:bg-white/15 flex items-center justify-center text-[10px] font-mono tabular-nums">2</span>
               {loc('Fase 2: Granos', 'Phase 2: Grains', 'Phase 2 : Grains', 'Fase 2: Grani')}
             </button>
 
@@ -592,11 +800,11 @@ export function SmartSearchEngine({
               data-tour="smart-search-phase-3-btn"
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeStep === 3 
-                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  ? 'bg-primary text-primary-foreground shadow-xs' 
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
             >
-              <span className="w-4 h-4 rounded-full bg-black/20 flex items-center justify-center text-[10px]">3</span>
+              <span className="w-4 h-4 rounded bg-black/15 dark:bg-white/15 flex items-center justify-center text-[10px] font-mono tabular-nums">3</span>
               {loc('Fase 3: Algoritmos', 'Phase 3: Algorithms', 'Phase 3 : Algorithmes', 'Fase 3: Algoritmi')}
             </button>
           </div>
@@ -605,17 +813,15 @@ export function SmartSearchEngine({
 
       {/* ================= INFORMATIVE MODAL / BANNER: ALGORITHM & SIMULATION FORMULATION ================= */}
       {showAlgorithmInfo && (
-        <div className={`p-5 rounded-xl border space-y-4 text-xs leading-relaxed transition-all shadow-md ${
-          isLight ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950' : 'bg-slate-900/95 border-emerald-600/50 text-emerald-100'
-        }`}>
-          <div className="flex items-center justify-between pb-3 border-b border-emerald-500/30">
-            <h4 className="font-bold font-mono text-sm flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-              <Zap size={18} className="text-emerald-500 animate-pulse" />
+        <div className="p-5 rounded-xl border border-border bg-card text-foreground space-y-4 text-xs leading-relaxed transition-all shadow-sm">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <h4 className="font-bold font-mono text-sm flex items-center gap-2 text-primary">
+              <Zap size={18} className="text-primary" />
               {loc('Guía Completa de Smart Search: Flujo de Misión, Algoritmos, Modus Operandi y Formulación', 'Smart Search Complete Guide: Mission Workflow, Algorithms, Modus Operandi & Formulation')}
             </h4>
             <button 
               onClick={() => setShowAlgorithmInfo(false)}
-              className="text-xs font-bold px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-800 dark:text-emerald-200 transition-colors cursor-pointer"
+              className="text-xs font-bold px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground border border-border transition-colors cursor-pointer"
             >
               ✕ {loc('Cerrar Guía', 'Close Guide')}
             </button>
@@ -702,13 +908,13 @@ export function SmartSearchEngine({
               </div>
 
               {/* Algorithm 3: Deep */}
-              <div className="p-3 rounded-xl border border-purple-500/40 bg-card/70 space-y-1.5">
+              <div className="p-3 rounded-xl border border-secondary/40 bg-card/70 space-y-1.5">
                 <div className="flex items-center justify-between font-mono font-bold text-foreground">
                   <span className="flex items-center gap-1.5">
-                    <Rocket size={14} className="text-purple-500" />
+                    <Rocket size={14} className="text-secondary" />
                     {loc('Búsqueda Profunda', 'Deep Search')}
                   </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/15 text-secondary font-bold tabular-nums">
                     2.000 evals / N
                   </span>
                 </div>
@@ -761,10 +967,10 @@ export function SmartSearchEngine({
       
       {/* STEP 0: BANDEJA DE OBJETIVOS DE MISIÓN */}
       {activeStep === 0 && (
-        <Card data-tour="smart-search-goal-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500 animate-in fade-in duration-200">
-          <CardHeader className="py-4 px-5 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <Card data-tour="smart-search-goal-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden animate-in fade-in duration-200">
+          <CardHeader className="py-3.5 px-5 bg-card-header text-card-header-foreground border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2 font-mono">
+              <CardTitle className="text-xs uppercase tracking-widest text-primary font-bold flex items-center gap-2 font-mono">
                 <Target size={16} />
                 {loc('Bandeja de Objetivos de Misión', 'Mission Objectives Inbox', 'Boîte des Objectifs de Mission', 'Casella degli Obiettivi di Missione')}
               </CardTitle>
@@ -794,20 +1000,20 @@ export function SmartSearchEngine({
                   setGoal('max_impulse');
                   setActiveStep(1);
                 }}
-                className="group relative p-5 rounded-2xl border-2 border-emerald-500/60 bg-gradient-to-br from-emerald-500/10 via-card to-emerald-500/5 hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer space-y-4"
+                className="group relative p-5 rounded-xl border border-primary/40 bg-primary/5 hover:border-primary hover:shadow-md transition-all cursor-pointer space-y-4"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0">
                       <Rocket size={24} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                        <span className="text-xs font-mono font-bold uppercase tracking-wider text-primary">
                           {loc('Bandeja Principal de Misión', 'Main Mission Tray', 'Bac Principal de Mission', 'Cassetto Principale di Missione')}
                         </span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
-                          {loc('Activo', 'Active', 'Actif', 'Attivo')}
+                        <span className="text-[10px] font-mono font-semibold text-primary">
+                          · {loc('Activo', 'Active', 'Actif', 'Attivo')}
                         </span>
                       </div>
                       <h3 className="text-base sm:text-lg font-bold text-foreground mt-0.5 font-mono flex items-center gap-2">
@@ -873,10 +1079,10 @@ export function SmartSearchEngine({
 
       {/* FASE 1: HARDWARE DEFINIDO (CÁMARA Y TOBERA) */}
       {activeStep === 1 && (
-        <Card data-tour="smart-search-phase1-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
-          <CardHeader className="py-3 px-4 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <Card data-tour="smart-search-phase1-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden">
+          <CardHeader className="py-3 px-4 bg-card-header text-card-header-foreground border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
+              <CardTitle className="text-xs uppercase tracking-widest text-primary font-bold flex items-center gap-2">
                 <Sliders size={16} />
                 {loc('Fase 1: Hardware Definido (Cámara y Tobera)', 'Phase 1: Defined Hardware (Chamber & Nozzle)', 'Phase 1 : Matériel Défini (Chambre & Tuyère)', 'Fase 1: Hardware Definito (Camera & Ugello)')}
               </CardTitle>
@@ -886,7 +1092,7 @@ export function SmartSearchEngine({
             </div>
             
             {/* Live Quick Hardware Indicators */}
-            <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground bg-muted/40 px-3 py-1 rounded-lg border border-border">
+            <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground bg-muted/40 px-3 py-1 rounded-lg border border-border tabular-nums">
               <span>Vol: <strong className="text-foreground">{chamberVolumeCm3.toFixed(1)} cm³</strong></span>
               <span>•</span>
               <span>{loc('Esbeltez (Lc/Dc):', 'Slenderness (Lc/Dc):', 'Élancement (Lc/Dc) :', 'Snellezza (Lc/Dc):')} <strong className="text-foreground">{slendernessRatio.toFixed(1)}</strong></span>
@@ -986,6 +1192,147 @@ export function SmartSearchEngine({
               </div>
             </div>
 
+            {/* Optional Thermal Liner & Grain Outer Inhibitor (matches Inputs Tab) */}
+            <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5 uppercase font-mono tracking-wider">
+                  <Shield size={14} className="text-amber-600 dark:text-amber-400" />
+                  {loc('Protección Térmica Opcional (Liner e Inhibidor)', 'Optional Thermal Protection (Liner & Inhibitor)')}
+                </h4>
+                <div className={`text-[11px] font-mono tabular-nums px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${
+                  isClearanceCollapsed
+                    ? 'bg-red-500/15 border-red-500/50 text-red-700 dark:text-red-300 font-bold'
+                    : radialDeductionDiamMm > 0
+                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-800 dark:text-amber-200 font-semibold'
+                      : 'bg-background/80 border-border text-muted-foreground'
+                }`}>
+                  <span>{loc('Diámetro máx. grano (D0 máx):', 'Max allowed grain (D0 max):')}</span>
+                  <strong className={isClearanceCollapsed ? 'text-red-600 dark:text-red-400' : 'text-foreground'}>
+                    {availableD0.toFixed(1)} mm
+                  </strong>
+                  {radialDeductionDiamMm > 0 && (
+                    <span className="text-[10px] opacity-80">
+                      (Dc {DcVal.toFixed(1)} − {radialDeductionDiamMm.toFixed(1)} mm)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Optional Liner */}
+                <div className={`p-3 rounded-lg border transition-colors flex flex-col gap-2 ${
+                  hasLiner
+                    ? 'bg-amber-500/12 border-amber-500/60'
+                    : 'bg-card/60 border-border hover:border-amber-500/45'
+                }`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <UiLabel
+                      htmlFor="smart-has-liner-chk"
+                      className={`text-xs font-semibold uppercase tracking-tight cursor-pointer flex items-center gap-2 flex-1 min-w-0 ${
+                        hasLiner ? 'text-amber-700 dark:text-amber-300' : 'text-foreground/85'
+                      }`}
+                    >
+                      <Checkbox
+                        id="smart-has-liner-chk"
+                        checked={hasLiner}
+                        onCheckedChange={(c) => setHasLiner(Boolean(c))}
+                        className="w-4 h-4 rounded-sm border border-amber-600/70 bg-background data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600 data-[state=checked]:text-white shrink-0"
+                      />
+                      <span>{loc('Añadir Liner Interno', 'Add Internal Liner')}</span>
+                    </UiLabel>
+                    <span className={`text-[10px] font-mono font-bold shrink-0 ${
+                      hasLiner ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
+                    }`}>
+                      {hasLiner ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    {loc('Aislante térmico interno entre cámara Dc y grano/inhibidor (resta 2×espesor al diámetro útil).', 'Internal thermal liner inside casing Dc (reduces available diameter by 2×thickness).')}
+                  </p>
+                  {hasLiner && (
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-amber-500/25">
+                      <span className="text-[11px] font-mono text-foreground font-semibold">
+                        {loc('Espesor Liner (radial):', 'Liner Thickness (radial):')}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={inputValues.linerThickness}
+                          onChange={(e) => handleInputChange('linerThickness', e.target.value)}
+                          className="w-20 h-7 text-xs font-mono font-bold tabular-nums bg-background"
+                        />
+                        <span className="text-[11px] font-mono text-muted-foreground">mm</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Optional Inhibitor */}
+                <div className={`p-3 rounded-lg border transition-colors flex flex-col gap-2 ${
+                  hasInhibitor
+                    ? 'bg-emerald-500/12 border-emerald-500/60'
+                    : 'bg-card/60 border-border hover:border-emerald-500/45'
+                }`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <UiLabel
+                      htmlFor="smart-has-inhibitor-chk"
+                      className={`text-xs font-semibold uppercase tracking-tight cursor-pointer flex items-center gap-2 flex-1 min-w-0 ${
+                        hasInhibitor ? 'text-emerald-700 dark:text-emerald-300' : 'text-foreground/85'
+                      }`}
+                    >
+                      <Checkbox
+                        id="smart-has-inhibitor-chk"
+                        checked={hasInhibitor}
+                        onCheckedChange={(c) => setHasInhibitor(Boolean(c))}
+                        className="w-4 h-4 rounded-sm border border-emerald-600/70 bg-background data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600 data-[state=checked]:text-white shrink-0"
+                      />
+                      <span>{loc('Añadir Inhibidor / Funda', 'Add Outer Inhibitor Sleeve')}</span>
+                    </UiLabel>
+                    <span className={`text-[10px] font-mono font-bold shrink-0 ${
+                      hasInhibitor ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'
+                    }`}>
+                      {hasInhibitor ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    {loc('Camisa exterior sobre el grano para proteger pared e inhibir cara externa (resta 2×espesor al diámetro útil).', 'Outer sleeve around propellant grain (reduces available diameter by 2×thickness).')}
+                  </p>
+                  {hasInhibitor && (
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-emerald-500/25">
+                      <span className="text-[11px] font-mono text-foreground font-semibold">
+                        {loc('Espesor Inhibidor (radial):', 'Inhibitor Thickness (radial):')}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={inputValues.inhibitorThickness}
+                          onChange={(e) => handleInputChange('inhibitorThickness', e.target.value)}
+                          className="w-20 h-7 text-xs font-mono font-bold tabular-nums bg-background"
+                        />
+                        <span className="text-[11px] font-mono text-muted-foreground">mm</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {isClearanceCollapsed && (
+                <div className="p-2.5 rounded-lg border border-red-500/50 bg-red-500/12 text-red-700 dark:text-red-300 text-xs font-mono flex items-center gap-2">
+                  <AlertTriangle size={15} className="text-red-500 shrink-0" />
+                  <span>
+                    {loc(
+                      `Espacio radial nulo o negativo (${availableD0.toFixed(1)} mm): la suma 2×liner + 2×inhibidor (${radialDeductionDiamMm.toFixed(1)} mm) iguala o supera Dc (${DcVal.toFixed(1)} mm).`,
+                      `Zero/negative radial clearance (${availableD0.toFixed(1)} mm): 2×liner + 2×inhibitor (${radialDeductionDiamMm.toFixed(1)} mm) equals or exceeds Dc (${DcVal.toFixed(1)} mm).`
+                    )}
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Grid 2: Nozzle & Propellant */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border">
               
@@ -999,7 +1346,7 @@ export function SmartSearchEngine({
                   <div className="space-y-1">
                     <UiLabel className="text-[10px] text-muted-foreground font-mono flex items-center justify-between">
                       <span>{loc('Garganta (Dt) [mm]', 'Throat (Dt) [mm]')}</span>
-                      {(isDt0GeDs || isDt0GeDc) && <AlertTriangle size={12} className="text-red-500 animate-pulse" />}
+                      {(isDt0GeDs || isDt0GeDc) && <AlertTriangle size={12} className="text-red-500" />}
                     </UiLabel>
                     <Input
                       type="number"
@@ -1008,14 +1355,14 @@ export function SmartSearchEngine({
                       onChange={(e) => handleInputChange('Dt0', e.target.value)}
                       onBlur={() => handleBlur('Dt0')}
                       placeholder="8.0"
-                      className={`h-8 text-xs font-mono font-bold ${isDt0EmptyOrInvalid || isDt0GeDs || isDt0GeDc ? 'border-red-500 bg-red-500/10' : ''}`}
+                      className={`h-8 text-xs font-mono font-bold tabular-nums ${isDt0EmptyOrInvalid || isDt0GeDs || isDt0GeDc ? 'border-red-500 bg-red-500/10' : ''}`}
                     />
                   </div>
 
                   <div className="space-y-1">
                     <UiLabel className="text-[10px] text-muted-foreground font-mono flex items-center justify-between">
                       <span>{loc('Salida (Ds) [mm]', 'Exit (Ds) [mm]')}</span>
-                      {isDt0GeDs && <AlertTriangle size={12} className="text-red-500 animate-pulse" />}
+                      {isDt0GeDs && <AlertTriangle size={12} className="text-red-500" />}
                     </UiLabel>
                     <Input
                       type="number"
@@ -1188,10 +1535,10 @@ export function SmartSearchEngine({
 
       {/* FASE 2: GEOMETRÍA Y RESTRICCIONES DE GRANO */}
       {activeStep === 2 && (
-        <Card data-tour="smart-search-phase2-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
-          <CardHeader className="py-3 px-4 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <Card data-tour="smart-search-phase2-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden">
+          <CardHeader className="py-3 px-4 bg-card-header text-card-header-foreground border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
+              <CardTitle className="text-xs uppercase tracking-widest text-primary font-bold flex items-center gap-2">
                 <Sliders size={16} />
                 {loc('Fase 2: Geometría y Restricción de Granos', 'Phase 2: Grain Geometry & Constraints')}
               </CardTitle>
@@ -1199,12 +1546,33 @@ export function SmartSearchEngine({
                 {loc('Elige la forma del grano, caras activas de combustión y bloquea o libera dimensiones', 'Select grain shape, active burn surfaces, and lock/unlock dimensions')}
               </p>
             </div>
-            <div className="text-[11px] font-mono text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg border border-border">
-              <span>{loc('Cámara:', 'Chamber:')} <strong className="text-foreground">Dc={DcVal}mm, Lc={LcVal}mm</strong></span>
+            <div className={`text-[11px] font-mono px-2.5 py-1 rounded-lg border tabular-nums flex items-center gap-2 ${
+              isClearanceCollapsed
+                ? 'border-red-500/50 bg-red-500/10 text-red-600 dark:text-red-400'
+                : 'border-border bg-muted/40 text-muted-foreground'
+            }`}>
+              <span>
+                {loc('Cámara:', 'Chamber:')} <strong className="text-foreground">Dc={DcVal}mm, Lc={LcVal}mm</strong>
+              </span>
+              <span>•</span>
+              <span>
+                {loc('D0 máx útil:', 'Max D0 clearance:')} <strong className={isClearanceCollapsed ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>{availableD0.toFixed(1)}mm</strong>
+              </span>
             </div>
           </CardHeader>
 
           <CardContent className="p-5 space-y-5">
+            {isClearanceCollapsed && (
+              <div className="p-3 rounded-xl border border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300 flex items-center gap-2.5 text-xs font-mono">
+                <AlertTriangle size={16} className="text-red-500 shrink-0" />
+                <span>
+                  {loc(
+                    `Aviso crítico: Dc (${DcVal} mm) menos liner/inhibidor (${radialDeductionDiamMm.toFixed(1)} mm) deja ${availableD0.toFixed(1)} mm disponibles. Ajusta la Fase 1 antes de definir granos.`,
+                    `Critical warning: Dc (${DcVal} mm) minus liner/inhibitor (${radialDeductionDiamMm.toFixed(1)} mm) leaves ${availableD0.toFixed(1)} mm clearance. Adjust Phase 1 first.`
+                  )}
+                </span>
+              </div>
+            )}
             
             {/* 1. Grain Shape & Segment Count Mode */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1338,8 +1706,10 @@ export function SmartSearchEngine({
                       <div className="text-xs font-bold text-foreground">
                         {loc('Diámetro Exterior (D0)', 'Outer Diameter (D0)')}
                       </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {loc(`Cámara Dc = ${DcVal} mm`, `Chamber Dc = ${DcVal} mm`)}
+                      <div className="text-[10px] text-muted-foreground font-mono tabular-nums">
+                        {radialDeductionDiamMm > 0
+                          ? loc(`Máx útil = ${availableD0.toFixed(1)} mm (Dc ${DcVal} − aislamiento)`, `Max D0 = ${availableD0.toFixed(1)} mm (Dc ${DcVal} − insulation)`)
+                          : loc(`Cámara Dc = ${DcVal} mm (Máx = ${availableD0.toFixed(1)} mm)`, `Chamber Dc = ${DcVal} mm (Max = ${availableD0.toFixed(1)} mm)`)}
                       </div>
                     </div>
                   </div>
@@ -1383,8 +1753,10 @@ export function SmartSearchEngine({
 
                   {/* Controls based on mode */}
                   {modeD0 === 'free' && (
-                    <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center">
-                      {loc('Auto: Holgura óptima (Dc - 1 a 2.5 mm)', 'Auto: Optimal casing clearance')}
+                    <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center tabular-nums">
+                      {radialDeductionDiamMm > 0
+                        ? loc(`Auto: Holgura respetando liner/inhibidor (≤ ${availableD0.toFixed(1)} mm)`, `Auto: Respects liner/inhibitor (≤ ${availableD0.toFixed(1)} mm)`)
+                        : loc(`Auto: Ajuste óptimo en cámara (≤ ${(availableD0 - 0.5).toFixed(1)} mm)`, `Auto: Optimal casing clearance (≤ ${(availableD0 - 0.5).toFixed(1)} mm)`)}
                     </div>
                   )}
 
@@ -1397,19 +1769,23 @@ export function SmartSearchEngine({
                           value={inputValues.valD0}
                           onChange={(e) => handleInputChange('valD0', e.target.value)}
                           onBlur={() => handleBlur('valD0')}
-                          placeholder="49.0"
-                          className={`h-8 text-xs font-mono font-bold flex-1 ${isD0EmptyOrInvalid || isD0GeDc ? 'border-red-500 bg-red-500/10' : ''}`}
+                          placeholder={Math.max(10, availableD0 - 0.5).toFixed(1)}
+                          className={`h-8 text-xs font-mono font-bold flex-1 tabular-nums ${isD0EmptyOrInvalid || isD0ExceedsClearance ? 'border-red-500 bg-red-500/10' : ''}`}
                         />
                         <span className="text-xs font-mono text-muted-foreground">mm</span>
-                        {isD0GeDc && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
+                        {isD0ExceedsClearance && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
                       </div>
                       {isD0EmptyOrInvalid && (
                         <p className="text-[10px] text-red-500 font-medium">{loc('⚠️ Introduce D0', '⚠️ Enter D0')}</p>
                       )}
-                      {isD0GeDc && (
-                        <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
-                          <AlertTriangle size={12} className="shrink-0" />
-                          {loc(`⚠️ D0 (${valD0Num} mm) ≥ Dc cámara (${DcVal} mm). El grano debe ser menor que la cámara.`, `⚠️ D0 (${valD0Num} mm) ≥ chamber Dc (${DcVal} mm). Grain must fit inside casing.`)}
+                      {isD0ExceedsClearance && (
+                        <p className="text-[10px] text-red-500 font-medium flex items-start gap-1">
+                          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                          <span>
+                            {radialDeductionDiamMm > 0
+                              ? loc(`D0 (${valD0Num} mm) supera el máximo permitido (${availableD0.toFixed(1)} mm) tras descontar liner/inhibidor (−${radialDeductionDiamMm.toFixed(1)} mm sobre Dc=${DcVal} mm).`, `D0 (${valD0Num} mm) exceeds max allowed (${availableD0.toFixed(1)} mm) after liner/inhibitor (−${radialDeductionDiamMm.toFixed(1)} mm from Dc=${DcVal} mm).`)
+                              : loc(`D0 (${valD0Num} mm) supera el diámetro útil de cámara (${availableD0.toFixed(1)} mm).`, `D0 (${valD0Num} mm) exceeds chamber clearance (${availableD0.toFixed(1)} mm).`)}
+                          </span>
                         </p>
                       )}
                     </div>
@@ -1425,8 +1801,8 @@ export function SmartSearchEngine({
                             step="0.5"
                             value={inputValues.minD0}
                             onChange={(e) => handleInputChange('minD0', e.target.value)}
-                            placeholder="47.5"
-                            className={`h-8 text-xs font-mono font-bold ${isD0RangeInverted ? 'border-red-500 bg-red-500/10' : ''}`}
+                            placeholder={Math.max(10, availableD0 - 3.0).toFixed(1)}
+                            className={`h-8 text-xs font-mono font-bold tabular-nums ${isD0RangeInverted || isMinD0ExceedsClearance ? 'border-red-500 bg-red-500/10' : ''}`}
                           />
                         </div>
                         <div>
@@ -1436,15 +1812,19 @@ export function SmartSearchEngine({
                             step="0.5"
                             value={inputValues.maxD0}
                             onChange={(e) => handleInputChange('maxD0', e.target.value)}
-                            placeholder="49.2"
-                            className={`h-8 text-xs font-mono font-bold ${isD0RangeInverted || isMaxD0GeDc ? 'border-red-500 bg-red-500/10' : ''}`}
+                            placeholder={availableD0.toFixed(1)}
+                            className={`h-8 text-xs font-mono font-bold tabular-nums ${isD0RangeInverted || isMaxD0ExceedsClearance ? 'border-red-500 bg-red-500/10' : ''}`}
                           />
                         </div>
                       </div>
-                      {isMaxD0GeDc && (
-                        <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
-                          <AlertTriangle size={12} className="shrink-0" />
-                          {loc(`⚠️ Máx D0 (${maxD0Num} mm) ≥ Dc (${DcVal} mm).`, `⚠️ Max D0 (${maxD0Num} mm) ≥ Chamber Dc (${DcVal} mm).`)}
+                      {(isMaxD0ExceedsClearance || isMinD0ExceedsClearance) && (
+                        <p className="text-[10px] text-red-500 font-medium flex items-start gap-1">
+                          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                          <span>
+                            {radialDeductionDiamMm > 0
+                              ? loc(`El rango de D0 (hasta ${Math.max(minD0Num, maxD0Num)} mm) supera el máximo permitido (${availableD0.toFixed(1)} mm) con liner/inhibidor activo.`, `D0 range (up to ${Math.max(minD0Num, maxD0Num)} mm) exceeds max allowed (${availableD0.toFixed(1)} mm) with active liner/inhibitor.`)
+                              : loc(`Máx D0 (${maxD0Num} mm) supera el diámetro útil (${availableD0.toFixed(1)} mm).`, `Max D0 (${maxD0Num} mm) exceeds clearance (${availableD0.toFixed(1)} mm).`)}
+                          </span>
                         </p>
                       )}
                       {isD0RangeInverted && (
@@ -1463,10 +1843,14 @@ export function SmartSearchEngine({
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs font-bold text-foreground">
-                          {loc('Diámetro Núcleo (d0)', 'Core Diameter (d0)')}
+                          {shape === 2
+                            ? loc('Diámetro Puntas Internas (d0)', 'Inner Star Tip Diameter (d0)')
+                            : loc('Diámetro Núcleo (d0)', 'Core Diameter (d0)')}
                         </div>
                         <div className="text-[10px] text-muted-foreground">
-                          {loc('Canal central de gas', 'Central combustion port')}
+                          {shape === 2
+                            ? loc('Diámetro interior entre puntas de la estrella', 'Inner diameter across star tips')
+                            : loc('Canal central de gas', 'Central combustion port')}
                         </div>
                       </div>
                     </div>
@@ -1528,7 +1912,7 @@ export function SmartSearchEngine({
                             className={`h-8 text-xs font-mono font-bold flex-1 ${isd0EmptyOrInvalid || isd0GeD0 ? 'border-red-500 bg-red-500/10' : ''}`}
                           />
                           <span className="text-xs font-mono text-muted-foreground">mm</span>
-                          {isd0GeD0 && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
+                          {isd0GeD0 && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
                         </div>
                         {isd0EmptyOrInvalid && (
                           <p className="text-[10px] text-red-500 font-medium">{loc('⚠️ Introduce d0', '⚠️ Enter d0')}</p>
@@ -1660,7 +2044,7 @@ export function SmartSearchEngine({
                           className={`h-8 text-xs font-mono font-bold flex-1 ${isL0EmptyOrInvalid || isL0ExceedsLc ? 'border-red-500 bg-red-500/10' : ''}`}
                         />
                         <span className="text-xs font-mono text-muted-foreground">mm</span>
-                        {isL0ExceedsLc && <AlertTriangle size={14} className="text-red-500 animate-pulse shrink-0" />}
+                        {isL0ExceedsLc && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
                       </div>
                       {isL0EmptyOrInvalid && (
                         <p className="text-[10px] text-red-500 font-medium">{loc('⚠️ Introduce L0', '⚠️ Enter L0')}</p>
@@ -1711,6 +2095,354 @@ export function SmartSearchEngine({
                 </div>
 
               </div>
+
+              {/* Dedicated Star Geometry Inputs when shape === 2 */}
+              {shape === 2 && (
+                <div className="mt-3 p-4 rounded-xl border border-primary/35 bg-primary/5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <Star size={15} className="text-primary shrink-0" />
+                      <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
+                        {loc('Parámetros Específicos de Grano en Estrella (Clipper2)', 'Star Grain Specific Parameters (Clipper2)')}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {loc('El optimizador añade Dp y Np a la evolución diferencial', 'Optimizer expands Differential Evolution across Dp & Np')}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Star Variable A: Valley Diameter (d0mayor / Dp) */}
+                    <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
+                      <div>
+                        <div className="text-xs font-bold text-foreground">
+                          {loc('Diámetro Valles Estrella (d0mayor / Dp)', 'Star Valley Diameter (d0mayor / Dp)')}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-mono tabular-nums">
+                          {minStarD0mayorDisplay > 0
+                            ? loc(
+                                `Mín. geom. estrella = ${minStarD0mayorDisplay.toFixed(1)} mm (d0/cos(π/Np)) · Máx < ${effectiveOuterD.toFixed(1)} mm`,
+                                `Star geom. min = ${minStarD0mayorDisplay.toFixed(1)} mm (d0/cos(π/Np)) · Max < ${effectiveOuterD.toFixed(1)} mm`
+                              )
+                            : loc(`Debe cumplir Dp > d0/cos(π/Np) y Dp < D0 (≤ ${effectiveOuterD.toFixed(1)} mm)`, `Must satisfy Dp > d0/cos(π/Np) & Dp < D0 (≤ ${effectiveOuterD.toFixed(1)} mm)`)}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1 p-1 bg-muted/60 rounded-lg text-[11px] font-mono">
+                        <button
+                          type="button"
+                          onClick={() => setModed0mayor('free')}
+                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+                            moded0mayor === 'free'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {loc('Libre', 'Free')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModed0mayor('fixed')}
+                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+                            moded0mayor === 'fixed'
+                              ? 'bg-amber-500 text-white shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {loc('Fijo', 'Fixed')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModed0mayor('range')}
+                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+                            moded0mayor === 'range'
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {loc('Rango', 'Range')}
+                        </button>
+                      </div>
+
+                      {moded0mayor === 'free' && (
+                        <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center">
+                          {loc('Auto: Valles siempre > mín. geom. d0/cos(π/Np) garantizando puntas de estrella', 'Auto: Valleys always > d0/cos(π/Np) ensuring genuine star arms')}
+                        </div>
+                      )}
+
+                      {moded0mayor === 'fixed' && (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="number"
+                              step="0.5"
+                              value={inputValues.vald0mayor}
+                              onChange={(e) => handleInputChange('vald0mayor', e.target.value)}
+                              onBlur={() => handleBlur('vald0mayor')}
+                              placeholder="30.0"
+                              className={`h-8 text-xs font-mono font-bold flex-1 tabular-nums ${
+                                isd0mayorEmptyOrInvalid || isd0mayorLeqd0 || isStarDpBelowGeomMin || isd0mayorGeD0 ? 'border-red-500 bg-red-500/10' : ''
+                              }`}
+                            />
+                            <span className="text-xs font-mono text-muted-foreground">mm</span>
+                            {(isd0mayorLeqd0 || isStarDpBelowGeomMin || isd0mayorGeD0) && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
+                          </div>
+                          {isd0mayorEmptyOrInvalid && (
+                            <p className="text-[10px] text-red-500 font-medium">{loc('⚠️ Introduce d0mayor', '⚠️ Enter d0mayor')}</p>
+                          )}
+                          {isd0mayorLeqd0 && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                              <AlertTriangle size={12} className="shrink-0" />
+                              {loc(`Dp (${vald0mayorNum} mm) debe ser mayor que puntas d0 (${vald0Num} mm).`, `Dp (${vald0mayorNum} mm) must exceed inner tips d0 (${vald0Num} mm).`)}
+                            </p>
+                          )}
+                          {!isd0mayorLeqd0 && isStarDpBelowGeomMin && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-start gap-1">
+                              <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                              <span>
+                                {loc(
+                                  `Dp (${vald0mayorNum} mm) ≤ mín. geom. (${minStarD0mayorStrict.toFixed(1)} mm): no forma puntas de estrella (colapsa en polígono convexo).`,
+                                  `Dp (${vald0mayorNum} mm) ≤ geom. min (${minStarD0mayorStrict.toFixed(1)} mm): cannot form star arms (collapses into convex polygon).`
+                                )}
+                              </span>
+                            </p>
+                          )}
+                          {isd0mayorGeD0 && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                              <AlertTriangle size={12} className="shrink-0" />
+                              {loc(`Dp (${vald0mayorNum} mm) ≥ D0 útil (${effectiveOuterD.toFixed(1)} mm). Los valles perforan la pared exterior.`, `Dp (${vald0mayorNum} mm) ≥ outer D0 (${effectiveOuterD.toFixed(1)} mm). Valleys pierce outer wall.`)}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {moded0mayor === 'range' && (
+                        <div className="space-y-1">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] text-muted-foreground font-mono">Mín (mm)</span>
+                              <Input
+                                type="number"
+                                step="0.5"
+                                value={inputValues.mind0mayor}
+                                onChange={(e) => handleInputChange('mind0mayor', e.target.value)}
+                                placeholder="18.0"
+                                className={`h-8 text-xs font-mono font-bold tabular-nums ${
+                                  isd0mayorRangeInverted || isMind0mayorGeD0 ? 'border-red-500 bg-red-500/10' : ''
+                                }`}
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-muted-foreground font-mono">Máx (mm)</span>
+                              <Input
+                                type="number"
+                                step="0.5"
+                                value={inputValues.maxd0mayor}
+                                onChange={(e) => handleInputChange('maxd0mayor', e.target.value)}
+                                placeholder="40.0"
+                                className={`h-8 text-xs font-mono font-bold tabular-nums ${
+                                  isd0mayorRangeInverted || isMaxd0mayorGeD0 || isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0 || isStarMaxDpBelowGeomMin ? 'border-red-500 bg-red-500/10' : ''
+                                }`}
+                              />
+                            </div>
+                          </div>
+                          {isd0mayorRangeInverted && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                              <AlertTriangle size={12} className="shrink-0" />
+                              {loc(`Mín Dp (${mind0mayorNum} mm) ≥ Máx Dp (${maxd0mayorNum} mm). Rango invertido.`, `Min Dp (${mind0mayorNum} mm) ≥ Max Dp (${maxd0mayorNum} mm). Inverted range.`)}
+                            </p>
+                          )}
+                          {(isMaxd0mayorGeD0 || isMind0mayorGeD0) && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                              <AlertTriangle size={12} className="shrink-0" />
+                              {loc(`El rango de Dp supera el diámetro exterior D0 (${effectiveOuterD.toFixed(1)} mm).`, `Dp range exceeds outer diameter D0 (${effectiveOuterD.toFixed(1)} mm).`)}
+                            </p>
+                          )}
+                          {(isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0) && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                              <AlertTriangle size={12} className="shrink-0" />
+                              {loc('El máximo de Dp debe superar a d0.', 'Max Dp must be greater than d0.')}
+                            </p>
+                          )}
+                          {!(isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0) && isStarMaxDpBelowGeomMin && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-start gap-1">
+                              <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                              <span>
+                                {loc(
+                                  `Máx Dp (${maxd0mayorNum} mm) ≤ mín. geom. (${minStarD0mayorStrict.toFixed(1)} mm): ninguna estrella en este rango tiene puntas válidas.`,
+                                  `Max Dp (${maxd0mayorNum} mm) ≤ geom. min (${minStarD0mayorStrict.toFixed(1)} mm): no valid star geometry in range.`
+                                )}
+                              </span>
+                            </p>
+                          )}
+                          {isStarRangeMinDpPartial && (
+                            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-start gap-1">
+                              <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                              <span>
+                                {loc(
+                                  `Nota: se descartarán automáticamente valores con Dp ≤ mín. geom. (${minStarD0mayorDisplay.toFixed(1)} mm) para conservar la forma de estrella.`,
+                                  `Note: candidates with Dp ≤ geom. min (${minStarD0mayorDisplay.toFixed(1)} mm) will be discarded to preserve star shape.`
+                                )}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Star Variable B: Number of Star Points (Np) */}
+                    <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
+                      <div>
+                        <div className="text-xs font-bold text-foreground">
+                          {loc('Número de Puntas de Estrella (Np)', 'Number of Star Points (Np)')}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-mono">
+                          {loc('Entero ≥ 3 puntas (controla área inicial y progresividad)', 'Integer ≥ 3 points (controls initial port area & progressivity)')}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1 p-1 bg-muted/60 rounded-lg text-[11px] font-mono">
+                        <button
+                          type="button"
+                          onClick={() => setModeNp('free')}
+                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+                            modeNp === 'free'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {loc('Libre', 'Free')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModeNp('fixed')}
+                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+                            modeNp === 'fixed'
+                              ? 'bg-amber-500 text-white shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {loc('Fijo', 'Fixed')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModeNp('range')}
+                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+                            modeNp === 'range'
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {loc('Rango', 'Range')}
+                        </button>
+                      </div>
+
+                      {modeNp === 'free' && (
+                        <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center">
+                          {loc('Auto: Búsqueda global de puntas Np ∈ [3, 10]', 'Auto: Global search over Np ∈ [3, 10] points')}
+                        </div>
+                      )}
+
+                      {modeNp === 'fixed' && (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="number"
+                              step="1"
+                              min="3"
+                              max="24"
+                              value={inputValues.valNp}
+                              onChange={(e) => handleInputChange('valNp', e.target.value)}
+                              onBlur={() => handleBlur('valNp')}
+                              placeholder="5"
+                              className={`h-8 text-xs font-mono font-bold flex-1 tabular-nums ${isNpInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
+                            />
+                            <span className="text-xs font-mono text-muted-foreground">{loc('puntas', 'pts')}</span>
+                            {isNpInvalid && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
+                          </div>
+                          {isNpInvalid && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                              <AlertTriangle size={12} className="shrink-0" />
+                              {loc('Una estrella requiere al menos Np ≥ 3 puntas.', 'Star grain requires at least Np ≥ 3 points.')}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {modeNp === 'range' && (
+                        <div className="space-y-1">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] text-muted-foreground font-mono">Mín (puntas)</span>
+                              <Input
+                                type="number"
+                                step="1"
+                                min="3"
+                                max="24"
+                                value={inputValues.minNp}
+                                onChange={(e) => handleInputChange('minNp', e.target.value)}
+                                placeholder="3"
+                                className={`h-8 text-xs font-mono font-bold tabular-nums ${isNpRangeInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-muted-foreground font-mono">Máx (puntas)</span>
+                              <Input
+                                type="number"
+                                step="1"
+                                min="3"
+                                max="24"
+                                value={inputValues.maxNp}
+                                onChange={(e) => handleInputChange('maxNp', e.target.value)}
+                                placeholder="8"
+                                className={`h-8 text-xs font-mono font-bold tabular-nums ${isNpRangeInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
+                              />
+                            </div>
+                          </div>
+                          {isNpRangeInvalid && (
+                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                              <AlertTriangle size={12} className="shrink-0" />
+                              {loc('Rango de Np inválido: ambos deben ser ≥ 3 y Mín ≤ Máx.', 'Invalid Np range: both must be ≥ 3 and Min ≤ Max.')}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Inputs-style Unified Star Alert Box */}
+                  {hasStarGeometricAlert && (
+                    <div className="p-2.5 rounded-lg border border-red-500/45 bg-red-500/10 text-red-700 dark:text-red-300 flex flex-col gap-0.5 text-[11px] font-mono">
+                      <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle size={13} className="shrink-0" />
+                        {loc('Alerta Configuración Estrella', 'Star Configuration Alert')}
+                      </span>
+                      {(isNpInvalid || isNpRangeInvalid) && (
+                        <span>• {loc('Requiere >= 3 puntas (y Mín ≤ Máx)', 'Requires >= 3 points (and Min ≤ Max)')}</span>
+                      )}
+                      {(isd0mayorLeqd0 || isStarDpBelowGeomMin || isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0 || isStarMaxDpBelowGeomMin) && (
+                        <span>
+                          • {loc(
+                            `Valle (Dp) > mín. geom. (${(minStarD0mayorStrict > 0 ? minStarD0mayorStrict : vald0Num).toFixed(1)} mm) para formar estrella real (si es menor o igual degenera en polígono)`,
+                            `Valley (Dp) > geom. min (${(minStarD0mayorStrict > 0 ? minStarD0mayorStrict : vald0Num).toFixed(1)} mm) for genuine star arms`
+                          )}
+                        </span>
+                      )}
+                      {(isd0mayorGeD0 || isMaxd0mayorGeD0 || isMind0mayorGeD0) && (
+                        <span>• {loc(`Valle (Dp) < D0 exterior (${effectiveOuterD.toFixed(1)} mm)`, `Valley (Dp) < outer D0 (${effectiveOuterD.toFixed(1)} mm)`)}</span>
+                      )}
+                      {isStarGeomExceedsD0 && (
+                        <span>
+                          • {loc(
+                            `Con d0 ≥ ${starMinD0Ref.toFixed(1)} mm y Np ≤ ${starMaxNpPossible}, el mín. geom. de valles (${minStarD0mayorStrict.toFixed(1)} mm) iguala o supera D0 útil (${effectiveOuterD.toFixed(1)} mm). Reduce d0 o aumenta Np/D0.`,
+                            `With d0 ≥ ${starMinD0Ref.toFixed(1)} mm & Np ≤ ${starMaxNpPossible}, star valley geom. min (${minStarD0mayorStrict.toFixed(1)} mm) reaches outer D0 (${effectiveOuterD.toFixed(1)} mm). Lower d0 or raise Np/D0.`
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 3. SUPERFICIES DE QUEMADO E INHIBICIONES */}
@@ -1945,10 +2677,10 @@ export function SmartSearchEngine({
 
       {/* FASE 3: ALGORITMOS Y EJECUCIÓN DEL OPTIMIZADOR */}
       {activeStep === 3 && (
-        <Card data-tour="smart-search-phase3-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden border-t-4 border-t-emerald-500">
-          <CardHeader className="py-3 px-4 bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <Card data-tour="smart-search-phase3-card" className="bg-card border-border shadow-xs rounded-xl overflow-hidden">
+          <CardHeader className="py-3 px-4 bg-card-header text-card-header-foreground border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-xs uppercase tracking-widest text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-2">
+              <CardTitle className="text-xs uppercase tracking-widest text-primary font-bold flex items-center gap-2">
                 <Cpu size={16} />
                 {loc('Fase 3: Algoritmos y Lanzamiento del Optimizador', 'Phase 3: Algorithms & Optimizer Execution')}
               </CardTitle>
@@ -1956,7 +2688,7 @@ export function SmartSearchEngine({
                 {loc('Configura el presupuesto de simulación y lanza la optimización balística global', 'Configure simulation budget and launch global ballistic optimization')}
               </p>
             </div>
-            <div className="text-[11px] font-mono text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg border border-border">
+            <div className="text-[11px] font-mono text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg border border-border tabular-nums">
               <span>{loc('Hardware:', 'Hardware:')} <strong className="text-foreground">{DcVal}x{LcVal} mm, Dt={Dt0Val} mm</strong></span>
             </div>
           </CardHeader>
@@ -1974,7 +2706,7 @@ export function SmartSearchEngine({
                     <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 font-mono">
                       {loc('Objetivo Activo de Misión', 'Active Mission Objective')}
                     </span>
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">
+                    <span className="text-[10px] font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md font-bold border border-emerald-500/30">
                       {loc('Fijado en Bandeja', 'Set in Inbox')}
                     </span>
                   </div>
@@ -2009,7 +2741,7 @@ export function SmartSearchEngine({
                     <div>
                       <h4 className="text-xs font-bold uppercase font-mono tracking-wider text-foreground flex items-center gap-2">
                         <span>{loc('Motor Unificado: Differential Evolution (DE/rand/1/bin)', 'Unified Engine: Differential Evolution (DE/rand/1/bin)')}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-bold">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-bold">
                           {loc('Canónico', 'Canonical')}
                         </span>
                       </h4>
@@ -2030,24 +2762,35 @@ export function SmartSearchEngine({
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-emerald-500/20 text-[11px] font-mono">
                   <div className="p-2 rounded-lg bg-card border border-border/60">
                     <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Estrategia', 'Strategy')}</div>
-                    <div className="font-bold text-foreground mt-0.5">DE/rand/1/bin (LHS)</div>
+                    <div className="font-bold text-foreground mt-0.5">
+                      {shape === 2 ? 'DE/rand/1/bin + Clipper2' : 'DE/rand/1/bin (LHS)'}
+                    </div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
                     <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Variables Activas', 'Active Variables')}</div>
                     <div className="font-bold text-foreground mt-0.5">
-                      {modeD0 !== 'fixed' ? 'D0 ' : ''}{moded0 !== 'fixed' && shape !== 3 ? 'd0 ' : ''}{modeL0 !== 'fixed' ? 'L0' : ''}
-                      {modeD0 === 'fixed' && (moded0 === 'fixed' || shape === 3) && modeL0 === 'fixed' ? (loc('Ninguna (Fijadas)', 'None (Fixed)')) : ''}
+                      {(() => {
+                        const vars: string[] = [];
+                        if (modeD0 !== 'fixed') vars.push('D0');
+                        if (shape !== 3 && moded0 !== 'fixed') vars.push('d0');
+                        if (shape === 2 && moded0mayor !== 'fixed') vars.push('Dp');
+                        if (modeL0 !== 'fixed') vars.push('L0');
+                        if (shape === 2 && modeNp !== 'fixed') vars.push('Np');
+                        return vars.length > 0 ? vars.join(' · ') : loc('Ninguna (Fijadas)', 'None (Fixed)');
+                      })()}
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
-                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Modo de Granos', 'Grain Mode')}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Geometría y Granos', 'Shape & Grains')}</div>
                     <div className="font-bold text-foreground mt-0.5">
-                      {grainCountMode === 'range' ? `Auto (N = 1 .. ${inputValues.maxGrainCount || 5})` : `Fijo (N = ${inputValues.fixedGrainCount || 3})`}
+                      {shape === 2 ? loc('Estrella', 'Star') : shape === 3 ? loc('Macizo', 'Solid') : 'BATES'} · {grainCountMode === 'range' ? `N=1..${inputValues.maxGrainCount || 5}` : `N=${inputValues.fixedGrainCount || 3}`}
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
-                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Restricción Pmax', 'Pmax Constraint')}</div>
-                    <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">≤ {inputValues.Pmax_lim || '6.0'} MPa (Deb)</div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Límites Cámara', 'Chamber Limits')}</div>
+                    <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">
+                      P≤{inputValues.Pmax_lim || '6.0'} MPa · D0≤{availableD0.toFixed(1)}mm
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2135,54 +2878,54 @@ export function SmartSearchEngine({
                     }}
                     className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                       budgetPreset === 'deep' && evaluationsPerN === 2000
-                        ? 'border-emerald-500 bg-emerald-500/10 shadow-xs ring-1 ring-emerald-500/30'
+                        ? 'border-primary bg-primary/10 shadow-xs ring-1 ring-primary/30'
                         : 'border-border bg-card/60 hover:bg-muted/40'
                     }`}
                   >
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                          <Rocket size={14} className="text-purple-500" />
+                          <Rocket size={14} className="text-secondary" />
                           {loc('Búsqueda Profunda', 'Deep Search')}
                         </span>
                         {budgetPreset === 'deep' && evaluationsPerN === 2000 && (
-                          <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
+                          <CheckCircle2 size={16} className="text-primary" />
                         )}
                       </div>
                       <p className="text-[11px] text-muted-foreground">
                         {loc('2.000 simulaciones / N. Máxima exploración global para geometrías complejas.', '2,000 simulations / N. Exhaustive global exploration for complex geometries.')}
                       </p>
                     </div>
-                    <div className="mt-2 pt-1.5 border-t border-border/40 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      🔬 ~5 - 8s {loc('por grano', 'per grain')}
+                    <div className="mt-2 pt-1.5 border-t border-border/40 text-[10px] font-mono font-bold text-primary tabular-nums">
+                      ~5 - 8s {loc('por grano', 'per grain')}
                     </div>
                   </div>
                 </div>
 
                 {/* Transparent Budget Summary Banner */}
-                <div className="p-3 rounded-xl border border-border bg-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+                <div className="p-3 rounded-xl border border-border bg-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono tabular-nums">
                   <div className="flex items-center gap-2 text-foreground">
-                    <Activity size={15} className="text-emerald-500 shrink-0" />
+                    <Activity size={15} className="text-primary shrink-0" />
                     <span>
                       {grainCountMode === 'range' ? (
                         lang === 'es' ? (
-                          <>Presupuesto: <strong>{evaluationsPerN.toLocaleString()}</strong> evals / grano × <strong>{inputValues.maxGrainCount || 5}</strong> valores de N = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulaciones totales</strong></>
+                          <>Presupuesto: <strong>{evaluationsPerN.toLocaleString()}</strong> evals / grano × <strong>{inputValues.maxGrainCount || 5}</strong> valores de N = <strong className="text-primary">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulaciones totales</strong></>
                         ) : lang === 'fr' ? (
-                          <>Budget : <strong>{evaluationsPerN.toLocaleString()}</strong> évals / grain × <strong>{inputValues.maxGrainCount || 5}</strong> valeurs de N = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulations au total</strong></>
+                          <>Budget : <strong>{evaluationsPerN.toLocaleString()}</strong> évals / grain × <strong>{inputValues.maxGrainCount || 5}</strong> valeurs de N = <strong className="text-primary">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulations au total</strong></>
                         ) : lang === 'it' ? (
-                          <>Budget: <strong>{evaluationsPerN.toLocaleString()}</strong> valutazioni / grano × <strong>{inputValues.maxGrainCount || 5}</strong> valori di N = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulazioni totali</strong></>
+                          <>Budget: <strong>{evaluationsPerN.toLocaleString()}</strong> valutazioni / grano × <strong>{inputValues.maxGrainCount || 5}</strong> valori di N = <strong className="text-primary">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} simulazioni totali</strong></>
                         ) : (
-                          <>Budget: <strong>{evaluationsPerN.toLocaleString()}</strong> evals / grain × <strong>{inputValues.maxGrainCount || 5}</strong> N values = <strong className="text-emerald-600 dark:text-emerald-400">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} total simulations</strong></>
+                          <>Budget: <strong>{evaluationsPerN.toLocaleString()}</strong> evals / grain × <strong>{inputValues.maxGrainCount || 5}</strong> N values = <strong className="text-primary">~{(evaluationsPerN * (parseInt(inputValues.maxGrainCount) || 5)).toLocaleString()} total simulations</strong></>
                         )
                       ) : (
                         lang === 'es' ? (
-                          <>Presupuesto: <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} simulaciones balísticas</strong> para N = {inputValues.fixedGrainCount || 3} granos fijos</>
+                          <>Presupuesto: <strong className="text-primary">{evaluationsPerN.toLocaleString()} simulaciones balísticas</strong> para N = {inputValues.fixedGrainCount || 3} granos fijos</>
                         ) : lang === 'fr' ? (
-                          <>Budget : <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} simulations balistiques</strong> pour N = {inputValues.fixedGrainCount || 3} grains fixes</>
+                          <>Budget : <strong className="text-primary">{evaluationsPerN.toLocaleString()} simulations balistiques</strong> pour N = {inputValues.fixedGrainCount || 3} grains fixes</>
                         ) : lang === 'it' ? (
-                          <>Budget: <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} simulazioni balistiche</strong> per N = {inputValues.fixedGrainCount || 3} grani fissi</>
+                          <>Budget: <strong className="text-primary">{evaluationsPerN.toLocaleString()} simulazioni balistiche</strong> per N = {inputValues.fixedGrainCount || 3} grani fissi</>
                         ) : (
-                          <>Budget: <strong className="text-emerald-600 dark:text-emerald-400">{evaluationsPerN.toLocaleString()} ballistic simulations</strong> for fixed N = {inputValues.fixedGrainCount || 3}</>
+                          <>Budget: <strong className="text-primary">{evaluationsPerN.toLocaleString()} ballistic simulations</strong> for fixed N = {inputValues.fixedGrainCount || 3}</>
                         )
                       )}
                     </span>
@@ -2204,44 +2947,40 @@ export function SmartSearchEngine({
                         else if (val === 2000) setBudgetPreset('deep');
                         else setBudgetPreset('standard');
                       }}
-                      className="w-20 h-7 px-2 text-xs font-mono font-bold rounded-md border border-border bg-background text-foreground text-center"
+                      className="w-20 h-7 px-2 text-xs font-mono font-bold rounded-md border border-border bg-background text-foreground text-center tabular-nums"
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* HIGH-TECH FUTURISTIC OPTIMIZATION PROGRESS HUD */}
+            {/* OPTIMIZATION PROGRESS TELEMETRY */}
             {isSearching && (
-              <div className="p-4 rounded-xl border border-emerald-500/50 bg-slate-950 text-white shadow-lg space-y-3 relative overflow-hidden animate-in fade-in duration-300">
-                {/* Background ambient glow */}
-                <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl pointer-events-none bg-emerald-500/15"></div>
-                
+              <div className="p-4 rounded-xl border border-primary/40 bg-card text-foreground shadow-sm space-y-3 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center font-bold animate-spin bg-emerald-500/20 text-emerald-400 shrink-0">
-                      <Cpu size={15} />
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center font-bold border border-primary/30 bg-primary/10 text-primary shrink-0">
+                      <span className="w-3.5 h-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold font-mono flex items-center gap-2 text-emerald-400">
+                      <div className="text-xs font-bold font-mono flex items-center gap-2 text-primary">
                         <span>
                           {loc('EVOLUCIÓN DIFERENCIAL ACTIVA (DE/rand/1/bin)', 'DIFFERENTIAL EVOLUTION RUNNING (DE/rand/1/bin)')}
                         </span>
-                        <span className="inline-block w-2 h-2 rounded-full animate-ping bg-emerald-400"></span>
                       </div>
-                      <div className="text-[11px] text-slate-300 font-mono mt-0.5">
+                      <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
                         {searchProgress?.stepDescription || (loc('Evaluando candidatos balísticos...', 'Evaluating ballistic candidates...'))}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="text-right font-mono">
-                      <div className="text-base font-bold text-emerald-400">
+                    <div className="text-right font-mono tabular-nums">
+                      <div className="text-base font-bold text-primary">
                         {searchProgress?.percent || 0}%
                       </div>
-                      <div className="text-[10px] text-slate-400">
-                        ⏱️ {searchProgress?.elapsedSeconds !== undefined ? searchProgress.elapsedSeconds : (searchProgress?.elapsedMs ? (searchProgress.elapsedMs / 1000).toFixed(1) : '0.0')}s
+                      <div className="text-[10px] text-muted-foreground">
+                        {searchProgress?.elapsedSeconds !== undefined ? searchProgress.elapsedSeconds : (searchProgress?.elapsedMs ? (searchProgress.elapsedMs / 1000).toFixed(1) : '0.0')}s
                       </div>
                     </div>
 
@@ -2250,7 +2989,7 @@ export function SmartSearchEngine({
                       type="button"
                       variant="destructive"
                       onClick={handleCancelSearch}
-                      className="bg-red-600 hover:bg-red-700 text-white font-bold h-9 px-4 text-xs font-mono flex items-center gap-1.5 shadow-md border border-red-500 cursor-pointer shrink-0"
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold h-9 px-4 text-xs font-mono flex items-center gap-1.5 shadow-sm border border-red-500 cursor-pointer shrink-0"
                     >
                       <XCircle size={15} />
                       {loc('CANCELAR SIMULACIÓN', 'CANCEL SIMULATION')}
@@ -2258,30 +2997,28 @@ export function SmartSearchEngine({
                   </div>
                 </div>
 
-                {/* Glowing Animated Progress Bar */}
-                <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5 relative">
+                {/* Crisp Progress Bar */}
+                <div className="w-full h-2 bg-muted rounded-md overflow-hidden border border-border">
                   <div 
-                    className="h-full rounded-full transition-all duration-150 relative bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]"
-                    style={{ width: `${Math.min(100, Math.max(5, searchProgress?.percent || 5))}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-                  </div>
+                    className="h-full rounded-sm transition-all duration-150 bg-primary"
+                    style={{ width: `${Math.min(100, Math.max(4, searchProgress?.percent || 4))}%` }}
+                  />
                 </div>
 
                 {/* Status Ticker */}
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-800">
+                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground pt-1 border-t border-border tabular-nums">
                   <div className="flex items-center gap-2">
-                    <Activity size={12} className="text-emerald-400" />
+                    <Activity size={12} className="text-primary" />
                     <span>
                       {loc('Simulaciones Balísticas:', 'Ballistic Simulations:')}{' '}
-                      <strong className="text-white">{searchProgress?.currentEvaluations || 0}</strong>
+                      <strong className="text-foreground">{searchProgress?.currentEvaluations || 0}</strong>
                       {searchProgress?.totalEstimated ? ` / ~${searchProgress.totalEstimated}` : ''}
                     </span>
                   </div>
 
                   {searchProgress?.bestConfigSummary && (
-                    <div className="text-emerald-300 text-[10px] truncate max-w-xs sm:max-w-md">
-                      🏆 {loc('Mejor:', 'Best:')} <strong>{searchProgress.bestConfigSummary}</strong>
+                    <div className="text-primary text-[10px] truncate max-w-xs sm:max-w-md font-semibold">
+                      {loc('Mejor:', 'Best:')} <strong>{searchProgress.bestConfigSummary}</strong>
                     </div>
                   )}
                 </div>
@@ -2291,35 +3028,65 @@ export function SmartSearchEngine({
             {/* Geometric Conflict Warning Banner */}
             {hasGeometricConflict && (
               <div className="p-3.5 rounded-xl border border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300 flex items-start gap-3 text-xs font-mono shadow-xs">
-                <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5 animate-pulse" />
+                <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <div className="font-bold text-sm">
                     {loc('⚠️ Restricción Geométrica No Física Detectada', '⚠️ Non-Physical Geometric Constraint Detected')}
                   </div>
                   <div className="text-[11px] leading-relaxed">
+                    {isClearanceCollapsed && (
+                      <span className="block">• {loc(`Espacio radial agotado (D0 máx = ${availableD0.toFixed(1)} mm): el espesor de liner e inhibidor (${radialDeductionDiamMm.toFixed(1)} mm) iguala o supera Dc (${DcVal} mm).`, `Radial clearance exhausted (D0 max = ${availableD0.toFixed(1)} mm): liner + inhibitor (${radialDeductionDiamMm.toFixed(1)} mm) equals or exceeds Dc (${DcVal} mm).`)}</span>
+                    )}
                     {isDt0GeDs && (
                       <span className="block">• {loc(`Garganta tobera Dt (${Dt0Val} mm) ≥ Salida Ds (${DsVal} mm). En toberas de Laval la salida debe ser mayor.`, `Nozzle throat Dt (${Dt0Val} mm) ≥ Exit Ds (${DsVal} mm). Exit must be larger.`)}</span>
                     )}
                     {isDt0GeDc && (
                       <span className="block">• {loc(`Garganta tobera Dt (${Dt0Val} mm) ≥ Cámara Dc (${DcVal} mm). La garganta no cabe en la cámara.`, `Nozzle throat Dt (${Dt0Val} mm) ≥ Chamber Dc (${DcVal} mm).`)}</span>
                     )}
-                    {isD0GeDc && (
-                      <span className="block">• {loc(`Diámetro exterior D0 (${valD0Num} mm) ≥ Cámara Dc (${DcVal} mm). El grano no cabe en la cámara.`, `Grain outer D0 (${valD0Num} mm) ≥ Chamber Dc (${DcVal} mm). Grain does not fit.`)}</span>
+                    {isD0ExceedsClearance && (
+                      <span className="block">• {loc(`Diámetro exterior D0 (${valD0Num} mm) > Diámetro útil permitido (${availableD0.toFixed(1)} mm${radialDeductionDiamMm > 0 ? ' tras liner/inhibidor' : ''}). El grano no cabe.`, `Outer D0 (${valD0Num} mm) > Available diameter (${availableD0.toFixed(1)} mm${radialDeductionDiamMm > 0 ? ' after liner/inhibitor' : ''}).`)}</span>
                     )}
-                    {isMaxD0GeDc && (
-                      <span className="block">• {loc(`Máximo D0 (${maxD0Num} mm) ≥ Cámara Dc (${DcVal} mm). Rango excede el diámetro de cámara.`, `Max D0 (${maxD0Num} mm) ≥ Chamber Dc (${DcVal} mm).`)}</span>
+                    {(isMaxD0ExceedsClearance || isMinD0ExceedsClearance) && (
+                      <span className="block">• {loc(`Rango D0 (hasta ${Math.max(minD0Num, maxD0Num)} mm) > Diámetro útil permitido (${availableD0.toFixed(1)} mm).`, `D0 range (up to ${Math.max(minD0Num, maxD0Num)} mm) > Available diameter (${availableD0.toFixed(1)} mm).`)}</span>
                     )}
                     {isD0RangeInverted && (
                       <span className="block">• {loc(`Rango D0 invertido: Mín (${minD0Num} mm) ≥ Máx (${maxD0Num} mm).`, `Inverted D0 range: Min (${minD0Num} mm) ≥ Max (${maxD0Num} mm).`)}</span>
                     )}
                     {isd0GeD0 && (
-                      <span className="block">• {loc(`Núcleo interior d0 (${vald0Num} mm) ≥ Diámetro D0 (${effectiveOuterD} mm). Espesor de pared (web) nulo o negativo.`, `Inner core d0 (${vald0Num} mm) ≥ Outer D0 (${effectiveOuterD} mm). Zero or negative web.`)}</span>
+                      <span className="block">• {loc(`Núcleo interior d0 (${vald0Num} mm) ≥ Diámetro exterior útil (${effectiveOuterD.toFixed(1)} mm). Espesor de pared (web) nulo o negativo.`, `Inner core d0 (${vald0Num} mm) ≥ Outer D0 (${effectiveOuterD.toFixed(1)} mm). Zero or negative web.`)}</span>
                     )}
                     {isd0RangeInverted && (
                       <span className="block">• {loc(`Rango d0 invertido: Mín (${mind0Num} mm) ≥ Máx (${maxd0Num} mm).`, `Inverted d0 range: Min (${mind0Num} mm) ≥ Max (${maxd0Num} mm).`)}</span>
                     )}
                     {isMind0GeD0 && (
-                      <span className="block">• {loc(`Mínimo d0 (${mind0Num} mm) ≥ Diámetro D0 (${effectiveOuterD} mm).`, `Min d0 (${mind0Num} mm) ≥ Outer D0 (${effectiveOuterD} mm).`)}</span>
+                      <span className="block">• {loc(`Mínimo d0 (${mind0Num} mm) ≥ Diámetro D0 (${effectiveOuterD.toFixed(1)} mm).`, `Min d0 (${mind0Num} mm) ≥ Outer D0 (${effectiveOuterD.toFixed(1)} mm).`)}</span>
+                    )}
+                    {isd0mayorLeqd0 && (
+                      <span className="block">• {loc(`Estrella: diámetro de valles Dp (${vald0mayorNum} mm) ≤ puntas d0 (${vald0Num} mm).`, `Star: valley diameter Dp (${vald0mayorNum} mm) ≤ inner tips d0 (${vald0Num} mm).`)}</span>
+                    )}
+                    {!isd0mayorLeqd0 && isStarDpBelowGeomMin && (
+                      <span className="block">• {loc(`Estrella: diámetro de valles Dp (${vald0mayorNum} mm) ≤ mín. geom. (${minStarD0mayorStrict.toFixed(1)} mm). Colapsa en polígono sin puntas de estrella.`, `Star: valley diameter Dp (${vald0mayorNum} mm) ≤ geom. min (${minStarD0mayorStrict.toFixed(1)} mm). Collapses into non-star polygon.`)}</span>
+                    )}
+                    {isd0mayorGeD0 && (
+                      <span className="block">• {loc(`Estrella: diámetro de valles Dp (${vald0mayorNum} mm) ≥ D0 útil (${effectiveOuterD.toFixed(1)} mm).`, `Star: valley diameter Dp (${vald0mayorNum} mm) ≥ outer D0 (${effectiveOuterD.toFixed(1)} mm).`)}</span>
+                    )}
+                    {isd0mayorRangeInverted && (
+                      <span className="block">• {loc(`Estrella: rango Dp invertido (${mind0mayorNum} ≥ ${maxd0mayorNum} mm).`, `Star: inverted Dp range (${mind0mayorNum} ≥ ${maxd0mayorNum} mm).`)}</span>
+                    )}
+                    {(isMaxd0mayorGeD0 || isMind0mayorGeD0) && (
+                      <span className="block">• {loc(`Estrella: rango de Dp supera diámetro exterior útil (${effectiveOuterD.toFixed(1)} mm).`, `Star: Dp range exceeds outer diameter (${effectiveOuterD.toFixed(1)} mm).`)}</span>
+                    )}
+                    {(isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0) && (
+                      <span className="block">• {loc('Estrella: el diámetro máximo de valles Dp debe ser mayor que d0.', 'Star: max valley diameter Dp must exceed d0.')}</span>
+                    )}
+                    {!(isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0) && isStarMaxDpBelowGeomMin && (
+                      <span className="block">• {loc(`Estrella: el máximo de Dp (${maxd0mayorNum} mm) ≤ mín. geom. (${minStarD0mayorStrict.toFixed(1)} mm). No forma estrella válida.`, `Star: max Dp (${maxd0mayorNum} mm) ≤ geom. min (${minStarD0mayorStrict.toFixed(1)} mm). No valid star.`)}</span>
+                    )}
+                    {isStarGeomExceedsD0 && (
+                      <span className="block">• {loc(`Estrella: el mínimo geométrico de valles (${minStarD0mayorStrict.toFixed(1)} mm) iguala o supera D0 útil (${effectiveOuterD.toFixed(1)} mm). Reduce d0 o aumenta Np/D0.`, `Star: valley geom. min (${minStarD0mayorStrict.toFixed(1)} mm) reaches outer D0 (${effectiveOuterD.toFixed(1)} mm). Lower d0 or raise Np/D0.`)}</span>
+                    )}
+                    {(isNpInvalid || isNpRangeInvalid) && (
+                      <span className="block">• {loc('Estrella: el número de puntas Np debe ser ≥ 3 (y Mín ≤ Máx).', 'Star: star point count Np must be ≥ 3 (and Min ≤ Max).')}</span>
                     )}
                     {isL0ExceedsLc && (
                       <span className="block">• {loc(`Longitud total N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) supera longitud útil de cámara Lc (${LcVal} mm).`, `Total length N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) exceeds chamber Lc (${LcVal} mm).`)}</span>
@@ -2440,12 +3207,12 @@ export function SmartSearchEngine({
                       : (loc('No se encontraron soluciones viables', 'No viable solutions found'))}
                   </span>
                   {searchOutcome.safeCount > 0 && (
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 tabular-nums">
                       {searchOutcome.safeCount} {loc('100% Seguras (P ≤ Pmax)', 'Safe (P ≤ Pmax)')}
                     </span>
                   )}
-                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-                    🧬 Differential Evolution (DE/rand/1/bin)
+                  <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-md border bg-primary/10 text-primary border-primary/30">
+                    Differential Evolution (DE/rand/1/bin)
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
@@ -2578,9 +3345,9 @@ export function SmartSearchEngine({
                     >
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full ${
+                          <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-md tabular-nums ${
                             cand.rank === 1 
-                              ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30' 
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30' 
                               : 'bg-muted text-muted-foreground'
                           }`}>
                             #{cand.rank} {cand.rank === 1 ? (loc('★ ÓPTIMO', '★ BEST')) : ''}
@@ -2594,7 +3361,7 @@ export function SmartSearchEngine({
                           {cand.config.grainCount}x L={cand.config.L0}mm
                         </div>
                         <div className="text-[11px] text-muted-foreground font-mono">
-                          D={cand.config.D0} / d={cand.config.d0} mm
+                          D={cand.config.D0} / d={cand.config.d0}{cand.config.shape === 2 ? ` / Dp=${cand.config.d0mayor} (${cand.config.Np}p)` : ''} mm
                         </div>
                       </div>
 
@@ -2799,52 +3566,48 @@ export function SmartSearchEngine({
                     <div className="h-64 w-full pt-1">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.6} />
                           <XAxis 
                             dataKey="time" 
-                            tick={{ fontSize: 10 }} 
+                            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} 
                             unit="s"
-                            stroke={isLight ? '#78716c' : '#94a3b8'} 
+                            stroke="var(--muted-foreground)" 
                           />
                           <YAxis 
                             yAxisId="thrust" 
                             orientation="left" 
-                            tick={{ fontSize: 10 }} 
+                            tick={{ fontSize: 10, fill: chartThrustColor }} 
                             unit="N"
-                            stroke="#10b981" 
+                            stroke={chartThrustColor} 
                           />
                           <YAxis 
                             yAxisId="pressure" 
                             orientation="right" 
-                            tick={{ fontSize: 10 }} 
+                            tick={{ fontSize: 10, fill: chartPressureColor }} 
                             unit="MPa"
-                            stroke="#3b82f6" 
+                            stroke={chartPressureColor} 
                           />
-                          <Tooltip 
-                            contentStyle={{ 
-                              fontSize: '11px', 
-                              backgroundColor: isLight ? '#ffffff' : '#0f172a',
-                              borderColor: isLight ? '#e7e5e4' : '#334155'
-                            }} 
-                          />
+                          <Tooltip contentStyle={tooltipStyle} />
                           <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }} />
                           <Line 
                             yAxisId="thrust" 
                             type="monotone" 
                             dataKey="F_N" 
                             name={loc('Empuje F (N)', 'Thrust F (N)')} 
-                            stroke="#10b981" 
+                            stroke={chartThrustColor} 
                             strokeWidth={2.5} 
-                            dot={false} 
+                            dot={false}
+                            isAnimationActive={false}
                           />
                           <Line 
                             yAxisId="pressure" 
                             type="monotone" 
                             dataKey="P0_MPa" 
                             name={loc('Presión P0 (MPa)', 'Pressure P0 (MPa)')} 
-                            stroke="#3b82f6" 
+                            stroke={chartPressureColor} 
                             strokeWidth={2} 
-                            dot={false} 
+                            dot={false}
+                            isAnimationActive={false}
                           />
                         </LineChart>
                       </ResponsiveContainer>
@@ -2860,22 +3623,22 @@ export function SmartSearchEngine({
                       <div className="h-64 w-full pt-1">
                         <ResponsiveContainer width="100%" height="100%">
                           <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.6} />
                             <XAxis 
                               type="number" 
                               dataKey="x" 
                               name={loc("Presión Pico Pmax", "Peak Pressure Pmax")} 
                               unit=" MPa"
-                              tick={{ fontSize: 10 }}
-                              stroke={isLight ? '#78716c' : '#94a3b8'}
+                              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                              stroke="var(--muted-foreground)"
                             />
                             <YAxis 
                               type="number" 
                               dataKey="y" 
                               name={loc("Impulso Total It", "Total Impulse It")} 
                               unit=" N·s"
-                              tick={{ fontSize: 10 }}
-                              stroke={isLight ? '#78716c' : '#94a3b8'}
+                              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                              stroke="var(--muted-foreground)"
                             />
                             <ZAxis range={[30, 90]} />
                             <ReferenceLine 
@@ -2895,11 +3658,11 @@ export function SmartSearchEngine({
                                 if (!payload || !payload.length) return null;
                                 const pt = payload[0].payload;
                                 return (
-                                  <div className="p-2.5 rounded-lg border border-border bg-card shadow-md text-xs font-mono space-y-1">
+                                  <div className="p-2.5 rounded-lg border border-border bg-card text-foreground shadow-md text-xs font-mono tabular-nums space-y-1">
                                     <div className="font-bold text-foreground">
-                                      {pt.grainCount}x L={pt.L0}mm (D={pt.D0} / d={pt.d0}mm)
+                                      {pt.grainCount}x L={pt.L0}mm (D={pt.D0} / d={pt.d0}{pt.d0mayor > 0 ? ` / Dp=${pt.d0mayor} / ${pt.Np}p` : ''}mm)
                                     </div>
-                                    <div className="text-emerald-600 dark:text-emerald-400">
+                                    <div className="text-primary font-semibold">
                                       {loc('Impulso Total:', 'Total Impulse:')} <strong>{pt.totalImpulse} N·s</strong>
                                     </div>
                                     <div className={pt.maxPressure > parseFloat(inputValues.Pmax_lim || '6.0') ? 'text-red-500' : 'text-foreground'}>
@@ -2914,13 +3677,13 @@ export function SmartSearchEngine({
                             />
                             <Scatter name={loc("Soluciones", "Solutions")} data={scatterPoints}>
                               {scatterPoints.map((entry, index) => {
-                                let fillColor = entry.isSafe ? '#10b981' : '#ef4444';
-                                if (entry.isCurrentSelected) fillColor = '#f59e0b';
+                                let fillColor = entry.isSafe ? chartThrustColor : '#ef4444';
+                                if (entry.isCurrentSelected) fillColor = chartSecondaryColor;
                                 return (
                                   <Cell 
                                     key={`cell-${index}`} 
                                     fill={fillColor} 
-                                    stroke={entry.isCurrentSelected ? '#ffffff' : 'none'}
+                                    stroke={entry.isCurrentSelected ? 'var(--foreground)' : 'none'}
                                     strokeWidth={entry.isCurrentSelected ? 2 : 0}
                                   />
                                 );
@@ -2941,40 +3704,34 @@ export function SmartSearchEngine({
                       <div className="h-64 w-full pt-1">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={convergenceLineData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.6} />
                             <XAxis 
                               dataKey="iteration" 
-                              tick={{ fontSize: 10 }} 
+                              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} 
                               unit=""
-                              stroke={isLight ? '#78716c' : '#94a3b8'} 
+                              stroke="var(--muted-foreground)" 
                             />
                             <YAxis 
                               yAxisId="score" 
                               orientation="left" 
-                              tick={{ fontSize: 10 }} 
-                              stroke="#f59e0b" 
+                              tick={{ fontSize: 10, fill: chartSecondaryColor }} 
+                              stroke={chartSecondaryColor} 
                             />
                             <YAxis 
                               yAxisId="impulse" 
                               orientation="right" 
-                              tick={{ fontSize: 10 }} 
+                              tick={{ fontSize: 10, fill: chartImpulseColor }} 
                               unit=" N·s"
-                              stroke="#10b981" 
+                              stroke={chartImpulseColor} 
                             />
-                            <Tooltip 
-                              contentStyle={{ 
-                                fontSize: '11px', 
-                                backgroundColor: isLight ? '#ffffff' : '#0f172a',
-                                borderColor: isLight ? '#e7e5e4' : '#334155'
-                              }} 
-                            />
+                            <Tooltip contentStyle={tooltipStyle} />
                             <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }} />
                             <Line 
                               yAxisId="impulse" 
                               type="monotone" 
                               dataKey="bestImpulse" 
                               name={loc('Mejor Impulso It (N·s)', 'Best Impulse (N·s)')} 
-                              stroke="#10b981" 
+                              stroke={chartImpulseColor} 
                               strokeWidth={2.5} 
                               dot={false} 
                             />
@@ -2983,7 +3740,7 @@ export function SmartSearchEngine({
                               type="monotone" 
                               dataKey="bestScore" 
                               name={loc('Mejor Fitness Score', 'Best Fitness Score')} 
-                              stroke="#f59e0b" 
+                              stroke={chartSecondaryColor} 
                               strokeWidth={1.5} 
                               strokeDasharray="4 4"
                               dot={false} 

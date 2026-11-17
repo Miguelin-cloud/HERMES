@@ -96,10 +96,10 @@ const TableNumberInput: React.FC<{
         value={strVal}
         placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        className={`w-full px-2 py-1 text-xs font-mono rounded transition-all focus:outline-none ${
+        className={`w-full px-2 py-1 text-xs font-mono tabular-nums rounded transition-all focus:outline-none ${
           isEmpty 
             ? 'border-2 border-amber-500 bg-amber-500/10 text-amber-900 dark:text-amber-100 ring-2 ring-amber-500/30 placeholder-amber-400 font-bold shadow-xs' 
-            : `bg-muted/30 border border-border focus:border-purple-500 focus:ring-1 focus:ring-purple-500 ${variantText}`
+            : `bg-muted/30 border border-border focus:border-primary focus:ring-1 focus:ring-primary ${variantText}`
         } ${className}`}
       />
       {isEmpty && (
@@ -148,10 +148,10 @@ const FormPropertyNumberInput: React.FC<{
           value={strVal}
           placeholder={placeholder}
           onChange={e => onChange(e.target.value)}
-          className={`w-full px-2.5 py-1.5 text-sm font-mono rounded-lg transition-all focus:outline-none ${
+          className={`w-full px-2.5 py-1.5 text-sm font-mono tabular-nums rounded-lg transition-all focus:outline-none ${
             isEmpty
               ? 'border-2 border-amber-500 bg-amber-500/10 text-amber-900 dark:text-amber-100 ring-2 ring-amber-500/30 placeholder-amber-400 font-bold shadow-xs'
-              : 'bg-background border border-border focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30'
+              : 'bg-background border border-border focus:border-primary focus:ring-2 focus:ring-primary/30'
           }`}
         />
         {isEmpty && (
@@ -229,6 +229,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
   const [activeTab, setActiveTab] = useState<'catalog' | 'editor'>('catalog');
   const [editingPropellant, setEditingPropellant] = useState<EditableCustomPropellant | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
 
   React.useEffect(() => {
     const handleStartNew = () => {
@@ -388,11 +389,18 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
   const removePressureRange = (index: number) => {
     if (!editingPropellant || !editingPropellant.pressureRanges) return;
     if (editingPropellant.pressureRanges.length <= 1) {
-      alert(lang === 'es' 
-        ? 'Debe haber al menos un rango de presión definido en la tabla.' 
-        : 'At least one pressure range must be defined in the table.');
+      setEditorError(
+        lang === 'es'
+          ? 'Debe haber al menos un rango de presión definido en la tabla.'
+          : lang === 'fr'
+            ? 'Au moins une plage de pression doit être définie dans le tableau.'
+            : lang === 'it'
+              ? 'Deve essere definito almeno un intervallo di pressione nella tabella.'
+              : 'At least one pressure range must be defined in the table.'
+      );
       return;
     }
+    setEditorError(null);
     const updated = editingPropellant.pressureRanges.filter((_, i) => i !== index);
     setEditingPropellant({
       ...editingPropellant,
@@ -402,6 +410,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
 
   const setSingleRange = () => {
     if (!editingPropellant) return;
+    setEditorError(null);
     const first = editingPropellant.pressureRanges?.[0];
     setEditingPropellant({
       ...editingPropellant,
@@ -420,7 +429,15 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
   const handleSave = () => {
     if (!editingPropellant) return;
     if (!editingPropellant.name.trim()) {
-      alert(lang === 'es' ? 'Por favor introduce un nombre válido para el propulsante.' : 'Please enter a valid propellant name.');
+      setEditorError(
+        lang === 'es'
+          ? 'Por favor introduce un nombre válido para el propulsante.'
+          : lang === 'fr'
+            ? 'Veuillez saisir un nom de propergol valide.'
+            : lang === 'it'
+              ? 'Inserisci un nome valido per il propellente.'
+              : 'Please enter a valid propellant name.'
+      );
       return;
     }
 
@@ -431,9 +448,15 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
       String(editingPropellant.k).trim() === '' ||
       String(editingPropellant.M).trim() === ''
     ) {
-      alert(lang === 'es' 
-        ? 'Por favor completa todas las propiedades termodinámicas y densidad antes de guardar.' 
-        : 'Please fill in all thermodynamic and density properties before saving.');
+      setEditorError(
+        lang === 'es'
+          ? 'Por favor completa todas las propiedades termodinámicas y densidad antes de guardar.'
+          : lang === 'fr'
+            ? 'Veuillez remplir toutes les propriétés thermodynamiques et la densité avant d’enregistrer.'
+            : lang === 'it'
+              ? 'Compila tutte le proprietà termodinamiche e la densità prima di salvare.'
+              : 'Please fill in all thermodynamic and density properties before saving.'
+      );
       return;
     }
 
@@ -447,13 +470,20 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
           String(r.a).trim() === '' ||
           String(r.n).trim() === ''
         ) {
-          alert(lang === 'es'
-            ? `Por favor rellena o elimina los campos vacíos en la fila ${i + 1} de la tabla de tasa de quemado.`
-            : `Please fill in or delete the empty fields in row ${i + 1} of the burn rate table.`);
+          setEditorError(
+            lang === 'es'
+              ? `Por favor rellena o elimina los campos vacíos en la fila ${i + 1} de la tabla de tasa de quemado.`
+              : lang === 'fr'
+                ? `Veuillez remplir ou supprimer les champs vides à la ligne ${i + 1} du tableau de vitesse de combustion.`
+                : lang === 'it'
+                  ? `Compila o elimina i campi vuoti alla riga ${i + 1} della tabella della velocità di combustione.`
+                  : `Please fill in or delete the empty fields in row ${i + 1} of the burn rate table.`
+          );
           return;
         }
       }
     }
+    setEditorError(null);
 
     const ranges: PressureRangeBurnRate[] = (editingPropellant.pressureRanges && editingPropellant.pressureRanges.length > 0)
       ? editingPropellant.pressureRanges.map((r, i) => ({
@@ -551,9 +581,9 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
       >
         
         {/* Modal Top Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/20">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-card-header text-card-header-foreground">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/25">
               <Beaker className="w-5 h-5" />
             </div>
             <div>
@@ -583,7 +613,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
               onClick={() => { setActiveTab('catalog'); setEditingPropellant(null); }}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'catalog'
-                  ? 'bg-purple-600 text-white shadow-sm'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
             >
@@ -592,7 +622,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
             </button>
 
             {activeTab === 'editor' && editingPropellant && (
-              <span className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1.5">
+              <span className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary/15 text-primary border border-primary/30 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
                 {editingPropellant.id > 7 && customPropellants.some(p => p.id === editingPropellant.id)
                   ? t.editor_tab_edit 
@@ -605,7 +635,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
             <button
               onClick={startCreateNew}
               data-tour="propellant-new-btn"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-sm hover:shadow-purple-500/25 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary-foreground bg-primary hover:opacity-90 rounded-lg shadow-sm transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               {t.btn_new}
@@ -623,10 +653,10 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
               <div id="custom-propellants-section" className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <Sparkles className="w-4 h-4 text-primary" />
                     <h3 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                       {t.custom_propellants}
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-bold">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/25 font-bold tabular-nums">
                         {customPropellants.length}
                       </span>
                     </h3>
@@ -634,11 +664,11 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                 </div>
 
                 {customPropellants.length === 0 ? (
-                  <div className="p-6 rounded-xl border border-dashed border-border text-center bg-muted/10 space-y-2">
+                  <div className="p-6 rounded-xl border border-border text-center bg-muted/10 space-y-2">
                     <p className="text-sm text-muted-foreground">{t.no_custom}</p>
                     <button
                       onClick={startCreateNew}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary hover:underline cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       {lang === 'es' ? 'Crear mi primer propulsor personalizado ahora' : 'Create my first custom propellant now'}
@@ -650,19 +680,19 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                       <div
                         key={prop.id}
                         id={`custom-prop-card-${prop.id}`}
-                        className="p-4 rounded-xl border border-purple-500/30 bg-card hover:border-purple-500/60 transition-all space-y-3 shadow-sm relative group"
+                        className="p-4 rounded-xl border border-primary/30 bg-card hover:border-primary/60 transition-all space-y-3 shadow-sm relative group"
                       >
                         {/* Header & Badges */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <div 
-                              className="w-3.5 h-3.5 rounded-full ring-2 ring-purple-500/40 shrink-0" 
-                              style={{ backgroundColor: prop.color || '#8b5cf6' }} 
+                              className="w-3.5 h-3.5 rounded-sm ring-1 ring-border shrink-0" 
+                              style={{ backgroundColor: prop.color || 'var(--primary)' }} 
                             />
                             <div>
                               <h4 className="font-semibold text-foreground text-sm flex items-center gap-1.5">
                                 {prop.name}
-                                <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30 font-bold">
+                                <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/25 font-bold">
                                   #{prop.id} • {t.custom_badge}
                                 </span>
                               </h4>
@@ -708,7 +738,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                                   title={t.btn_edit}
                                   className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors cursor-pointer"
                                 >
-                                  <Edit3 className="w-4 h-4 text-purple-500" />
+                                  <Edit3 className="w-4 h-4 text-primary" />
                                 </button>
                                 <button
                                   type="button"
@@ -740,7 +770,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                               onSelectPropellantForGrain(prop.id);
                               onClose();
                             }}
-                            className="w-full py-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                            className="w-full py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                           >
                             <Check className="w-3.5 h-3.5" />
                             {t.btn_use}
@@ -759,7 +789,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                     <Shield className="w-4 h-4 text-amber-500" />
                     <h3 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                       {t.standard_propellants}
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold tabular-nums">
                         {DEFAULT_PROPELLANTS.length}
                       </span>
                     </h3>
@@ -794,7 +824,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                         <button
                           onClick={() => startDuplicate(prop)}
                           title={t.btn_duplicate}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-md transition-colors cursor-pointer shrink-0"
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/25 rounded-md transition-colors cursor-pointer shrink-0"
                         >
                           <Copy className="w-3.5 h-3.5" />
                           <span className="hidden sm:inline">{t.btn_duplicate}</span>
@@ -824,6 +854,22 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
           ) : editingPropellant ? (
             /* Propellant Editor Tab */
             <div id="propellant-editor-container" className="space-y-6 animate-fadeIn">
+              {editorError && (
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg border border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300 text-xs font-medium">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                    <span>{editorError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditorError(null)}
+                    className="p-0.5 rounded hover:bg-red-500/20 text-red-500 cursor-pointer"
+                    aria-label="Close"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
                 {/* Left Column: Properties & Interactive Burn Rate Table */}
@@ -832,7 +878,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                   {/* General Identification */}
                   <div data-tour="propellant-identity-card" className="p-4 rounded-xl border border-border bg-muted/10 space-y-4">
                     <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                      <Sparkles className="w-4 h-4 text-primary" />
                       {lang === 'es' ? 'Identificación del Propulsor' : 'Propellant Identification'}
                     </h3>
 
@@ -847,7 +893,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                           className={`w-full px-3 py-2 text-sm bg-background border rounded-lg focus:outline-none transition-all ${
                             !editingPropellant.name.trim() 
                               ? 'border-2 border-amber-500 ring-2 ring-amber-500/30' 
-                              : 'border-border focus:ring-2 focus:ring-purple-500'
+                              : 'border-border focus:ring-2 focus:ring-primary'
                           }`}
                           placeholder="ej. KNSB-65/35 Experimental"
                         />
@@ -859,7 +905,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                           id="select-propellant-category"
                           value={editingPropellant.category}
                           onChange={e => setEditingPropellant({ ...editingPropellant, category: e.target.value as any })}
-                          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:outline-none cursor-pointer"
                         >
                           <option value="custom">{lang === 'es' ? 'Personalizado' : 'Custom'}</option>
                           <option value="candy">Candy / Azúcar (KNDX, KNSO, KNSU)</option>
@@ -921,7 +967,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                   </div>
 
                   {/* 3. Interactive Burn Rate Table Editor */}
-                  <div data-tour="propellant-burn-table" className="p-4 rounded-xl border border-purple-500/30 bg-purple-500/5 space-y-4">
+                  <div data-tour="propellant-burn-table" className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -1015,7 +1061,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                       <button
                         type="button"
                         onClick={addPressureRange}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-600 dark:text-purple-300 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 rounded-lg transition-colors cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg transition-colors cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         {t.add_range}
@@ -1037,33 +1083,35 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                         <Activity className="w-4 h-4 text-primary" />
                         {t.curve_preview}
                       </h4>
-                      <span className="text-[10px] font-mono text-muted-foreground">0.1 - 10.0 MPa</span>
+                      <span className="text-[10px] font-mono text-muted-foreground tabular-nums">0.1 - 10.0 MPa</span>
                     </div>
 
                     <div className="flex-1 w-full min-h-[260px] bg-muted/10 rounded-lg p-2 border border-border/60">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={previewCurveData} margin={{ top: 10, right: 15, left: 0, bottom: 20 }}>
-                          <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.6} />
                           <XAxis 
                             dataKey="P" 
                             unit=" MPa" 
                             fontSize={10} 
                             tickLine={false}
+                            stroke="var(--muted-foreground)"
                           />
                           <YAxis 
                             unit=" mm/s" 
                             fontSize={10} 
                             tickLine={false} 
                             width={55}
+                            stroke="var(--muted-foreground)"
                           />
                           <Tooltip 
                             content={({ active, payload }) => {
                               if (active && payload && payload.length) {
                                 const data = payload[0].payload;
                                 return (
-                                  <div className="p-2 rounded bg-slate-900 text-white text-xs border border-slate-700 shadow-lg font-mono">
-                                    <p className="text-slate-400">P = {data.P} MPa</p>
-                                    <p className="text-purple-400 font-bold">r = {data.r} mm/s</p>
+                                  <div className="p-2 rounded bg-card text-foreground text-xs border border-border shadow-md font-mono tabular-nums">
+                                    <p className="text-muted-foreground">P = {data.P} MPa</p>
+                                    <p className="text-primary font-bold">r = {data.r} mm/s</p>
                                   </div>
                                 );
                               }
@@ -1073,10 +1121,10 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                           <Line 
                             type="monotone" 
                             dataKey="r" 
-                            stroke="#8b5cf6" 
+                            stroke="var(--primary)" 
                             strokeWidth={2.5} 
                             dot={false} 
-                            activeDot={{ r: 4, fill: '#8b5cf6' }} 
+                            activeDot={{ r: 4, fill: 'var(--primary)' }} 
                           />
                         </LineChart>
                       </ResponsiveContainer>
@@ -1084,7 +1132,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
 
                     <div className="p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground space-y-1.5">
                       <p className="flex items-start gap-1.5">
-                        <Info className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
+                        <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                         <span>
                           {lang === 'es' 
                             ? 'La curva evalúa en tiempo real los valores de a y n para cada intervalo de presión ingresado en la tabla.' 
@@ -1101,7 +1149,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
               <div className="flex items-center justify-between pt-4 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => { setActiveTab('catalog'); setEditingPropellant(null); }}
+                  onClick={() => { setEditorError(null); setActiveTab('catalog'); setEditingPropellant(null); }}
                   className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
                 >
                   {t.btn_cancel}
@@ -1112,7 +1160,7 @@ export const CustomPropellantModal: React.FC<CustomPropellantModalProps> = ({
                   id="btn-save-custom-propellant"
                   data-tour="propellant-save-btn"
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-md hover:shadow-purple-500/20 transition-all cursor-pointer"
+                  className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-primary-foreground bg-primary hover:opacity-90 rounded-lg shadow-sm transition-all cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   {t.btn_save}

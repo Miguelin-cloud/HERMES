@@ -1,5 +1,10 @@
 import React from 'react';
 import { SimulationResults, getPropellantVisualProfile } from '../lib/types';
+import {
+  contoursToSvgPath,
+  getGrainModule,
+  isComplexGrain,
+} from '../lib/grains';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Layers } from 'lucide-react';
 
@@ -48,18 +53,20 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
                      const maxScaleD = Math.max(...results.grains.map(gx => gx.D0));
                      const scaleY = 60 / maxScaleD;
                      
-                     const currentL = Math.max(0, g.L0 - g.ei * x * 2);
-                     const currentDOuter = Math.max(0, g.D0 - g.osi * x * 2);
+                     const burnbackTable = results.grains_burnback?.[i];
+                     const isComplexExhausted = isComplexGrain(g.shape) && burnbackTable ? x >= burnbackTable.xMaxMm : false;
+                     const currentL = isComplexExhausted ? 0 : Math.max(0, g.L0 - g.ei * x * 2);
+                     const currentDOuter = isComplexExhausted ? 0 : Math.max(0, g.D0 - g.osi * x * 2);
                      
                      let coreTop = 42.5;
                      let coreHeight = 0;
                      
                      if (g.shape === 1) { // Tubular
-                       const currentDInner = g.d0 + g.ci * x * 2;
+                       const currentDInner = Math.min(currentDOuter, g.d0 + g.ci * x * 2);
                        coreTop = 42.5 - (currentDInner/2) * scaleY;
                        coreHeight = currentDInner * scaleY;
-                     } else if (g.shape === 2) { // Star
-                       const currentDInner = g.d0mayor + g.ci * x * 2;
+                     } else if (isComplexGrain(g.shape) && !isComplexExhausted) { // Geometría compleja (Estrella, etc.)
+                       const currentDInner = Math.min(currentDOuter, g.d0mayor + g.ci * x * 2);
                        coreTop = 42.5 - (currentDInner/2) * scaleY;
                        coreHeight = currentDInner * scaleY;
                      }
@@ -103,45 +110,37 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
                 const drawSize = 130; 
                 const maxD = g.D0 || 100;
                 const scale = (drawSize - 20) / maxD;
+                const currentL = Math.max(0, g.L0 - g.ei * x * 2);
                 
                 let pathStr = "";
                 let corePathStr = "";
+                let vectorPathStr = "";
+                const rEnvPx = Math.max(0, (g.D0 / 2 - g.osi * x)) * scale;
 
-                if (g.shape === 1) {
-                  const r_out = Math.max(0, (g.D0 / 2 - g.osi * x)) * scale;
-                  const r_in = (g.d0 / 2 + g.ci * x) * scale;
-                  if (r_out > r_in) {
-                    pathStr = `M ${drawSize/2+r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2-r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2+r_out} ${drawSize/2}`;
-                    if (r_in > 0) {
-                      corePathStr = `M ${drawSize/2+r_in} ${drawSize/2} A ${r_in} ${r_in} 0 1 1 ${drawSize/2-r_in} ${drawSize/2} A ${r_in} ${r_in} 0 1 1 ${drawSize/2+r_in} ${drawSize/2}`;
+                if (isComplexGrain(g.shape)) {
+                  if (currentL > 0) {
+                    const loops = getGrainModule(g.shape).getCrossSectionContoursMm?.(
+                      g,
+                      x,
+                      results.grains_burnback?.[i]
+                    );
+                    if (loops && loops.length > 0) {
+                      vectorPathStr = contoursToSvgPath(loops, drawSize / 2, drawSize / 2, scale);
                     }
                   }
-                } else if (g.shape === 3) {
-                  const r_out = Math.max(0, (g.D0 / 2 - g.osi * x)) * scale;
-                  if (r_out > 0) {
-                     pathStr = `M ${drawSize/2+r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2-r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2+r_out} ${drawSize/2}`;
-                  }
-                } else if (g.shape === 2) {
-                  const r_out = Math.max(0, (g.D0 / 2 - g.osi * x)) * scale;
-                  const base_tip = g.d0 / 2;
-                  const base_valley = g.d0mayor / 2;
-                  
-                  const pts = [];
-                  for (let k = 0; k < g.Np * 2; k++) {
-                    const angle = (Math.PI * 2 * k) / (g.Np * 2);
-                    const isTip = k % 2 === 0;
-                    const current_r = Math.min(g.D0/2, (isTip ? base_tip : base_valley) + g.ci * x);
-                    
-                    const px = drawSize/2 + current_r * scale * Math.cos(angle);
-                    const py = drawSize/2 + current_r * scale * Math.sin(angle);
-                    pts.push(`${px},${py}`);
-                  }
-                  
-                  if (r_out > 0) {
+                } else {
+                  const primitives = getGrainModule(g.shape).getCrossSectionPrimitives(g, x);
+                  const r_out = Math.max(0, primitives.outerRadiusMm) * scale;
+                  if (primitives.innerCircleRadiusMm !== null) {
+                    const r_in = Math.max(0, primitives.innerCircleRadiusMm) * scale;
+                    if (currentL > 0 && r_out > r_in) {
+                      pathStr = `M ${drawSize/2+r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2-r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2+r_out} ${drawSize/2}`;
+                      if (r_in > 0) {
+                        corePathStr = `M ${drawSize/2+r_in} ${drawSize/2} A ${r_in} ${r_in} 0 1 1 ${drawSize/2-r_in} ${drawSize/2} A ${r_in} ${r_in} 0 1 1 ${drawSize/2+r_in} ${drawSize/2}`;
+                      }
+                    }
+                  } else if (currentL > 0 && r_out > 0) {
                     pathStr = `M ${drawSize/2+r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2-r_out} ${drawSize/2} A ${r_out} ${r_out} 0 1 0 ${drawSize/2+r_out} ${drawSize/2}`;
-                  }
-                  if (pts.length > 0) {
-                      corePathStr = `M ${pts[0]} L ${pts.slice(1).join(' L ')} Z`;
                   }
                 }
 
@@ -157,16 +156,36 @@ export function GrainViewer({ results, timeIndex, t }: { results: SimulationResu
                       <line x1={drawSize/2} y1="0" x2={drawSize/2} y2={drawSize} stroke="#64748b" strokeDasharray="2 2" strokeWidth="0.8" />
                       <line x1="0" y1={drawSize/2} x2={drawSize} y2={drawSize/2} stroke="#64748b" strokeDasharray="2 2" strokeWidth="0.8" />
                       
-                      {pathStr && (
-                        <path d={pathStr} fill={grainFill} stroke="#475569" strokeWidth="0.5" fillRule="evenodd" />
-                      )}
-                      
-                      {g.shape === 2 && corePathStr && (
-                        <polygon points={corePathStr.replace(/M |L |Z/g, "")} fill="#0f172a" />
-                      )}
-                      
-                      {g.shape === 1 && corePathStr && (
-                        <path d={corePathStr} fill="#0f172a" />
+                      {isComplexGrain(g.shape) ? (
+                        <>
+                          {rEnvPx > 0 && (
+                            <circle
+                              cx={drawSize / 2}
+                              cy={drawSize / 2}
+                              r={rEnvPx}
+                              fill="#0f172a"
+                              opacity={0.9}
+                            />
+                          )}
+                          {vectorPathStr && (
+                            <path
+                              d={vectorPathStr}
+                              fill={grainFill}
+                              fillRule="evenodd"
+                              stroke="#475569"
+                              strokeWidth="0.6"
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {pathStr && (
+                            <path d={pathStr} fill={grainFill} stroke="#475569" strokeWidth="0.5" fillRule="evenodd" />
+                          )}
+                          {g.shape === 1 && corePathStr && (
+                            <path d={corePathStr} fill="#0f172a" />
+                          )}
+                        </>
                       )}
                     </svg>
                   </div>
