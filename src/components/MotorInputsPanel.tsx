@@ -7,16 +7,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertTriangle, Beaker, Info, Layers, Scale, ShieldAlert } from 'lucide-react';
 import {
+  BOLT_GRADES,
+  BOLT_METRICS,
+  BoltGradeId,
+  BoltMetricId,
   CustomPropellant,
   DEFAULT_PROPELLANTS,
   GrainInput,
+  GrainShapeId,
   MOTOR_MATERIALS,
   MotorInput,
   MotorMaterialId,
   NozzleInput,
   SimulationResults,
 } from '../lib/types';
-import { MotorInputsValidation, MotorStructureResult } from '../lib/motorStructure';
+import {
+  getDefaultGrainParamsForShape,
+  getGeometryErrorMessage,
+  getGrainShapeDesc,
+  getGrainShapeLabel,
+  getMaxCSlotDepthMm,
+  getMaxFinocylWidthMm,
+  getMaxMoonburnerOffsetMm,
+  getMaxWagonWheelSpokeWidthMm,
+} from '../lib/grains';
+import { MotorInputsValidation, MotorStructureResult, PadmGoverningLimit } from '../lib/motorStructure';
 import { GrainPreview } from './GrainPreview';
 import { MotorPreview } from './MotorPreview';
 
@@ -137,7 +152,9 @@ function NumberInput({
   );
 }
 
-const GrainShapeIcon: React.FC<{ shape: number; grainId: string }> = ({ shape, grainId }) => {
+const ALL_SHAPE_IDS: GrainShapeId[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+export const GrainShapeIcon: React.FC<{ shape: number; grainId: string }> = ({ shape, grainId }) => {
   const patternId = `stripe-${shape}-${grainId}`;
   return (
     <svg className="w-7 h-7 shrink-0 select-none" viewBox="0 0 32 32">
@@ -146,18 +163,75 @@ const GrainShapeIcon: React.FC<{ shape: number; grainId: string }> = ({ shape, g
           <line x1="0" y1="0" x2="0" y2="4.5" stroke="currentColor" strokeWidth="1.2" className="text-primary/65" />
         </pattern>
       </defs>
-      <circle cx="16" cy="16" r="13" fill={`url(#${patternId})`} stroke="currentColor" className="text-muted-foreground" strokeWidth="1.5" />
+      {shape !== 7 && (
+        <circle cx="16" cy="16" r="13" fill={`url(#${patternId})`} stroke="currentColor" className="text-muted-foreground" strokeWidth="1.5" />
+      )}
       {shape === 1 && (
         <circle cx="16" cy="16" r="4.5" fill="var(--card)" stroke="currentColor" className="text-muted-foreground" strokeDasharray="1.5 1.2" strokeWidth="1.2" />
       )}
       {shape === 2 && (
         <path
-          d="M 16,10 L 17.5,13.5 L 21,14 L 18.2,16.5 L 19,20 L 16,18.2 L 13,20 L 13.8,16.5 L 11,14 L 14.5,13.5 Z"
+          d="M 16,9.5 L 17.6,13.5 L 21.5,14 L 18.4,16.7 L 19.3,20.5 L 16,18.4 L 12.7,20.5 L 13.6,16.7 L 10.5,14 L 14.4,13.5 Z"
           fill="var(--card)"
           stroke="currentColor"
           className="text-muted-foreground"
           strokeWidth="1.2"
         />
+      )}
+      {shape === 4 && (
+        <g>
+          {[0, 60, 120].map((deg) => (
+            <rect
+              key={deg}
+              x="6"
+              y="14.9"
+              width="20"
+              height="2.2"
+              rx="0.4"
+              fill="var(--card)"
+              transform={`rotate(${deg} 16 16)`}
+            />
+          ))}
+          <circle cx="16" cy="16" r="4.2" fill="var(--card)" stroke="currentColor" className="text-muted-foreground" strokeWidth="1.1" />
+        </g>
+      )}
+      {shape === 5 && (
+        <circle cx="20" cy="16" r="4.2" fill="var(--card)" stroke="currentColor" className="text-muted-foreground" strokeWidth="1.2" />
+      )}
+      {shape === 6 && (
+        <rect x="13" y="13.5" width="16.5" height="5" fill="var(--card)" stroke="currentColor" className="text-muted-foreground" strokeWidth="1.1" />
+      )}
+      {shape === 7 && (
+        <path
+          d="M 18,3.2 A 13,13 0 1 0 18,28.8 Z"
+          fill={`url(#${patternId})`}
+          stroke="currentColor"
+          className="text-muted-foreground"
+          strokeWidth="1.5"
+        />
+      )}
+      {shape === 8 && (
+        <g>
+          <circle cx="16" cy="16" r="8.2" fill="var(--card)" stroke="currentColor" className="text-muted-foreground" strokeWidth="1.2" />
+          <circle cx="16" cy="16" r="3.8" fill={`url(#${patternId})`} stroke="currentColor" className="text-muted-foreground" strokeWidth="1.2" />
+        </g>
+      )}
+      {shape === 9 && (
+        <g>
+          <circle cx="16" cy="16" r="9.5" fill="var(--card)" stroke="currentColor" className="text-muted-foreground" strokeWidth="1.1" />
+          {[0, 60, 120].map((deg) => (
+            <rect
+              key={deg}
+              x="6.2"
+              y="15.1"
+              width="19.6"
+              height="1.8"
+              fill={`url(#${patternId})`}
+              transform={`rotate(${deg} 16 16)`}
+            />
+          ))}
+          <circle cx="16" cy="16" r="4.0" fill="var(--card)" stroke="currentColor" className="text-muted-foreground" strokeWidth="1.0" />
+        </g>
       )}
     </svg>
   );
@@ -217,6 +291,15 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
   const { totalGrainsLengthMm: totalGrainsLength, maxGrainD0Mm: maxGrainD0, hasRadialClearanceError } = motorValidation;
   const totalPropellantMass = totalPropellantMassKg.toFixed(3);
 
+  const [boltCountDraft, setBoltCountDraft] = useState<string>(String(motorStruct.boltCount));
+  const isBoltCountFocusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isBoltCountFocusedRef.current) {
+      setBoltCountDraft(String(motorStruct.boltCount));
+    }
+  }, [motorStruct.boltCount]);
+
   return (
     <>
       {/* TOP ROW: Chamber Thermodynamics, Chamber Structure/Material/Protection, and Nozzle */}
@@ -253,9 +336,30 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                   : null
               }
             />
-            <NumberInput label={t.gstar} step="0.1" value={motor.Gstar} onChange={(v) => setMotor({ ...motor, Gstar: v })} tooltip={t.gstar_desc} />
-            <NumberInput label={t.kv} step="0.1" value={motor.kv} onChange={(v) => setMotor({ ...motor, kv: v })} tooltip={t.kv_desc} />
-            <NumberInput label={t.eff_c} step="0.01" value={motor.etac} onChange={(v) => setMotor({ ...motor, etac: v })} tooltip={t.etac_desc} />
+            <NumberInput
+              label={t.gstar}
+              step="0.1"
+              value={motor.Gstar}
+              onChange={(v) => setMotor({ ...motor, Gstar: v })}
+              tooltip={t.gstar_desc}
+              error={motorValidation.isGstarInvalid ? '≥ 0' : null}
+            />
+            <NumberInput
+              label={t.kv}
+              step="0.1"
+              value={motor.kv}
+              onChange={(v) => setMotor({ ...motor, kv: v })}
+              tooltip={t.kv_desc}
+              error={motorValidation.isKvInvalid ? '≥ 0' : null}
+            />
+            <NumberInput
+              label={t.eff_c}
+              step="0.01"
+              value={motor.etac}
+              onChange={(v) => setMotor({ ...motor, etac: v })}
+              tooltip={t.etac_desc}
+              error={motorValidation.isEtacInvalid ? '0 < ηc ≤ 1' : null}
+            />
             <NumberInput
               label={t.time_step}
               step="0.001"
@@ -264,6 +368,7 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
               onChange={(v) => setMotor({ ...motor, paso_de_tiempo: v })}
               tooltip={t.dt_desc}
               inputWidth="w-[58px] sm:w-[68px]"
+              error={motorValidation.isDtInvalid ? '> 0 s' : null}
             />
             <NumberInput
               label={t.p_amb}
@@ -273,6 +378,7 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
               onChange={(v) => setMotor({ ...motor, Pamb: v })}
               tooltip={t.pamb_desc}
               inputWidth="w-[58px] sm:w-[68px]"
+              error={motorValidation.isPambInvalid ? '> 0 MPa' : null}
             />
           </CardContent>
         </Card>
@@ -322,8 +428,8 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                 onValueChange={(v: MotorMaterialId) => {
                   if (v === 'al6082') {
                     setMotor({ ...motor, materialId: 'al6082' });
-                  } else if (v === 'ss174ph') {
-                    setMotor({ ...motor, materialId: 'ss174ph' });
+                  } else if (v === 'ss304') {
+                    setMotor({ ...motor, materialId: 'ss304' });
                   } else {
                     setMotor({
                       ...motor,
@@ -342,8 +448,8 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                   <SelectItem value="al6082" className="text-[11px] cursor-pointer font-medium">
                     {t.mat_al6082} (2700 kg/m³ • 250 MPa)
                   </SelectItem>
-                  <SelectItem value="ss174ph" className="text-[11px] cursor-pointer font-medium">
-                    {t.mat_ss174ph} (7800 kg/m³ • 1000 MPa)
+                  <SelectItem value="ss304" className="text-[11px] cursor-pointer font-medium">
+                    {t.mat_ss304} (7900 kg/m³ • 215 MPa)
                   </SelectItem>
                   <SelectItem value="custom" className="text-[11px] cursor-pointer font-semibold text-primary">
                     {t.mat_custom}
@@ -470,44 +576,206 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
               </div>
             </div>
 
-            {/* Live Admissible Pressure Box */}
+            {/* Radial Bolted Closure Retention (Smooth tube + inserted O-ring bulkhead/nozzle) */}
             <div
-              className={`mt-auto p-2 rounded-md border font-mono text-[10px] flex flex-col gap-1 ${
-                isOverpressure ? 'bg-red-500/12 border-red-500/60 text-red-700 dark:text-red-300' : 'bg-muted/40 border-border text-foreground'
+              className={`mx-1 p-1.5 rounded-md transition-colors flex flex-col gap-1.5 border ${
+                motorStruct.hasBoltedClosure
+                  ? 'bg-sky-500/10 border-sky-500/55'
+                  : 'bg-muted/45 border-border hover:border-sky-500/45'
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-muted-foreground font-semibold uppercase truncate">{t.max_admissible_p}:</span>
-                  <button
-                    type="button"
-                    onClick={onOpenPadmInfo}
-                    title={t.padm_info_btn}
-                    aria-label={t.padm_info_btn}
-                    className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary/15 hover:bg-primary/25 text-primary border border-primary/40 transition-colors cursor-pointer shrink-0"
-                  >
-                    <Info className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-                <span className={`font-bold text-xs tabular-nums shrink-0 ${isOverpressure ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                  {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa
-                  <span className="text-[9.5px] font-normal text-muted-foreground ml-1">
-                    ({motorStruct.maxAdmissiblePressureBar.toFixed(1)} bar)
-                  </span>
+              <div className="flex items-center justify-between gap-1" title={t.bolted_closure_desc}>
+                <UiLabel
+                  htmlFor="has-bolts-chk"
+                  className={`text-[10px] font-semibold uppercase tracking-tight cursor-pointer flex items-center gap-1.5 flex-1 min-w-0 ${
+                    motorStruct.hasBoltedClosure ? 'text-sky-700 dark:text-sky-300' : 'text-foreground/80'
+                  }`}
+                >
+                  <Checkbox
+                    id="has-bolts-chk"
+                    checked={motorStruct.hasBoltedClosure}
+                    onCheckedChange={(c) =>
+                      setMotor({
+                        ...motor,
+                        hasBoltedClosure: Boolean(c),
+                        boltMetric: motor.boltMetric ?? motorStruct.boltMetric,
+                        boltGrade: motor.boltGrade ?? motorStruct.boltGrade,
+                        boltCount: motor.boltCount ?? motorStruct.boltCount,
+                      })
+                    }
+                    className="w-4 h-4 rounded-sm border border-sky-600/70 bg-background data-[state=checked]:bg-sky-600 data-[state=checked]:border-sky-600 data-[state=checked]:text-white shrink-0"
+                  />
+                  <span className="truncate">{t.bolted_closure_title}</span>
+                </UiLabel>
+                <span
+                  className={`text-[9px] font-mono font-semibold shrink-0 ${
+                    motorStruct.hasBoltedClosure ? 'text-sky-700 dark:text-sky-300' : 'text-muted-foreground'
+                  }`}
+                >
+                  {motorStruct.hasBoltedClosure ? 'ON' : 'OFF'}
                 </span>
               </div>
-              <div className="text-[9.5px] font-sans text-muted-foreground leading-tight flex items-center justify-between gap-2">
-                <span>{t.padm_wall_only_short}</span>
-              </div>
-              {isOverpressure && results && (
-                <div className="flex items-center gap-1.5 text-[9.5px] font-semibold text-red-600 dark:text-red-300 pt-1 border-t border-red-500/30">
-                  <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    {t.overpressure_warning} ({results.summary.Pmax_MPa.toFixed(2)} &gt; {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa)
-                  </span>
+
+              {motorStruct.hasBoltedClosure && (
+                <div className="flex flex-col gap-1.5 pt-0.5">
+                  <div className="grid grid-cols-12 gap-1.5 items-end">
+                    <div className="col-span-4 flex flex-col gap-0.5">
+                      <UiLabel className="text-[9.5px] font-semibold text-muted-foreground leading-none">
+                        {t.bolt_metric}
+                      </UiLabel>
+                      <Select
+                        value={motorStruct.boltMetric}
+                        onValueChange={(v: BoltMetricId) => setMotor({ ...motor, boltMetric: v })}
+                      >
+                        <SelectTrigger className="h-6 text-[10.5px] px-1.5 py-0 bg-background border-border font-mono cursor-pointer">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card border-border text-foreground">
+                          {(Object.keys(BOLT_METRICS) as BoltMetricId[]).map((m) => (
+                            <SelectItem key={m} value={m} className="text-[10.5px] font-mono cursor-pointer">
+                              {m} ({BOLT_METRICS[m].stressAreaMm2} mm²)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="col-span-5 flex flex-col gap-0.5">
+                      <UiLabel className="text-[9.5px] font-semibold text-muted-foreground leading-none">
+                        {t.bolt_grade}
+                      </UiLabel>
+                      <Select
+                        value={motorStruct.boltGrade}
+                        onValueChange={(v: BoltGradeId) => setMotor({ ...motor, boltGrade: v })}
+                      >
+                        <SelectTrigger className="h-6 text-[10.5px] px-1.5 py-0 bg-background border-border font-medium cursor-pointer">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card border-border text-foreground">
+                          <SelectItem value="a2_70" className="text-[10.5px] cursor-pointer">{t.bolt_grade_a2_70}</SelectItem>
+                          <SelectItem value="a4_80" className="text-[10.5px] cursor-pointer">{t.bolt_grade_a4_80}</SelectItem>
+                          <SelectItem value="c8_8" className="text-[10.5px] cursor-pointer">{t.bolt_grade_c8_8}</SelectItem>
+                          <SelectItem value="c10_9" className="text-[10.5px] cursor-pointer">{t.bolt_grade_c10_9}</SelectItem>
+                          <SelectItem value="c12_9" className="text-[10.5px] cursor-pointer">{t.bolt_grade_c12_9}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="col-span-3 flex flex-col gap-0.5">
+                      <UiLabel className="text-[9.5px] font-semibold text-muted-foreground leading-none">
+                        {t.bolt_count}
+                      </UiLabel>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={boltCountDraft}
+                        onFocus={(e) => {
+                          isBoltCountFocusedRef.current = true;
+                          e.target.select();
+                        }}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^\d]/g, '');
+                          setBoltCountDraft(raw);
+                          if (raw !== '') {
+                            const parsed = parseInt(raw, 10);
+                            if (Number.isFinite(parsed) && parsed >= 1) {
+                              setMotor((prev) => ({
+                                ...prev,
+                                boltCount: parsed,
+                              }));
+                            }
+                          }
+                        }}
+                        onBlur={() => {
+                          isBoltCountFocusedRef.current = false;
+                          const parsed = parseInt(boltCountDraft, 10);
+                          const committed = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+                          setBoltCountDraft(String(committed));
+                          setMotor((prev) => ({
+                            ...prev,
+                            boltCount: committed,
+                          }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        className="h-6 text-[10.5px] px-1.5 py-0 bg-background border-border font-mono tabular-nums text-right"
+                      />
+                    </div>
+                  </div>
+
+                  {motorStruct.isBoltSpacingTight && (
+                    <div className="flex items-center gap-1 text-[9.5px] text-amber-700 dark:text-amber-300 font-medium leading-tight">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      <span>{t.bolt_spacing_tight_warn}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* Live Admissible Pressure Box */}
+            {(() => {
+              const limitMap: Record<PadmGoverningLimit, string> = {
+                cylinder: t.padm_limit_cylinder,
+                bolt_shear: t.padm_limit_bolt_shear,
+                wall_bearing: t.padm_limit_wall_bearing,
+                net_section: t.padm_limit_net_section,
+              };
+              const governingText = limitMap[motorStruct.governingLimit];
+              return (
+                <div
+                  className={`mt-auto p-2 rounded-md border font-mono text-[10px] flex flex-col gap-1 ${
+                    isOverpressure ? 'bg-red-500/12 border-red-500/60 text-red-700 dark:text-red-300' : 'bg-muted/40 border-border text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-muted-foreground font-semibold uppercase truncate">{t.max_admissible_p}:</span>
+                      <button
+                        type="button"
+                        onClick={onOpenPadmInfo}
+                        title={t.padm_info_btn}
+                        aria-label={t.padm_info_btn}
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary/15 hover:bg-primary/25 text-primary border border-primary/40 transition-colors cursor-pointer shrink-0"
+                      >
+                        <Info className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                    <span className={`font-bold text-xs tabular-nums shrink-0 ${isOverpressure ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa
+                      <span className="text-[9.5px] font-normal text-muted-foreground ml-1">
+                        ({motorStruct.maxAdmissiblePressureBar.toFixed(1)} bar)
+                      </span>
+                    </span>
+                  </div>
+                  <div className="text-[9.5px] font-sans text-muted-foreground leading-tight flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                    {motorStruct.hasBoltedClosure ? (
+                      <>
+                        <span className="font-semibold text-foreground/90">
+                          {t.padm_limit_label}: <span className="text-sky-700 dark:text-sky-300">{governingText}</span>
+                        </span>
+                        <span className="font-mono text-[9px] tabular-nums opacity-85">
+                          Cil {motorStruct.cylinderPressureMPa.toFixed(1)} · Torn {(motorStruct.boltShearPressureMPa ?? 0).toFixed(1)} · Apl {(motorStruct.wallBearingPressureMPa ?? 0).toFixed(1)} MPa
+                        </span>
+                      </>
+                    ) : (
+                      <span>{t.padm_wall_only_short}</span>
+                    )}
+                  </div>
+                  {isOverpressure && results && (
+                    <div className="flex items-center gap-1.5 text-[9.5px] font-semibold text-red-600 dark:text-red-300 pt-1 border-t border-red-500/30">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {t.overpressure_warning} ({results.summary.Pmax_MPa.toFixed(2)} &gt; {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa)
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -544,11 +812,35 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                 value={nozzle.Ds}
                 onChange={(v) => setNozzle({ ...nozzle, Ds: v })}
                 tooltip={t.ds_desc}
-                error={nozzle.Ds <= 0 ? t.err_ds_gt0 : null}
-                warning={nozzle.Ds <= nozzle.Dt0 ? `${t.warn_ds_lte_dt0} (${nozzle.Ds} ≤ ${nozzle.Dt0} mm)` : null}
+                error={
+                  nozzle.Ds <= 0
+                    ? t.err_ds_gt0
+                    : motorValidation.isDsLtDt0
+                      ? `${t.warn_ds_lte_dt0} (Ds < Dt0)`
+                      : null
+                }
+                warning={
+                  nozzle.Ds > 0 && nozzle.Ds === nozzle.Dt0
+                    ? `${t.warn_ds_lte_dt0} (${nozzle.Ds} = ${nozzle.Dt0} mm)`
+                    : null
+                }
               />
-              <NumberInput label={t.div_angle + ' [º]'} step="1" value={nozzle.alpha} onChange={(v) => setNozzle({ ...nozzle, alpha: v })} tooltip={t.alpha_desc} />
-              <NumberInput label={t.eff_n} step="0.01" value={nozzle.etanoz} onChange={(v) => setNozzle({ ...nozzle, etanoz: v })} tooltip={t.etanoz_desc} />
+              <NumberInput
+                label={t.div_angle + ' [º]'}
+                step="1"
+                value={nozzle.alpha}
+                onChange={(v) => setNozzle({ ...nozzle, alpha: v })}
+                tooltip={t.alpha_desc}
+                error={motorValidation.isAlphaInvalid ? '0° < α < 90°' : null}
+              />
+              <NumberInput
+                label={t.eff_n}
+                step="0.01"
+                value={nozzle.etanoz}
+                onChange={(v) => setNozzle({ ...nozzle, etanoz: v })}
+                tooltip={t.etanoz_desc}
+                error={motorValidation.isEtanozInvalid ? '0 < ηnoz ≤ 1' : null}
+              />
             </div>
 
             {/* Slag & Erosion Panel */}
@@ -657,7 +949,7 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                             setNozzle((prev) => ({ ...prev, e: sign * clamped }));
                           }
                         }}
-                        className={`h-6 w-full text-[10px] font-mono px-1 py-0 bg-background border-input text-right font-bold ${slagMode === 'slag' && (parseFloat(slagMagnitudeStr) || 0) >= nozzle.Dt0 ? 'border-red-500 bg-red-500/10 text-red-500' : ''}`}
+                        className={`h-6 w-full text-[10px] font-mono px-1 py-0 bg-background border-input text-right font-bold ${(motorValidation.isThroatSlagInvalid || (slagMode === 'slag' && (parseFloat(slagMagnitudeStr) || 0) >= nozzle.Dt0)) ? 'border-red-500 bg-red-500/10 text-red-500' : ''}`}
                       />
                     </div>
                   ) : (
@@ -812,12 +1104,20 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
             const minD0mayor = gc?.minD0mayor ?? 0;
             const isStarPointsInvalid = gc?.isStarPointsInvalid ?? false;
             const isStarInvalid = gc?.hasStarError ?? (g.d0mayor <= g.d0 || g.d0mayor >= g.D0 || g.Np < 3);
+            const shapeGeomErrorMsg = getGeometryErrorMessage(gc, t);
+
+            // Shape classification flags
+            const usesCircularCoreD0 = [1, 2, 4, 5, 8, 9].includes(g.shape);
+            const finMaxWidth = g.shape === 4 ? getMaxFinocylWidthMm(g.D0 > 0 ? g.d0 : 0, g.Np || 6) : 0;
+            const moonMaxOffset = g.shape === 5 ? getMaxMoonburnerOffsetMm(g.D0, g.d0) : 0;
+            const cslotMaxDepth = g.shape === 6 ? getMaxCSlotDepthMm(g.D0, g.slotWidth || 0) : 0;
+            const wagonMaxSpoke = g.shape === 9 ? getMaxWagonWheelSpokeWidthMm(g.d0, g.Np || 6) : 0;
 
             return (
               <div
                 key={g.id}
                 data-tour={index === 0 ? 'grain-card-0' : undefined}
-                className="w-full flex shrink-0 border border-border bg-card hover:border-primary/40 rounded-lg min-h-[140px] overflow-hidden relative group/grain transition-colors"
+                className="w-full flex shrink-0 border border-border bg-card hover:border-primary/40 rounded-lg min-h-[165px] overflow-hidden relative group/grain transition-colors"
               >
                 {/* 1. Index & Remove */}
                 <div className="w-8 shrink-0 bg-card-header text-card-header-foreground flex flex-col items-center justify-center border-r border-border relative">
@@ -933,6 +1233,7 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                       value={g.rhorat}
                       onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, rhorat: v } : x)))}
                       tooltip={t.rho_rat_desc}
+                      error={gc?.isRhoratInvalid ? '> 0' : null}
                     />
                   </div>
 
@@ -941,51 +1242,52 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                       <UiLabel className="text-[10px] mb-1 block px-0.5 uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
                         {t.shape}
                       </UiLabel>
-                      <Select value={String(g.shape)} onValueChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, shape: +v as 1 | 2 | 3 } : x)))}>
+                      <Select
+                        value={String(g.shape)}
+                        onValueChange={(v) => {
+                          const newShape = Number(v) as GrainShapeId;
+                          setGrains(
+                            grains.map((x) => {
+                              if (x.id !== g.id) return x;
+                              const defaults = getDefaultGrainParamsForShape(newShape, x.D0 || 40);
+                              return {
+                                ...x,
+                                ...defaults,
+                                shape: newShape,
+                              };
+                            })
+                          );
+                        }}
+                      >
                         <SelectTrigger className="bg-background border-input h-8 text-[11px] px-2 py-0 min-h-0 text-foreground flex items-center gap-2 cursor-pointer w-full justify-between">
                           <div className="flex items-center gap-1.5">
                             <GrainShapeIcon shape={g.shape} grainId={g.id} />
-                            <span className="font-semibold">{g.shape === 1 ? t.shape_cylindrical : g.shape === 2 ? t.shape_star : t.shape_solid}</span>
+                            <span className="font-semibold">{getGrainShapeLabel(g.shape, t)}</span>
                           </div>
                         </SelectTrigger>
-                        <SelectContent className="bg-card text-foreground border-border min-w-[200px]">
-                          <SelectItem value="1" className="text-[11px] py-1.5 cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              <GrainShapeIcon shape={1} grainId={`${g.id}-opt1`} />
-                              <div className="text-left">
-                                <p className="font-bold text-xs">{t.shape_cylindrical}</p>
-                                <p className="text-[9px] opacity-80 leading-none">{t.shape_cylindrical_desc}</p>
+                        <SelectContent className="bg-card text-foreground border-border min-w-[235px] max-h-72">
+                          {ALL_SHAPE_IDS.map((sid) => (
+                            <SelectItem key={sid} value={String(sid)} className="text-[11px] py-1.5 cursor-pointer">
+                              <div className="flex items-center gap-2">
+                                <GrainShapeIcon shape={sid} grainId={`${g.id}-opt${sid}`} />
+                                <div className="text-left">
+                                  <p className="font-bold text-xs">{getGrainShapeLabel(sid, t)}</p>
+                                  <p className="text-[9px] opacity-80 leading-none">{getGrainShapeDesc(sid, t)}</p>
+                                </div>
                               </div>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="2" className="text-[11px] py-1.5 cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              <GrainShapeIcon shape={2} grainId={`${g.id}-opt2`} />
-                              <div className="text-left">
-                                <p className="font-bold text-xs">{t.shape_star}</p>
-                                <p className="text-[9px] opacity-80 leading-none">{t.shape_star_desc}</p>
-                              </div>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="3" className="text-[11px] py-1.5 cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              <GrainShapeIcon shape={3} grainId={`${g.id}-opt3`} />
-                              <div className="text-left">
-                                <p className="font-bold text-xs">{t.shape_solid}</p>
-                                <p className="text-[9px] opacity-80 leading-none">{t.shape_solid_desc}</p>
-                              </div>
-                            </div>
-                          </SelectItem>
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {g.shape !== 3 && (
+                    {/* Circular / Central Bore Diameter (BATES, Star, Finocyl, Moonburner, Rod & Tube, Wagon Wheel) */}
+                    {usesCircularCoreD0 && (
                       <NumberInput
-                        label={t.inner_d0 + ' [mm]'}
+                        label={(g.shape === 8 ? t.rodtube_tube_id || 'Tube Inner Dia.' : t.inner_d0) + ' [mm]'}
                         value={g.d0}
                         onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, d0: v } : x)))}
-                        tooltip={t.inner_d0_desc}
+                        tooltip={g.shape === 8 ? t.rodtube_tube_id_desc || t.inner_d0_desc : t.inner_d0_desc}
                         error={isd0Invalid ? t.err_small_d0_gt0 : null}
                         warning={
                           !isd0Invalid && isd0ExceedsD0
@@ -997,6 +1299,7 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                       />
                     )}
 
+                    {/* Shape 2: Star Parameters */}
                     {g.shape === 2 && (
                       <>
                         <NumberInput
@@ -1041,45 +1344,218 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                       </>
                     )}
 
-                    <div data-tour={index === 0 ? 'grain-faces-0' : undefined} className="border-t border-border pt-2 mt-2 flex justify-between items-center px-1">
-                      <UiLabel className="text-[10px] text-primary uppercase font-semibold tracking-wider">{t.burn_faces}</UiLabel>
-                      <div className="flex gap-4">
-                        <div className="flex items-center space-x-1.5" title={t.external}>
-                          <Checkbox
-                            className="w-4 h-4 rounded-sm border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                            checked={g.osi === 1}
-                            onCheckedChange={(c) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, osi: c ? 1 : 0 } : x)))}
-                            id={`osi-${g.id}`}
-                          />
-                          <UiLabel className="text-[11px] font-mono text-foreground font-semibold cursor-pointer" htmlFor={`osi-${g.id}`}>
-                            EXT
-                          </UiLabel>
-                        </div>
-                        <div className="flex items-center space-x-1.5" title={t.ends}>
-                          <Checkbox
-                            className="w-4 h-4 rounded-sm border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                            checked={g.ei === 1}
-                            onCheckedChange={(c) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, osi: g.osi, ei: c ? 1 : 0 } : x)))}
-                            id={`ei-${g.id}`}
-                          />
-                          <UiLabel className="text-[11px] font-mono text-foreground font-semibold cursor-pointer" htmlFor={`ei-${g.id}`}>
-                            ENDS
-                          </UiLabel>
-                        </div>
-                        {g.shape !== 3 && (
-                          <div className="flex items-center space-x-1.5" title={t.internal}>
+                    {/* Shape 4: Finocyl Parameters */}
+                    {g.shape === 4 && (
+                      <>
+                        <NumberInput
+                          label={(t.finocyl_tip_d0 || 'Fin Tip Dia.') + ' [mm]'}
+                          value={g.d0mayor}
+                          onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, d0mayor: v } : x)))}
+                          tooltip={t.finocyl_tip_d0_desc}
+                          warning={
+                            g.d0mayor <= g.d0
+                              ? `≤ d0 (${g.d0} mm)`
+                              : g.d0mayor >= g.D0
+                                ? `≥ D0 (${g.D0} mm)`
+                                : null
+                          }
+                        />
+                        <NumberInput
+                          label={t.finocyl_n_fins || 'Fin Count'}
+                          value={g.Np}
+                          onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, Np: Math.max(1, Math.round(v)) } : x)))}
+                          tooltip={t.finocyl_n_fins_desc}
+                          error={(g.Np || 0) < 2 ? '≥ 2' : null}
+                        />
+                        <NumberInput
+                          label={(t.finocyl_width || 'Fin Width') + ' [mm]'}
+                          step="0.5"
+                          value={g.finWidth ?? 3}
+                          onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, finWidth: v } : x)))}
+                          tooltip={t.finocyl_width_desc}
+                          error={(g.finWidth ?? 0) <= 0 ? '> 0' : null}
+                          warning={
+                            finMaxWidth > 0 && (g.finWidth ?? 0) >= finMaxWidth - 1e-6
+                              ? `≥ max (${finMaxWidth.toFixed(1)} mm)`
+                              : null
+                          }
+                        />
+                      </>
+                    )}
+
+                    {/* Shape 5: Moonburner Parameters */}
+                    {g.shape === 5 && (
+                      <NumberInput
+                        label={(t.moonburner_offset || 'Core Offset') + ' [mm]'}
+                        step="0.5"
+                        value={g.coreOffset ?? 0}
+                        onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, coreOffset: v } : x)))}
+                        tooltip={t.moonburner_offset_desc}
+                        error={(g.coreOffset ?? 0) < 0 ? '≥ 0' : null}
+                        warning={
+                          (g.coreOffset ?? 0) >= moonMaxOffset - 1e-6
+                            ? `≥ max (${moonMaxOffset.toFixed(1)} mm)`
+                            : null
+                        }
+                      />
+                    )}
+
+                    {/* Shape 6: C-Slot Parameters */}
+                    {g.shape === 6 && (
+                      <>
+                        <NumberInput
+                          label={(t.cslot_width || 'Slot Width') + ' [mm]'}
+                          step="0.5"
+                          value={g.slotWidth ?? 5}
+                          onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, slotWidth: v } : x)))}
+                          tooltip={t.cslot_width_desc}
+                          error={(g.slotWidth ?? 0) <= 0 ? '> 0' : null}
+                          warning={(g.slotWidth ?? 0) >= g.D0 ? `≥ D0 (${g.D0} mm)` : null}
+                        />
+                        <NumberInput
+                          label={(t.cslot_depth || 'Slot Depth') + ' [mm]'}
+                          step="0.5"
+                          value={g.slotDepth ?? 20}
+                          onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, slotDepth: v } : x)))}
+                          tooltip={t.cslot_depth_desc}
+                          error={(g.slotDepth ?? 0) <= 0 ? '> 0' : null}
+                          warning={
+                            cslotMaxDepth > 0 && (g.slotDepth ?? 0) >= cslotMaxDepth - 1e-6
+                              ? `≥ max (${cslotMaxDepth.toFixed(1)} mm)`
+                              : null
+                          }
+                        />
+                      </>
+                    )}
+
+                    {/* Shape 7: D-Grain Parameters */}
+                    {g.shape === 7 && (
+                      <NumberInput
+                        label={(t.dgrain_cut_depth || 'Cut Depth') + ' [mm]'}
+                        step="0.5"
+                        value={g.slotDepth ?? 15}
+                        onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, slotDepth: v } : x)))}
+                        tooltip={t.dgrain_cut_depth_desc}
+                        error={(g.slotDepth ?? 0) <= 0 ? '> 0' : null}
+                        warning={(g.slotDepth ?? 0) >= g.D0 ? `≥ D0 (${g.D0} mm)` : null}
+                      />
+                    )}
+
+                    {/* Shape 8: Rod & Tube Parameters */}
+                    {g.shape === 8 && (
+                      <NumberInput
+                        label={(t.rodtube_rod_d || 'Center Rod Dia.') + ' [mm]'}
+                        step="0.5"
+                        value={g.rodDiameter ?? 10}
+                        onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, rodDiameter: v } : x)))}
+                        tooltip={t.rodtube_rod_d_desc}
+                        error={(g.rodDiameter ?? 0) <= 0 ? '> 0' : null}
+                        warning={g.d0 > 0 && (g.rodDiameter ?? 0) >= g.d0 ? `≥ d0 (${g.d0} mm)` : null}
+                      />
+                    )}
+
+                    {/* Shape 9: Wagon Wheel Parameters */}
+                    {g.shape === 9 && (
+                      <>
+                        <NumberInput
+                          label={(t.wagon_slot_d0 || 'Window Outer Dia.') + ' [mm]'}
+                          value={g.d0mayor}
+                          onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, d0mayor: v } : x)))}
+                          tooltip={t.wagon_slot_d0_desc}
+                          warning={
+                            g.d0mayor <= g.d0
+                              ? `≤ d0 (${g.d0} mm)`
+                              : g.d0mayor >= g.D0
+                                ? `≥ D0 (${g.D0} mm)`
+                                : null
+                          }
+                        />
+                        <NumberInput
+                          label={t.wagon_n_spokes || 'Spoke Count'}
+                          value={g.Np}
+                          onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, Np: Math.max(1, Math.round(v)) } : x)))}
+                          tooltip={t.wagon_n_spokes_desc}
+                          error={(g.Np || 0) < 3 ? '≥ 3' : null}
+                        />
+                        <NumberInput
+                          label={(t.wagon_spoke_w || 'Spoke Width') + ' [mm]'}
+                          step="0.5"
+                          value={g.spokeWidth ?? 3}
+                          onChange={(v) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, spokeWidth: v } : x)))}
+                          tooltip={t.wagon_spoke_w_desc}
+                          error={(g.spokeWidth ?? 0) <= 0 ? '> 0' : null}
+                          warning={
+                            wagonMaxSpoke > 0 && (g.spokeWidth ?? 0) >= wagonMaxSpoke - 1e-6
+                              ? `≥ max (${wagonMaxSpoke.toFixed(1)} mm)`
+                              : null
+                          }
+                        />
+                      </>
+                    )}
+
+                    {/* Unified Geometry Alert Banner for shapes 4..9 */}
+                    {gc?.hasShapeGeometryError && shapeGeomErrorMsg && (
+                      <div className="bg-destructive/10 border border-destructive/30 p-1.5 rounded-sm flex flex-col gap-0.5 mt-1">
+                        <span className="text-[9px] font-bold text-destructive uppercase tracking-widest leading-none">
+                          {t.geom_alert_title || 'Geometry Constraint Alert'}
+                        </span>
+                        <span className="text-[9px] text-destructive/85 font-mono leading-tight italic">
+                          • {shapeGeomErrorMsg}
+                        </span>
+                      </div>
+                    )}
+
+                    <div data-tour={index === 0 ? 'grain-faces-0' : undefined} className="border-t border-border pt-2 mt-2 flex flex-col gap-1 px-1">
+                      <div className="flex justify-between items-center">
+                        <UiLabel className="text-[10px] text-primary uppercase font-semibold tracking-wider">{t.burn_faces}</UiLabel>
+                        <div className="flex gap-4">
+                          <div className="flex items-center space-x-1.5" title={t.external}>
                             <Checkbox
                               className="w-4 h-4 rounded-sm border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                              checked={g.ci === 1}
-                              onCheckedChange={(c) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, ci: c ? 1 : 0 } : x)))}
-                              id={`ci-${g.id}`}
+                              checked={g.osi === 1}
+                              onCheckedChange={(c) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, osi: c ? 1 : 0 } : x)))}
+                              id={`osi-${g.id}`}
                             />
-                            <UiLabel className="text-[11px] font-mono text-foreground font-semibold cursor-pointer" htmlFor={`ci-${g.id}`}>
-                              INT
+                            <UiLabel className="text-[11px] font-mono text-foreground font-semibold cursor-pointer" htmlFor={`osi-${g.id}`}>
+                              EXT
                             </UiLabel>
                           </div>
-                        )}
+                          <div className="flex items-center space-x-1.5" title={t.ends}>
+                            <Checkbox
+                              className="w-4 h-4 rounded-sm border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                              checked={g.ei === 1}
+                              onCheckedChange={(c) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, osi: g.osi, ei: c ? 1 : 0 } : x)))}
+                              id={`ei-${g.id}`}
+                            />
+                            <UiLabel className="text-[11px] font-mono text-foreground font-semibold cursor-pointer" htmlFor={`ei-${g.id}`}>
+                              ENDS
+                            </UiLabel>
+                          </div>
+                          {g.shape !== 3 && (
+                            <div className="flex items-center space-x-1.5" title={t.internal}>
+                              <Checkbox
+                                className="w-4 h-4 rounded-sm border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                checked={g.ci === 1}
+                                onCheckedChange={(c) => setGrains(grains.map((x) => (x.id === g.id ? { ...x, ci: c ? 1 : 0 } : x)))}
+                                id={`ci-${g.id}`}
+                              />
+                              <UiLabel className="text-[11px] font-mono text-foreground font-semibold cursor-pointer" htmlFor={`ci-${g.id}`}>
+                                INT
+                              </UiLabel>
+                            </div>
+                          )}
+                        </div>
                       </div>
+                      {(gc?.hasNoBurnFaces || gc?.hasInvalidPropellant) && (
+                        <div className="text-[9.5px] font-mono text-red-600 dark:text-red-400 flex items-center gap-1 leading-tight">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          <span>
+                            {gc?.hasNoBurnFaces
+                              ? '≥ 1 face (EXT / ENDS / INT)'
+                              : 'Invalid propellant parameters (pMin < pMax, a > 0)'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1087,13 +1563,25 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                 {/* 3. Previews */}
                 <div
                   data-tour={index === 0 ? 'grain-previews-0' : undefined}
-                  className="w-[350px] shrink-0 bg-muted/25 border-l border-border flex flex-row overflow-hidden relative"
+                  className="w-[360px] xl:w-[390px] shrink-0 bg-muted/25 border-l border-border flex flex-row overflow-hidden relative"
                 >
                   <div className="w-1/2 h-full border-r border-border relative z-10">
-                    <GrainPreview grain={g} t={t} mode="transversal" />
+                    <GrainPreview
+                      grain={g}
+                      t={t}
+                      mode="transversal"
+                      availableGrainDiameterMm={motorStruct.availableGrainDiameterMm}
+                      validation={gc}
+                    />
                   </div>
                   <div className="w-1/2 h-full relative z-10">
-                    <GrainPreview grain={g} t={t} mode="longitudinal" />
+                    <GrainPreview
+                      grain={g}
+                      t={t}
+                      mode="longitudinal"
+                      availableGrainDiameterMm={motorStruct.availableGrainDiameterMm}
+                      validation={gc}
+                    />
                   </div>
                 </div>
               </div>

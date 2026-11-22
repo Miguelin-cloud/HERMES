@@ -1,6 +1,8 @@
 import { GrainInput, MotorInput } from '../types';
 import {
   buildStarCoreLoopMm,
+  estimateClipperWebThicknessMm,
+  measureInitialCrossSectionClipper,
   solveClipperCrossSectionAtDepth,
   solveGrainBurnbackClipper,
 } from './clipperSolver';
@@ -23,6 +25,8 @@ const STAR_BURNBACK_CACHE_LIMIT = 64;
 const starBurnbackCache = new Map<string, GrainBurnbackTable>();
 const STAR_SLICE_CACHE_LIMIT = 256;
 const starSliceCache = new Map<string, GrainContourLoop[]>();
+const STAR_WEB_CACHE_LIMIT = 128;
+const starWebCache = new Map<string, number>();
 
 /**
  * Exact minimum valley diameter (d0mayor / Dp) required for a concave star core:
@@ -84,8 +88,8 @@ export function getOrComputeStarBurnbackTable(
   const ci = grain.ci ? 1 : 0;
   const osi = grain.osi ? 1 : 0;
   const circleSegments = options?.circleSegments ?? 144;
-  const sampleCount = options?.sampleCount ?? 64;
-  const includeContours = options?.includeContours ?? true;
+  const sampleCount = options?.sampleCount ?? 112;
+  const includeContours = options?.includeContours ?? false;
   const arcToleranceMm =
     options?.arcToleranceMm ?? Math.max(0.01, Math.min(0.025, outerR * 4e-4));
   // L0 solo influye en xMax si ci===0 && osi===0
@@ -100,6 +104,11 @@ export function getOrComputeStarBurnbackTable(
     return cached;
   }
 
+  const criticalDepthsMm: number[] = [];
+  if (ci + osi > 0) {
+    criticalDepthsMm.push((outerR - rValley) / (ci + osi));
+  }
+
   const table = solveGrainBurnbackClipper({
     outerRadiusMm: outerR,
     ci,
@@ -110,6 +119,7 @@ export function getOrComputeStarBurnbackTable(
     sampleCount,
     arcToleranceMm,
     includeContours,
+    criticalDepthsMm,
   });
 
   if (starBurnbackCache.size >= STAR_BURNBACK_CACHE_LIMIT) {
@@ -133,13 +143,48 @@ export const starGrainModule: GrainGeometryModule = {
   solverMode: 'clipper',
 
   getInitialGeometry(
-    grain: Pick<GrainInput, 'shape' | 'D0' | 'd0' | 'd0mayor' | 'L0' | 'N' | 'Np'>
+    grain: Pick<GrainInput, 'shape' | 'D0' | 'd0' | 'd0mayor' | 'L0' | 'N' | 'Np'> &
+      Partial<Pick<GrainInput, 'osi' | 'ci' | 'ei'>>
   ): GrainInitialGeometry {
-    const starHoleAreaMm2 = computeStarHoleAreaMm2(grain.d0, grain.d0mayor, grain.Np || 5);
-    const crossSectionAreaMm2 = Math.max(0, (Math.PI / 4) * Math.pow(grain.D0, 2) - starHoleAreaMm2);
-    const blockVolumeMm3 = Math.max(0, crossSectionAreaMm2 * grain.L0);
+    const outerR = Math.max(0.25, (Number(grain.D0) || 10) / 2);
+    const rTip = Math.max(0.05, Math.min(outerR - 0.1, (Number(grain.d0) || 2) / 2));
+    const rValley = Math.max(
+      rTip + 0.05,
+      Math.min(outerR - 0.02, (Number(grain.d0mayor) || rTip * 2.5) / 2)
+    );
+    const Np = Math.max(3, Math.round(Number(grain.Np) || 5));
+    const voidLoop = [buildStarCoreLoopMm(rTip, rValley, Np)];
+    const measured = measureInitialCrossSectionClipper(outerR, voidLoop, {
+      ci: 1,
+      osi: 1,
+      circleSegments: 144,
+    });
+    const starHoleAreaMm2 = measured.portAreaMm2;
+    const crossSectionAreaMm2 = measured.crossSectionAreaMm2;
+    const blockVolumeMm3 = Math.max(0, crossSectionAreaMm2 * (grain.L0 || 0));
     const totalVolumeMm3 = Math.max(0, blockVolumeMm3 * (grain.N || 0));
-    const tweb0 = (grain.D0 - grain.d0) / 2;
+
+    const ci = grain.ci !== undefined ? (grain.ci ? 1 : 0) : 1;
+    const osi = grain.osi !== undefined ? (grain.osi ? 1 : 0) : 0;
+    const ei = grain.ei !== undefined ? (grain.ei ? 1 : 0) : 0;
+    const L0 = Math.max(0, Number(grain.L0) || 0);
+    const webKey = `${outerR.toFixed(3)}|${rTip.toFixed(3)}|${rValley.toFixed(3)}|${Np}|${ci}|${osi}|${ei}|${ei ? L0.toFixed(2) : '0'}`;
+    let tweb0 = starWebCache.get(webKey);
+    if (tweb0 === undefined) {
+      tweb0 = estimateClipperWebThicknessMm({
+        outerRadiusMm: outerR,
+        ci,
+        osi,
+        ei,
+        L0,
+        innerVoidLoopsMm: voidLoop,
+      });
+      if (starWebCache.size >= STAR_WEB_CACHE_LIMIT) {
+        const oldest = starWebCache.keys().next().value;
+        if (oldest !== undefined) starWebCache.delete(oldest);
+      }
+      starWebCache.set(webKey, tweb0);
+    }
 
     return {
       blockVolumeMm3,
@@ -155,7 +200,7 @@ export const starGrainModule: GrainGeometryModule = {
     const geom = this.getInitialGeometry(grain);
     return (
       (Math.PI / 4) * Math.pow(motorDcMm, 2) -
-      ((Math.PI / 4) * Math.pow(grain.D0, 2) - geom.starHoleAreaMm2)
+      geom.crossSectionAreaMm2
     );
   },
 
@@ -179,9 +224,9 @@ export const starGrainModule: GrainGeometryModule = {
     const isFast = context.geometryQuality === 'fast';
     const burnbackTable = getOrComputeStarBurnbackTable(grain, {
       circleSegments: isFast ? 96 : 144,
-      sampleCount: isFast ? 36 : 64,
+      sampleCount: isFast ? 42 : 112,
       arcToleranceMm: isFast ? 0.025 : undefined,
-      includeContours: !isFast,
+      includeContours: false,
     });
 
     const eval0 = evaluateBurnbackTableAtDepth(burnbackTable, 0, grain, context.motor.Dc);
@@ -189,7 +234,7 @@ export const starGrainModule: GrainGeometryModule = {
     const Vg0 = eval0.Vg;
     const rhoreal = context.prop.rho * grain.rhorat;
     const mg0 = (rhoreal * Vg0) / 1e6;
-    const tweb0 = burnbackTable.xMaxMm;
+    const tweb0 = eval0.tweb;
 
     return {
       ...grain,
@@ -230,8 +275,8 @@ export const starGrainModule: GrainGeometryModule = {
       state.burnbackTable ??
       getOrComputeStarBurnbackTable(state, {
         circleSegments: 144,
-        sampleCount: 64,
-        includeContours: true,
+        sampleCount: 112,
+        includeContours: false,
       });
 
     return evaluateBurnbackTableAtDepth(table, xMm, state, motorDcMm);

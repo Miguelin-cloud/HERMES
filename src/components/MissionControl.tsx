@@ -21,49 +21,36 @@ import {
   Legend,
 } from "recharts";
 import { SimulationResults } from "../lib/types";
-import { calculateApogee, ApogeeResult, getExitMach, getTTIThrustCoefficient } from "../lib/apogee";
+import {
+  calculateApogee,
+  ApogeeResult,
+  computeMinSafeRailVelocity,
+  getAtmosphericPressurePa,
+  getExitMach,
+  getTTIThrustCoefficient,
+  RecoveryMode,
+} from "../lib/apogee";
 import { Language, translations } from "../lib/i18n";
 import { ThemeColors } from "../lib/theme";
-import { Download, FileSpreadsheet, Sparkles, CheckCircle2, Layers, UploadCloud, HelpCircle, X, Compass, ExternalLink, Lock } from "lucide-react";
+import { Download, FileSpreadsheet, Sparkles, CheckCircle2, Layers, UploadCloud, HelpCircle, X, Compass, ExternalLink, Lock, Wind, Umbrella, Ruler, AlertTriangle } from "lucide-react";
 import * as XLSX from "xlsx";
 
-const MC_STORAGE_KEY = "hermes_mc_params";
-const MC_DRAFT_STORAGE_KEY = "hermes_mc_draft_params";
+import {
+  ExpDataType,
+  HERMES_MC_IMPORTED_EVENT,
+  MissionControlSnapshot,
+  loadDraftMissionControlParams,
+  loadMissionControlAero,
+  loadMissionControlExp,
+  loadSavedMissionControlParams,
+  parseAeroDataRaw,
+  saveMissionControlAero,
+  saveMissionControlDraft,
+  saveMissionControlExp,
+  saveMissionControlParams,
+} from "../lib/missionControlStorage";
 
-function parseStoredMcParams(storageKey: string) {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (raw) {
-      const p = JSON.parse(raw);
-      return {
-        emptyRocketMass: typeof p.emptyRocketMass === "number" && !isNaN(p.emptyRocketMass) ? Math.max(0, p.emptyRocketMass) : 6.5,
-        rocketDiameter: typeof p.rocketDiameter === "number" && !isNaN(p.rocketDiameter) ? Math.max(1, p.rocketDiameter) : 80,
-        launchAltitude: typeof p.launchAltitude === "number" && !isNaN(p.launchAltitude) ? p.launchAltitude : 169,
-        launchTemp: typeof p.launchTemp === "number" && !isNaN(p.launchTemp) ? p.launchTemp : 28,
-        flightPathAngle: typeof p.flightPathAngle === "number" && !isNaN(p.flightPathAngle) ? Math.max(0, Math.min(90, p.flightPathAngle)) : 90,
-      };
-    }
-  } catch {
-    // ignore storage parse error
-  }
-  return null;
-}
-
-export function loadSavedMissionControlParams() {
-  return (
-    parseStoredMcParams(MC_STORAGE_KEY) ?? {
-      emptyRocketMass: 6.5,
-      rocketDiameter: 80,
-      launchAltitude: 169,
-      launchTemp: 28,
-      flightPathAngle: 90,
-    }
-  );
-}
-
-function loadDraftMissionControlParams() {
-  return parseStoredMcParams(MC_DRAFT_STORAGE_KEY) ?? loadSavedMissionControlParams();
-}
+export { loadSavedMissionControlParams };
 
 const NumberInputMC = ({
   label,
@@ -205,18 +192,33 @@ export function MissionControl({
   const [launchAltitude, setLaunchAltitude] = useState(initialDraft.launchAltitude);
   const [launchTemp, setLaunchTemp] = useState(initialDraft.launchTemp);
   const [flightPathAngle, setFlightPathAngle] = useState(initialDraft.flightPathAngle);
+  const [railLengthM, setRailLengthM] = useState(initialDraft.railLengthM);
+  const [windSpeedMs, setWindSpeedMs] = useState(initialDraft.windSpeedMs);
+  const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>(initialDraft.recoveryMode);
+  const [chuteDiameterM, setChuteDiameterM] = useState(initialDraft.chuteDiameterM);
+  const [chuteCd, setChuteCd] = useState(initialDraft.chuteCd);
+  const [drogueDiameterM, setDrogueDiameterM] = useState(initialDraft.drogueDiameterM);
+  const [drogueCd, setDrogueCd] = useState(initialDraft.drogueCd);
+  const [mainDeployAltM, setMainDeployAltM] = useState(initialDraft.mainDeployAltM);
 
   const activePropellantMassKg =
     results && results.mgra_total && results.mgra_total.length > 0
       ? results.mgra_total[0]
       : propellantMassKg;
   
+  const initialAero = React.useMemo(() => loadMissionControlAero(), []);
+  const initialAeroParsed = React.useMemo(
+    () => parseAeroDataRaw(initialAero.useAeroData, initialAero.aeroDataRaw),
+    [initialAero],
+  );
+  const initialExp = React.useMemo(() => loadMissionControlExp(), []);
+
   // Aerodynamic Data & Format Modal
-  const [useAeroData, setUseAeroData] = useState(false);
-  const [aeroDataRaw, setAeroDataRaw] = useState("");
-  const [aeroParsed, setAeroParsed] = useState<{ mach: number[], cd: number[] } | null>(null);
+  const [useAeroData, setUseAeroData] = useState(initialAero.useAeroData);
+  const [aeroDataRaw, setAeroDataRaw] = useState(initialAero.aeroDataRaw);
+  const [aeroParsed, setAeroParsed] = useState<{ mach: number[], cd: number[] } | null>(initialAeroParsed);
   const [aeroInputTab, setAeroInputTab] = useState<"upload" | "manual">("upload");
-  const [aeroFileName, setAeroFileName] = useState<string>("");
+  const [aeroFileName, setAeroFileName] = useState<string>(initialAero.aeroFileName);
   const [isAeroModalOpen, setIsAeroModalOpen] = useState<boolean>(false);
 
   const downloadAeroTemplate = () => {
@@ -356,28 +358,61 @@ export function MissionControl({
     launchAltitude: initialApplied.launchAltitude,
     launchTemp: initialApplied.launchTemp,
     flightPathAngle: initialApplied.flightPathAngle,
-    useAeroData: false,
-    aeroParsed: null as { mach: number[], cd: number[] } | null,
+    railLengthM: initialApplied.railLengthM,
+    windSpeedMs: initialApplied.windSpeedMs,
+    recoveryMode: initialApplied.recoveryMode,
+    chuteDiameterM: initialApplied.chuteDiameterM,
+    chuteCd: initialApplied.chuteCd,
+    drogueDiameterM: initialApplied.drogueDiameterM,
+    drogueCd: initialApplied.drogueCd,
+    mainDeployAltM: initialApplied.mainDeployAltM,
+    useAeroData: initialAero.useAeroData,
+    aeroParsed: initialAeroParsed,
   });
+
+  // Persist aero curve changes cleanly for .hermes portability & reload retention
+  useEffect(() => {
+    saveMissionControlAero({
+      useAeroData,
+      aeroFileName,
+      aeroDataRaw,
+    });
+  }, [useAeroData, aeroFileName, aeroDataRaw]);
 
   // Persist draft edits across tab switches without triggering apogee/animation updates
   useEffect(() => {
     const safeAngle = Math.max(0, Math.min(90, isNaN(flightPathAngle) ? 90 : flightPathAngle));
-    try {
-      localStorage.setItem(
-        MC_DRAFT_STORAGE_KEY,
-        JSON.stringify({
-          emptyRocketMass,
-          rocketDiameter,
-          launchAltitude,
-          launchTemp,
-          flightPathAngle: safeAngle,
-        }),
-      );
-    } catch {
-      // ignore
-    }
-  }, [emptyRocketMass, rocketDiameter, launchAltitude, launchTemp, flightPathAngle]);
+    const safeRail = Math.max(0.2, isNaN(railLengthM) ? 2.0 : railLengthM);
+    saveMissionControlDraft({
+      emptyRocketMass,
+      rocketDiameter,
+      launchAltitude,
+      launchTemp,
+      flightPathAngle: safeAngle,
+      railLengthM: safeRail,
+      windSpeedMs,
+      recoveryMode,
+      chuteDiameterM,
+      chuteCd,
+      drogueDiameterM,
+      drogueCd,
+      mainDeployAltM,
+    });
+  }, [
+    emptyRocketMass,
+    rocketDiameter,
+    launchAltitude,
+    launchTemp,
+    flightPathAngle,
+    railLengthM,
+    windSpeedMs,
+    recoveryMode,
+    chuteDiameterM,
+    chuteCd,
+    drogueDiameterM,
+    drogueCd,
+    mainDeployAltM,
+  ]);
 
   const hasChanges =
     emptyRocketMass !== calcParams.emptyRocketMass ||
@@ -385,25 +420,39 @@ export function MissionControl({
     launchAltitude !== calcParams.launchAltitude ||
     launchTemp !== calcParams.launchTemp ||
     flightPathAngle !== calcParams.flightPathAngle ||
+    railLengthM !== calcParams.railLengthM ||
+    windSpeedMs !== calcParams.windSpeedMs ||
+    recoveryMode !== calcParams.recoveryMode ||
+    chuteDiameterM !== calcParams.chuteDiameterM ||
+    chuteCd !== calcParams.chuteCd ||
+    drogueDiameterM !== calcParams.drogueDiameterM ||
+    drogueCd !== calcParams.drogueCd ||
+    mainDeployAltM !== calcParams.mainDeployAltM ||
     useAeroData !== calcParams.useAeroData ||
-    aeroParsed !== calcParams.aeroParsed;
+    JSON.stringify(aeroParsed) !== JSON.stringify(calcParams.aeroParsed);
 
   const handleUpdate = () => {
     const safeAngle = Math.max(0, Math.min(90, isNaN(flightPathAngle) ? 90 : flightPathAngle));
+    const safeRail = Math.max(0.2, isNaN(railLengthM) ? 2.0 : railLengthM);
     if (safeAngle !== flightPathAngle) setFlightPathAngle(safeAngle);
+    if (safeRail !== railLengthM) setRailLengthM(safeRail);
     const appliedPayload = {
       emptyRocketMass,
       rocketDiameter,
       launchAltitude,
       launchTemp,
       flightPathAngle: safeAngle,
+      railLengthM: safeRail,
+      windSpeedMs: isNaN(windSpeedMs) ? 0 : windSpeedMs,
+      recoveryMode,
+      chuteDiameterM: Math.max(0.1, isNaN(chuteDiameterM) ? 1.5 : chuteDiameterM),
+      chuteCd: Math.max(0.1, isNaN(chuteCd) ? 1.5 : chuteCd),
+      drogueDiameterM: Math.max(0.1, isNaN(drogueDiameterM) ? 0.45 : drogueDiameterM),
+      drogueCd: Math.max(0.1, isNaN(drogueCd) ? 1.5 : drogueCd),
+      mainDeployAltM: Math.max(10, isNaN(mainDeployAltM) ? 300 : mainDeployAltM),
     };
-    try {
-      localStorage.setItem(MC_STORAGE_KEY, JSON.stringify(appliedPayload));
-      localStorage.setItem(MC_DRAFT_STORAGE_KEY, JSON.stringify(appliedPayload));
-    } catch {
-      // ignore
-    }
+    saveMissionControlParams(appliedPayload, true);
+    saveMissionControlAero({ useAeroData, aeroFileName, aeroDataRaw });
     setCalcParams({ ...appliedPayload, useAeroData, aeroParsed });
   };
 
@@ -413,19 +462,88 @@ export function MissionControl({
   // Experimental Data state
   const [expDataRaw, setExpDataRaw] = useState<
     { t: number; p: number; f: number }[]
-  >([]);
-  const [presUnit, setPresUnit] = useState("MPa");
-  const [forceUnit, setForceUnit] = useState("N");
-  const [expDataType, setExpDataType] = useState<"time_thrust" | "time_pressure" | "time_both" | "time_p_time_f">(
-    "time_thrust",
-  );
+  >(initialExp.expDataRaw);
+  const [presUnit, setPresUnit] = useState(initialExp.presUnit);
+  const [forceUnit, setForceUnit] = useState(initialExp.forceUnit);
+  const [expDataType, setExpDataType] = useState<ExpDataType>(initialExp.expDataType);
 
   const [calcExpParams, setCalcExpParams] = useState({
-    expDataRaw: [] as { t: number; p: number; f: number }[],
-    presUnit: "MPa",
-    forceUnit: "N",
-    expDataType: "time_thrust" as "time_thrust" | "time_pressure" | "time_both" | "time_p_time_f",
+    expDataRaw: initialExp.expDataRaw,
+    presUnit: initialExp.presUnit,
+    forceUnit: initialExp.forceUnit,
+    expDataType: initialExp.expDataType,
   });
+
+  useEffect(() => {
+    saveMissionControlExp({
+      expDataRaw,
+      presUnit,
+      forceUnit,
+      expDataType,
+    });
+  }, [expDataRaw, presUnit, forceUnit, expDataType]);
+
+  // Listen for live .hermes imports applying Mission Control settings
+  useEffect(() => {
+    const handleMcImported = (evt: Event) => {
+      const snap = (evt as CustomEvent<MissionControlSnapshot>).detail;
+      if (!snap || !snap.params) return;
+      const p = snap.params;
+      setEmptyRocketMass(p.emptyRocketMass);
+      setRocketDiameter(p.rocketDiameter);
+      setLaunchAltitude(p.launchAltitude);
+      setLaunchTemp(p.launchTemp);
+      setFlightPathAngle(p.flightPathAngle);
+      setRailLengthM(p.railLengthM);
+      setWindSpeedMs(p.windSpeedMs);
+      setRecoveryMode(p.recoveryMode);
+      setChuteDiameterM(p.chuteDiameterM);
+      setChuteCd(p.chuteCd);
+      setDrogueDiameterM(p.drogueDiameterM);
+      setDrogueCd(p.drogueCd);
+      setMainDeployAltM(p.mainDeployAltM);
+
+      const aero = snap.aerodynamics;
+      const parsedA = aero ? parseAeroDataRaw(aero.useAeroData, aero.aeroDataRaw) : null;
+      setUseAeroData(Boolean(aero?.useAeroData));
+      setAeroFileName(aero?.aeroFileName || "");
+      setAeroDataRaw(aero?.aeroDataRaw || "");
+      setAeroParsed(parsedA);
+
+      setCalcParams({
+        ...p,
+        useAeroData: Boolean(aero?.useAeroData),
+        aeroParsed: parsedA,
+      });
+
+      if (snap.experimental) {
+        setExpDataRaw(snap.experimental.expDataRaw);
+        setPresUnit(snap.experimental.presUnit);
+        setForceUnit(snap.experimental.forceUnit);
+        setExpDataType(snap.experimental.expDataType);
+        setCalcExpParams({
+          expDataRaw: snap.experimental.expDataRaw,
+          presUnit: snap.experimental.presUnit,
+          forceUnit: snap.experimental.forceUnit,
+          expDataType: snap.experimental.expDataType,
+        });
+      } else {
+        setExpDataRaw([]);
+        setPresUnit("MPa");
+        setForceUnit("N");
+        setExpDataType("time_thrust");
+        setCalcExpParams({
+          expDataRaw: [],
+          presUnit: "MPa",
+          forceUnit: "N",
+          expDataType: "time_thrust",
+        });
+      }
+    };
+
+    window.addEventListener(HERMES_MC_IMPORTED_EVENT, handleMcImported);
+    return () => window.removeEventListener(HERMES_MC_IMPORTED_EVENT, handleMcImported);
+  }, []);
 
   const hasExpChanges =
     expDataRaw !== calcExpParams.expDataRaw ||
@@ -434,6 +552,7 @@ export function MissionControl({
     expDataType !== calcExpParams.expDataType;
 
   const handleExpUpdate = () => {
+    saveMissionControlExp({ expDataRaw, presUnit, forceUnit, expDataType });
     setCalcExpParams({ expDataRaw, presUnit, forceUnit, expDataType });
   };
 
@@ -478,6 +597,7 @@ export function MissionControl({
   const [activeMainChart, setActiveMainChart] = useState<"altitude" | "thrust">(
     "altitude",
   );
+  const [chartScope, setChartScope] = useState<"ascent" | "full">("ascent");
 
   useEffect(() => {
     if (onApogeeUpdate && (simApogee !== null || !results)) {
@@ -502,7 +622,17 @@ export function MissionControl({
       calcParams.launchTemp,
       calcParams.aeroParsed ? calcParams.aeroParsed.mach : undefined,
       calcParams.aeroParsed ? calcParams.aeroParsed.cd : undefined,
-      calcParams.flightPathAngle
+      calcParams.flightPathAngle,
+      {
+        railLengthM: calcParams.railLengthM,
+        windSpeedMs: calcParams.windSpeedMs,
+        recoveryMode: calcParams.recoveryMode,
+        chuteDiameterM: calcParams.chuteDiameterM,
+        chuteCd: calcParams.chuteCd,
+        drogueDiameterM: calcParams.drogueDiameterM,
+        drogueCd: calcParams.drogueCd,
+        mainDeployAltM: calcParams.mainDeployAltM,
+      }
     );
     setSimApogee(simResult);
     setIsUpdating(false);
@@ -526,7 +656,7 @@ export function MissionControl({
           const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
           const P_Pa_gauge = P_MPa_gauge * 1e6;
           
-          const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
+          const Pa = getAtmosphericPressurePa(calcParams.launchAltitude || 0);
           // Absolute chamber pressure: gauge pressure + atmospheric pressure (never below Pa)
           const P_Pa_abs = Math.max(Pa, P_Pa_gauge + Pa);
           
@@ -548,7 +678,7 @@ export function MissionControl({
           } else if (d.p > 0) {
             const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
             const P_Pa_gauge = P_MPa_gauge * 1e6;
-            const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
+            const Pa = getAtmosphericPressurePa(calcParams.launchAltitude || 0);
             const P_Pa_abs = Math.max(Pa, P_Pa_gauge + Pa);
             const Dt = nozzleParams?.Dt0 || 18.8;
             const Ds = nozzleParams?.Ds || 37.6;
@@ -590,7 +720,17 @@ export function MissionControl({
         calcParams.launchTemp,
         calcParams.aeroParsed ? calcParams.aeroParsed.mach : undefined,
         calcParams.aeroParsed ? calcParams.aeroParsed.cd : undefined,
-        calcParams.flightPathAngle
+        calcParams.flightPathAngle,
+        {
+          railLengthM: calcParams.railLengthM,
+          windSpeedMs: calcParams.windSpeedMs,
+          recoveryMode: calcParams.recoveryMode,
+          chuteDiameterM: calcParams.chuteDiameterM,
+          chuteCd: calcParams.chuteCd,
+          drogueDiameterM: calcParams.drogueDiameterM,
+          drogueCd: calcParams.drogueCd,
+          mainDeployAltM: calcParams.mainDeployAltM,
+        }
       );
 
       setExpApogee(res);
@@ -858,7 +998,7 @@ export function MissionControl({
           const P_MPa_gauge = convertPresToMPa(d.p, calcExpParams.presUnit);
           const P_Pa_gauge = P_MPa_gauge * 1e6;
           
-          const Pa = 101325 * Math.pow(1 - 2.25577e-5 * (calcParams.launchAltitude || 0), 5.25588);
+          const Pa = getAtmosphericPressurePa(calcParams.launchAltitude || 0);
           // Absolute chamber pressure: gauge pressure + atmospheric pressure (never below Pa)
           const P_Pa_abs = Math.max(Pa, P_Pa_gauge + Pa);
           
@@ -878,9 +1018,32 @@ export function MissionControl({
       return { exp_F, exp_P_F };
     };
 
+    const getSampleIndices = (resObj: ApogeeResult, maxCount: number) => {
+      const len = resObj.t.length;
+      if (len === 0) return [];
+      const limitTime =
+        activeMainChart === "thrust"
+          ? Math.max(resObj.burnoutTime * 1.25, 0.4)
+          : chartScope === "ascent" && resObj.apogeeTime > 0
+            ? resObj.apogeeTime
+            : resObj.t[len - 1];
+      let endIdx = len - 1;
+      for (let k = len - 1; k >= 0; k--) {
+        if (resObj.t[k] <= limitTime + 1e-6) {
+          endIdx = k;
+          break;
+        }
+      }
+      const step = Math.max(1, Math.floor((endIdx + 1) / maxCount));
+      const out: number[] = [];
+      for (let i = 0; i <= endIdx; i += step) out.push(i);
+      if (out[out.length - 1] !== endIdx) out.push(endIdx);
+      return out;
+    };
+
     if (simApogee) {
-      const step = Math.max(1, Math.floor(simApogee.t.length / 300));
-      for (let i = 0; i < simApogee.t.length; i += step) {
+      const idxs = getSampleIndices(simApogee, 320);
+      for (const i of idxs) {
         const t = simApogee.t[i];
         const { exp_F, exp_P_F } = getExpF(t);
         const sim_F_val = getSimF(t);
@@ -894,26 +1057,11 @@ export function MissionControl({
           ...(exp_P_F !== null && { exp_P_F: Number(exp_P_F.toFixed(1)) }),
         });
       }
-      if (simApogee.t.length > 0 && (simApogee.t.length - 1) % step !== 0) {
-        const el = simApogee.t.length - 1;
-        const t = simApogee.t[el];
-        const { exp_F, exp_P_F } = getExpF(t);
-        const sim_F_val = getSimF(t);
-        data.push({
-          time: Number(t.toFixed(3)),
-          sim_h: Number(simApogee.h[el].toFixed(1)),
-          sim_v: Number(simApogee.v[el].toFixed(1)),
-          sim_a: Number(simApogee.a[el].toFixed(1)),
-          ...(sim_F_val !== null && { sim_F: Number(sim_F_val.toFixed(1)) }),
-          ...(exp_F !== null && { exp_F: Number(exp_F.toFixed(1)) }),
-          ...(exp_P_F !== null && { exp_P_F: Number(exp_P_F.toFixed(1)) }),
-        });
-      }
     }
 
     if (expApogee) {
-      const step = Math.max(1, Math.floor(expApogee.t.length / 300));
-      for (let i = 0; i < expApogee.t.length; i += step) {
+      const idxs = getSampleIndices(expApogee, 320);
+      for (const i of idxs) {
         const t = expApogee.t[i];
         const { exp_F, exp_P_F } = getExpF(t);
         const sim_F_val = getSimF(t);
@@ -930,7 +1078,7 @@ export function MissionControl({
       data.sort((a, b) => a.time - b.time);
     }
     return data;
-  }, [simApogee, expApogee, results, calcExpParams, nozzleParams]);
+  }, [simApogee, expApogee, results, calcExpParams, nozzleParams, chartScope, activeMainChart, calcParams.launchAltitude]);
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -1012,6 +1160,34 @@ export function MissionControl({
               onChange={setLaunchTemp}
               step="0.1"
             />
+            <NumberInputMC
+              label={
+                <span className="flex items-center gap-1">
+                  <Ruler className="w-3 h-3 text-primary shrink-0" />
+                  <span>{t.rail_length || "Launch Rail [m]"}</span>
+                </span>
+              }
+              value={railLengthM}
+              onChange={setRailLengthM}
+              min={0.2}
+              max={50}
+              step="0.1"
+              tooltip={t.rail_length_desc}
+            />
+            <NumberInputMC
+              label={
+                <span className="flex items-center gap-1">
+                  <Wind className="w-3 h-3 text-primary shrink-0" />
+                  <span>{t.wind_speed || "Wind at Rail Height [m/s]"}</span>
+                </span>
+              }
+              value={windSpeedMs}
+              onChange={setWindSpeedMs}
+              min={-50}
+              max={50}
+              step="0.5"
+              tooltip={t.wind_speed_desc}
+            />
             <div className="col-span-2 pt-1.5 border-t border-border/50 mt-1">
               <NumberInputMC
                 label={
@@ -1033,6 +1209,92 @@ export function MissionControl({
                 max={90}
                 tooltip={t.flight_path_angle_desc || "Elevación de la rampa respecto a la horizontal (90º = vertical, 87º = 3º de inclinación)"}
               />
+            </div>
+            {/* Recovery / Parachute Configuration */}
+            <div className="col-span-2 pt-2 border-t border-border/50 mt-1 space-y-1.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-foreground/90 flex items-center gap-1.5">
+                  <Umbrella className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>{t.mc_recovery_section || "Recovery System"}</span>
+                </span>
+                <div className="inline-flex rounded border border-border bg-muted/40 p-0.5 gap-0.5">
+                  {(["none", "single", "dual"] as RecoveryMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setRecoveryMode(mode)}
+                      className={`px-2 py-0.5 text-[10px] font-medium rounded-xs transition-colors cursor-pointer ${
+                        recoveryMode === mode
+                          ? "bg-primary text-primary-foreground font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {mode === "none"
+                        ? t.mc_recovery_none || "Ascent Only"
+                        : mode === "single"
+                          ? t.mc_recovery_single || "Main Only"
+                          : t.mc_recovery_dual || "Drogue + Main"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {recoveryMode !== "none" && (
+                <div className="space-y-1.5 pl-1 border-l-2 border-primary/30">
+                  <p className="text-[10px] text-muted-foreground leading-snug px-1">
+                    {recoveryMode === "single"
+                      ? t.mc_recovery_single_hint || "Main chute deploys automatically at apogee."
+                      : t.mc_recovery_dual_hint || "Drogue deploys at apogee; Main deploys at selected altitude AGL."}
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                    <NumberInputMC
+                      label={t.mc_chute_diam || "Main Chute Ø [m]"}
+                      value={chuteDiameterM}
+                      onChange={setChuteDiameterM}
+                      min={0.1}
+                      max={25}
+                      step="0.1"
+                    />
+                    <NumberInputMC
+                      label={t.mc_chute_cd || "Main Chute Cd"}
+                      value={chuteCd}
+                      onChange={setChuteCd}
+                      min={0.1}
+                      max={3.0}
+                      step="0.05"
+                    />
+                    {recoveryMode === "dual" && (
+                      <>
+                        <NumberInputMC
+                          label={t.mc_drogue_diam || "Drogue Ø [m]"}
+                          value={drogueDiameterM}
+                          onChange={setDrogueDiameterM}
+                          min={0.1}
+                          max={10}
+                          step="0.05"
+                        />
+                        <NumberInputMC
+                          label={t.mc_drogue_cd || "Drogue Cd"}
+                          value={drogueCd}
+                          onChange={setDrogueCd}
+                          min={0.1}
+                          max={3.0}
+                          step="0.05"
+                        />
+                        <div className="col-span-2">
+                          <NumberInputMC
+                            label={t.mc_main_deploy_alt || "Main Deploy [m AGL]"}
+                            value={mainDeployAltM}
+                            onChange={setMainDeployAltM}
+                            min={10}
+                            max={10000}
+                            step="10"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             {/* Total Liftoff Mass Summary Strip */}
             <div className="col-span-2 mt-1.5 pt-1.5 border-t border-border/50 flex items-center justify-between px-2 py-1 rounded bg-muted/40 text-[10px] sm:text-[11px]">
@@ -1706,63 +1968,114 @@ export function MissionControl({
             </CardTitle>
             <span className="text-[10px] font-mono tabular-nums text-primary font-semibold flex items-center gap-1">
               <Compass className="w-3 h-3" />
-              FPA: {calcParams.flightPathAngle ?? 90}º
+              FPA: {calcParams.flightPathAngle ?? 90}º · {calcParams.railLengthM.toFixed(1)}m
             </span>
           </CardHeader>
           <CardContent className="p-3">
             {simApogee ? (
-              <div className="grid grid-cols-2 gap-4 font-mono tabular-nums">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight flex items-center justify-between">
-                    <span>{t.mc_apogee_agl_card}</span>
-                    <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold uppercase">AGL</span>
-                  </span>
-                  <span className="text-xl font-bold text-foreground mt-0.5">
-                    {simApogee.maxApogee.toFixed(1)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">m</span>
-                  </span>
-                  <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                    <span className="font-semibold text-foreground/80">
-                      {t.mc_asl_prefix}
+              <div className="space-y-3 font-mono tabular-nums">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight flex items-center justify-between">
+                      <span>{t.mc_apogee_agl_card}</span>
+                      <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold uppercase">AGL</span>
                     </span>
-                    <strong className="text-foreground">
-                      {(calcParams.launchAltitude + simApogee.maxApogee).toFixed(1)} m
-                    </strong>
-                  </span>
+                    <span className="text-xl font-bold text-foreground mt-0.5">
+                      {simApogee.maxApogee.toFixed(1)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">m</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                      <span className="font-semibold text-foreground/80">
+                        {t.mc_asl_prefix}
+                      </span>
+                      <strong className="text-foreground">
+                        {(calcParams.launchAltitude + simApogee.maxApogee).toFixed(1)} m
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
+                      {t.mc_max_vel}
+                    </span>
+                    <span className="text-xl font-mono font-bold text-foreground mt-0.5">
+                      {simApogee.maxVelocity.toFixed(1)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">m/s</span>
+                    </span>
+                    <span className="text-[10.5px] font-mono text-muted-foreground">
+                      Mach {(simApogee.mach.length > 0 ? Math.max(...simApogee.mach) : simApogee.maxVelocity / 340.29).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
+                      {t.mc_time_to_apogee}
+                    </span>
+                    <span className="text-xl font-mono font-bold text-foreground mt-0.5">
+                      {simApogee.apogeeTime.toFixed(2)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">s</span>
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
+                      {t.mc_max_accel}
+                    </span>
+                    <span className="text-xl font-mono font-bold text-foreground mt-0.5">
+                      {simApogee.maxAcceleration.toFixed(1)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">m/s²</span>
+                    </span>
+                    <span className="text-[10.5px] font-mono text-muted-foreground">
+                      {(simApogee.maxAcceleration / 9.80665).toFixed(1)} G
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
-                    {t.mc_max_vel}
-                  </span>
-                  <span className="text-xl font-mono font-bold text-foreground mt-0.5">
-                    {simApogee.maxVelocity.toFixed(1)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">m/s</span>
-                  </span>
-                  <span className="text-[10.5px] font-mono text-muted-foreground">
-                    Mach {(simApogee.maxVelocity / 340).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
-                    {t.mc_time_to_apogee}
-                  </span>
-                  <span className="text-xl font-mono font-bold text-foreground mt-0.5">
-                    {simApogee.apogeeTime.toFixed(2)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">s</span>
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
-                    {t.mc_max_accel}
-                  </span>
-                  <span className="text-xl font-mono font-bold text-foreground mt-0.5">
-                    {simApogee.maxAcceleration.toFixed(1)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">m/s²</span>
-                  </span>
-                  <span className="text-[10.5px] font-mono text-muted-foreground">
-                    {(simApogee.maxAcceleration / 9.80665).toFixed(1)} G
-                  </span>
-                </div>
+                {/* Rail-Exit Velocity & Recovery Strip */}
+                {(() => {
+                  const minSafe = simApogee.minRecommendedRailVel ?? computeMinSafeRailVelocity(calcParams.windSpeedMs);
+                  const isSafeRail = simApogee.clearedRail && simApogee.railExitVelocity >= minSafe;
+                  return (
+                    <div className="pt-2.5 border-t border-border/60 grid grid-cols-2 gap-3 text-[11px]">
+                      <div className="flex flex-col">
+                        <span className="text-[9.5px] text-muted-foreground uppercase flex items-center gap-1">
+                          <Ruler className="w-2.5 h-2.5" />
+                          <span>{t.mc_rail_exit_vel || "Rail Exit Velocity"}</span>
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className={`text-sm font-bold ${isSafeRail ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                            {simApogee.clearedRail ? `${simApogee.railExitVelocity.toFixed(1)} m/s` : t.mc_rail_not_cleared || "Blocked"}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-xs font-semibold ${isSafeRail ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
+                            {isSafeRail ? (t.mc_rail_safe_badge || "Stable") : (t.mc_rail_low_badge || "Low")}
+                          </span>
+                        </div>
+                        <span className="text-[9.5px] text-muted-foreground mt-0.5">
+                          {t.mc_rail_min_safe || "Safe min ≥"} {minSafe.toFixed(1)} m/s · {t.mc_rail_aoa || "α salida"}: {(simApogee.railExitAngleOfAttackDeg ?? 0).toFixed(1)}°
+                        </span>
+                      </div>
+                      {simApogee.recoveryMode !== "none" && simApogee.descentRateMs !== undefined ? (
+                        <div className="flex flex-col">
+                          <span className="text-[9.5px] text-muted-foreground uppercase flex items-center gap-1">
+                            <Umbrella className="w-2.5 h-2.5" />
+                            <span>{t.mc_descent_rate || "Touchdown Sink"}</span>
+                          </span>
+                          <span className="text-sm font-bold text-foreground mt-0.5">
+                            {simApogee.descentRateMs.toFixed(1)} m/s
+                          </span>
+                          <span className="text-[9.5px] text-muted-foreground mt-0.5">
+                            {t.mc_landing_time || "Total"}: {(simApogee.landingTime ?? 0).toFixed(0)}s · {t.mc_landing_range || "Drift"}: {(simApogee.landingRange ?? 0).toFixed(0)}m
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col">
+                          <span className="text-[9.5px] text-muted-foreground uppercase">
+                            {t.mc_landing_range || "Downrange"}
+                          </span>
+                          <span className="text-sm font-bold text-foreground mt-0.5">
+                            {simApogee.maxRange.toFixed(1)} m
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -1781,63 +2094,113 @@ export function MissionControl({
             </CardTitle>
             <span className="text-[10px] font-mono tabular-nums text-secondary font-semibold flex items-center gap-1">
               <Compass className="w-3 h-3" />
-              FPA: {calcParams.flightPathAngle ?? 90}º
+              FPA: {calcParams.flightPathAngle ?? 90}º · {calcParams.railLengthM.toFixed(1)}m
             </span>
           </CardHeader>
           <CardContent className="p-3">
             {expApogee ? (
-              <div className="grid grid-cols-2 gap-4 font-mono tabular-nums">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight flex items-center justify-between">
-                    <span>{t.mc_apogee_agl_card}</span>
-                    <span className="text-[9px] font-mono text-secondary font-semibold uppercase">AGL</span>
-                  </span>
-                  <span className="text-xl font-bold text-foreground mt-0.5">
-                    {expApogee.maxApogee.toFixed(1)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">m</span>
-                  </span>
-                  <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                    <span className="font-semibold text-foreground/80">
-                      {t.mc_asl_prefix}
+              <div className="space-y-3 font-mono tabular-nums">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight flex items-center justify-between">
+                      <span>{t.mc_apogee_agl_card}</span>
+                      <span className="text-[9px] font-mono text-secondary font-semibold uppercase">AGL</span>
                     </span>
-                    <strong className="text-foreground">
-                      {(calcParams.launchAltitude + expApogee.maxApogee).toFixed(1)} m
-                    </strong>
-                  </span>
+                    <span className="text-xl font-bold text-foreground mt-0.5">
+                      {expApogee.maxApogee.toFixed(1)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">m</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                      <span className="font-semibold text-foreground/80">
+                        {t.mc_asl_prefix}
+                      </span>
+                      <strong className="text-foreground">
+                        {(calcParams.launchAltitude + expApogee.maxApogee).toFixed(1)} m
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
+                      {t.mc_max_vel}
+                    </span>
+                    <span className="text-xl font-bold text-foreground mt-0.5">
+                      {expApogee.maxVelocity.toFixed(1)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">m/s</span>
+                    </span>
+                    <span className="text-[10.5px] font-mono text-muted-foreground">
+                      Mach {(expApogee.mach.length > 0 ? Math.max(...expApogee.mach) : expApogee.maxVelocity / 340.29).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
+                      {t.mc_time_to_apogee}
+                    </span>
+                    <span className="text-xl font-bold text-foreground mt-0.5">
+                      {expApogee.apogeeTime.toFixed(2)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">s</span>
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
+                      {t.mc_max_accel}
+                    </span>
+                    <span className="text-xl font-bold text-foreground mt-0.5">
+                      {expApogee.maxAcceleration.toFixed(1)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">m/s²</span>
+                    </span>
+                    <span className="text-[10.5px] font-mono text-muted-foreground">
+                      {(expApogee.maxAcceleration / 9.80665).toFixed(1)} G
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
-                    {t.mc_max_vel}
-                  </span>
-                  <span className="text-xl font-bold text-foreground mt-0.5">
-                    {expApogee.maxVelocity.toFixed(1)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">m/s</span>
-                  </span>
-                  <span className="text-[10.5px] font-mono text-muted-foreground">
-                    Mach {(expApogee.maxVelocity / 340).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
-                    {t.mc_time_to_apogee}
-                  </span>
-                  <span className="text-xl font-bold text-foreground mt-0.5">
-                    {expApogee.apogeeTime.toFixed(2)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">s</span>
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
-                    {t.mc_max_accel}
-                  </span>
-                  <span className="text-xl font-bold text-foreground mt-0.5">
-                    {expApogee.maxAcceleration.toFixed(1)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">m/s²</span>
-                  </span>
-                  <span className="text-[10.5px] font-mono text-muted-foreground">
-                    {(expApogee.maxAcceleration / 9.80665).toFixed(1)} G
-                  </span>
-                </div>
+                {(() => {
+                  const minSafe = expApogee.minRecommendedRailVel ?? computeMinSafeRailVelocity(calcParams.windSpeedMs);
+                  const isSafeRail = expApogee.clearedRail && expApogee.railExitVelocity >= minSafe;
+                  return (
+                    <div className="pt-2.5 border-t border-border/60 grid grid-cols-2 gap-3 text-[11px]">
+                      <div className="flex flex-col">
+                        <span className="text-[9.5px] text-muted-foreground uppercase flex items-center gap-1">
+                          <Ruler className="w-2.5 h-2.5" />
+                          <span>{t.mc_rail_exit_vel || "Rail Exit Velocity"}</span>
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className={`text-sm font-bold ${isSafeRail ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                            {expApogee.clearedRail ? `${expApogee.railExitVelocity.toFixed(1)} m/s` : t.mc_rail_not_cleared || "Blocked"}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-xs font-semibold ${isSafeRail ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
+                            {isSafeRail ? (t.mc_rail_safe_badge || "Stable") : (t.mc_rail_low_badge || "Low")}
+                          </span>
+                        </div>
+                        <span className="text-[9.5px] text-muted-foreground mt-0.5">
+                          {t.mc_rail_min_safe || "Safe min ≥"} {minSafe.toFixed(1)} m/s · {t.mc_rail_aoa || "α salida"}: {(expApogee.railExitAngleOfAttackDeg ?? 0).toFixed(1)}°
+                        </span>
+                      </div>
+                      {expApogee.recoveryMode !== "none" && expApogee.descentRateMs !== undefined ? (
+                        <div className="flex flex-col">
+                          <span className="text-[9.5px] text-muted-foreground uppercase flex items-center gap-1">
+                            <Umbrella className="w-2.5 h-2.5" />
+                            <span>{t.mc_descent_rate || "Touchdown Sink"}</span>
+                          </span>
+                          <span className="text-sm font-bold text-foreground mt-0.5">
+                            {expApogee.descentRateMs.toFixed(1)} m/s
+                          </span>
+                          <span className="text-[9.5px] text-muted-foreground mt-0.5">
+                            {t.mc_landing_time || "Total"}: {(expApogee.landingTime ?? 0).toFixed(0)}s · {t.mc_landing_range || "Drift"}: {(expApogee.landingRange ?? 0).toFixed(0)}m
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col">
+                          <span className="text-[9.5px] text-muted-foreground uppercase">
+                            {t.mc_landing_range || "Downrange"}
+                          </span>
+                          <span className="text-sm font-bold text-foreground mt-0.5">
+                            {expApogee.maxRange.toFixed(1)} m
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -1863,11 +2226,39 @@ export function MissionControl({
             )}
             {/* Altitude Chart */}
             <Card data-tour="mission-charts-card" className="bg-card border-border rounded-lg overflow-hidden min-h-[300px] flex flex-col">
-              <CardHeader className="py-2 px-3 bg-card-header text-card-header-foreground border-b border-border flex flex-row items-center justify-between">
+              <CardHeader className="py-2 px-3 bg-card-header text-card-header-foreground border-b border-border flex flex-row items-center justify-between gap-2 flex-wrap">
                 <CardTitle className="text-[11px] uppercase tracking-wider text-card-header-foreground font-semibold">
                   {t.flight_profile || "Altitude Profile"}
                 </CardTitle>
-                <div className="flex gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {calcParams.recoveryMode !== "none" && activeMainChart === "altitude" && (
+                    <div className="flex gap-1 mr-1 pr-1.5 border-r border-border">
+                      <Button
+                        size="sm"
+                        variant={chartScope === "ascent" ? "default" : "outline"}
+                        onClick={() => setChartScope("ascent")}
+                        className={`h-6 text-[10px] px-2 py-0 font-mono ${
+                          chartScope === "ascent"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground border-border hover:text-foreground"
+                        }`}
+                      >
+                        {t.mc_chart_ascent || "Ascent"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={chartScope === "full" ? "default" : "outline"}
+                        onClick={() => setChartScope("full")}
+                        className={`h-6 text-[10px] px-2 py-0 font-mono ${
+                          chartScope === "full"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground border-border hover:text-foreground"
+                        }`}
+                      >
+                        {t.mc_chart_full || "Full Flight"}
+                      </Button>
+                    </div>
+                  )}
                   <Button
                     size="sm"
                     variant={activeMainChart === "altitude" ? "default" : "outline"}
@@ -2355,7 +2746,7 @@ export function MissionControl({
             </Card>
           </div>
         ),
-        [chartData, isUpdating, expApogee, simApogee, t, activeDynChart, activeMainChart, simPrimaryColor, expSecondaryColor, simThrustColor, simAccelColor],
+        [chartData, isUpdating, expApogee, simApogee, t, activeDynChart, activeMainChart, chartScope, calcParams.recoveryMode, simPrimaryColor, expSecondaryColor, simThrustColor, simAccelColor],
       )}
     </div>
   );

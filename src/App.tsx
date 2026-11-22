@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useMemo, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { SimulationResults } from './lib/types';
@@ -15,6 +15,7 @@ import {
   BookOpen,
   FolderOpen,
   AlertTriangle,
+  Package,
   Settings,
   Save,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import {
 import { MotorInputsPanel } from './components/MotorInputsPanel';
 import { SimulationResultsPanel } from './components/SimulationResultsPanel';
 import { SimulationModals } from './components/SimulationModals';
+import { HermesApplyPayload, HermesShareModals } from './components/HermesShareModals';
 import { MissionControl, loadSavedMissionControlParams } from './components/MissionControl';
 import { DetailedAnalysisView } from './components/DetailedAnalysisView';
 import { SmartSearchEngine } from './components/SmartSearchEngine';
@@ -35,11 +37,20 @@ import { Language, translations } from './lib/i18n';
 import { Logo } from './components/Logo';
 import { recordAppLaunch, trackTabVisit, trackEvent } from './lib/telemetry';
 import { UsageAnalyticsModal } from './components/UsageAnalyticsModal';
-import { useSimulationStorage } from './hooks/useSimulationStorage';
+import { SavedSimulationEntry, useSimulationStorage } from './hooks/useSimulationStorage';
 import { getInstalledModules } from './lib/modules';
 import { ModuleNotInstalledNotice } from './components/ModuleNotInstalledNotice';
 import { SettingsMenu } from './components/SettingsMenu';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import {
+  HERMES_MC_IMPORTED_EVENT,
+  applyImportedMissionControlSnapshot,
+  loadMissionControlAero,
+  parseAeroDataRaw,
+} from './lib/missionControlStorage';
+import { resolveImportedPropellants } from './lib/hermesFile';
+
+import { StudyPanel } from './components/StudyPanel';
 
 const PlaybackWrapper = lazy(() =>
   import('./components/PlaybackWrapper').then((m) => ({ default: m.PlaybackWrapper }))
@@ -100,6 +111,7 @@ export default function App() {
   } = useSimulationStorage();
 
   const [showSplash, setShowSplash] = useState(true);
+  const handleSplashComplete = useCallback(() => setShowSplash(false), []);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [showCfdInfo, setShowCfdInfo] = useState(false);
@@ -111,8 +123,11 @@ export default function App() {
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFilename, setExportFilename] = useState('');
-  const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx'>('csv');
-  const [exportData, setExportData] = useState<any[] | null>(null);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx' | 'pdf'>('csv');
+
+  const [showHermesModal, setShowHermesModal] = useState(false);
+  const [hermesModalTab, setHermesModalTab] = useState<'export' | 'import'>('export');
+  const [mcSyncVersion, setMcSyncVersion] = useState(0);
 
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState('');
@@ -186,27 +201,41 @@ export default function App() {
   );
 
   const motorValidation = useMemo(
-    () => validateMotorInputs(motor, grains, nozzle, motorStruct),
-    [motor, grains, nozzle, motorStruct]
+    () => validateMotorInputs(motor, grains, nozzle, motorStruct, customPropellants),
+    [motor, grains, nozzle, motorStruct, customPropellants]
   );
 
   const isOverpressure = Boolean(
     results && motorStruct.maxAdmissiblePressureMPa > 0 && results.summary.Pmax_MPa > motorStruct.maxAdmissiblePressureMPa
   );
 
-  // Keep baseline trajectory synced across tab switches when Mission Control hasn't overridden it
+  useEffect(() => {
+    const onMcImported = () => {
+      missionControlManagedRef.current = false;
+      setMcSyncVersion((v) => v + 1);
+    };
+    window.addEventListener(HERMES_MC_IMPORTED_EVENT, onMcImported);
+    return () => window.removeEventListener(HERMES_MC_IMPORTED_EVENT, onMcImported);
+  }, []);
+
+  // Keep baseline trajectory synced across tab switches & .hermes imports
   useEffect(() => {
     if (!results) {
       setSimApogee(null);
       return;
     }
     const mcSaved = loadSavedMissionControlParams();
+    const mcAero = loadMissionControlAero();
+    const aeroParsed = parseAeroDataRaw(mcAero.useAeroData, mcAero.aeroDataRaw);
     const expectedDiamM = Math.max(0.02, (mcSaved.rocketDiameter || motorStruct.outerDiameterMm) / 1000);
     const isStaleVsSaved =
       !simApogee ||
       Math.abs((simApogee.flightPathAngleDeg ?? 90) - mcSaved.flightPathAngle) > 1e-4 ||
       Math.abs((simApogee.launchAltitudeM ?? 169) - mcSaved.launchAltitude) > 1e-4 ||
-      Math.abs((simApogee.rocketDiameterM ?? 0.08) - expectedDiamM) > 1e-5;
+      Math.abs((simApogee.rocketDiameterM ?? 0.08) - expectedDiamM) > 1e-5 ||
+      Math.abs((simApogee.railLengthM ?? 2.0) - mcSaved.railLengthM) > 1e-4 ||
+      Math.abs((simApogee.windSpeedMs ?? 0) - mcSaved.windSpeedMs) > 1e-4 ||
+      simApogee.recoveryMode !== mcSaved.recoveryMode;
 
     if (missionControlManagedRef.current && (!isStaleVsSaved || activeTab === 'mission_control')) return;
 
@@ -219,16 +248,31 @@ export default function App() {
       expectedDiamM,
       mcSaved.launchAltitude,
       mcSaved.launchTemp,
-      undefined,
-      undefined,
-      mcSaved.flightPathAngle
+      aeroParsed?.mach,
+      aeroParsed?.cd,
+      mcSaved.flightPathAngle,
+      {
+        railLengthM: mcSaved.railLengthM,
+        windSpeedMs: mcSaved.windSpeedMs,
+        recoveryMode: mcSaved.recoveryMode,
+        chuteDiameterM: mcSaved.chuteDiameterM,
+        chuteCd: mcSaved.chuteCd,
+        drogueDiameterM: mcSaved.drogueDiameterM,
+        drogueCd: mcSaved.drogueCd,
+        mainDeployAltM: mcSaved.mainDeployAltM,
+      }
     );
     setSimApogee(baseline);
-  }, [results, motorStruct.motorMassKg, motorStruct.outerDiameterMm, activeTab]);
+  }, [results, motorStruct.motorMassKg, motorStruct.outerDiameterMm, activeTab, mcSyncVersion]);
 
   const t = translations[lang];
 
   const simulate = () => {
+    const liveValidation = validateMotorInputs(motor, grains, nozzle, motorStruct, customPropellants);
+    if (liveValidation.hasBlockingError) {
+      setSimulationError(t.sim_error_msg);
+      return;
+    }
     try {
       setSimulationError(null);
       const res = runSimulation({ motor, nozzle, grains, customPropellants });
@@ -321,72 +365,79 @@ export default function App() {
     }
   };
 
-  const prepareExport = (res: SimulationResults) => {
-    const data: any[] = [];
-    const summaryRows = [
-      ['Motor Class', res.summary.motorClass, ''],
-      ['Total Impulse (IT)', (res.summary.It_total_N_s || 0).toFixed(2), 'N·s'],
-      ['Specific Impulse (ISP)', (res.summary.Isp_total_s || 0).toFixed(2), 's'],
-      ['Burn Time', (res.summary.t_quemado || 0).toFixed(3), 's'],
-      ['Action Time', (res.summary.t_fin || 0).toFixed(3), 's'],
-      ['Max Pressure', (res.summary.Pmax_MPa || 0).toFixed(4), 'MPa'],
-      ['Avg Pressure', (res.summary.Pmed_MPa || 0).toFixed(4), 'MPa'],
-      ['Max Thrust', (res.summary.Fmax_N || 0).toFixed(2), 'N'],
-      ['Avg Thrust', (res.summary.Fmed_N || 0).toFixed(2), 'N'],
-    ];
-
-    const maxRows = Math.max(res.t.length, summaryRows.length);
-
-    for (let i = 0; i < maxRows; i++) {
-      const row: any = {};
-      if (i < res.t.length) {
-        row['Time (s)'] = Number((res.t[i] || 0).toFixed(4));
-        const p_mpa = Math.max(0, res.P0_gage[i] || 0);
-        row['Pressure (MPa)'] = Number(p_mpa.toFixed(4));
-        row['Pressure (bar)'] = Number((p_mpa * 10).toFixed(4));
-        row['Pressure (atm)'] = Number((p_mpa * 9.86923).toFixed(4));
-        const f_rn = Math.max(0, res.F_N[i] || 0);
-        row['Thrust RN (N)'] = Number(f_rn.toFixed(2));
-        row['Thrust RN (kg)'] = Number((f_rn / 9.81).toFixed(2));
-        const f_tti = Math.max(0, res.E_N[i] || 0);
-        row['Thrust TTI (N)'] = Number(f_tti.toFixed(2));
-        row['Thrust TTI (kg)'] = Number((f_tti / 9.81).toFixed(2));
-        row['Mass Flow (kg/s)'] = Number((res.mgra_total[i] || 0).toFixed(4));
-      } else {
-        row['Time (s)'] = '';
-        row['Pressure (MPa)'] = '';
-        row['Pressure (bar)'] = '';
-        row['Pressure (atm)'] = '';
-        row['Thrust RN (N)'] = '';
-        row['Thrust RN (kg)'] = '';
-        row['Thrust TTI (N)'] = '';
-        row['Thrust TTI (kg)'] = '';
-        row['Mass Flow (kg/s)'] = '';
-      }
-
-      row[''] = '';
-
-      if (i < summaryRows.length) {
-        row['Summary Metric'] = summaryRows[i][0];
-        row['Value'] = summaryRows[i][1];
-        row['Unit'] = summaryRows[i][2];
-      } else {
-        row['Summary Metric'] = '';
-        row['Value'] = '';
-        row['Unit'] = '';
-      }
-
-      data.push(row);
-    }
-
-    setExportData(data);
+  const prepareExport = (_res: SimulationResults) => {
     setExportFilename(`HERMES_Results_${motor.Dc}mm`);
     setShowExportModal(true);
   };
 
+  const handleApplyHermesWorkspace = (payload: HermesApplyPayload) => {
+    if (payload.nextCustomPropellants) {
+      persistPropellants(payload.nextCustomPropellants);
+    }
+    const effectiveProps = payload.nextCustomPropellants || customPropellants;
+    const effectiveMotor = payload.motor ? normalizeMotorWithStructure(payload.motor) : motor;
+    const effectiveNozzle = payload.nozzle ?? nozzle;
+    const effectiveGrains = payload.grains ?? grains;
+
+    if (payload.motor) setMotor(effectiveMotor);
+    if (payload.nozzle) setNozzle(effectiveNozzle);
+    if (payload.grains) setGrains(effectiveGrains);
+
+    if (payload.missionControl) {
+      missionControlManagedRef.current = false;
+      applyImportedMissionControlSnapshot(payload.missionControl);
+    }
+
+    if (payload.motor || payload.nozzle || payload.grains) {
+      try {
+        setSimulationError(null);
+        const res = runSimulation({
+          motor: effectiveMotor,
+          nozzle: effectiveNozzle,
+          grains: effectiveGrains,
+          customPropellants: effectiveProps,
+        });
+        setResults(res);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  const handleLoadLibrarySimulation = (entry: SavedSimulationEntry) => {
+    const resolved = resolveImportedPropellants(
+      entry.bundledPropellants || [],
+      entry.grains,
+      customPropellants
+    );
+    if (resolved.addedNames.length > 0) {
+      persistPropellants(resolved.nextCustomPropellants);
+    }
+    const normalizedMotor = normalizeMotorWithStructure(entry.motor);
+    setMotor(normalizedMotor);
+    setNozzle(entry.nozzle);
+    setGrains(resolved.remappedGrains);
+    if (entry.missionControl) {
+      missionControlManagedRef.current = false;
+      applyImportedMissionControlSnapshot(entry.missionControl);
+    }
+    try {
+      setSimulationError(null);
+      const res = runSimulation({
+        motor: normalizedMotor,
+        nozzle: entry.nozzle,
+        grains: resolved.remappedGrains,
+        customPropellants: resolved.addedNames.length > 0 ? resolved.nextCustomPropellants : customPropellants,
+      });
+      setResults(res);
+    } catch {
+      // keep loaded inputs even if parameters need editing
+    }
+  };
+
   return (
     <div className={`min-h-screen bg-background text-foreground flex flex-col font-sans overflow-x-hidden ${cursorClass}`}>
-      {showSplash && <SplashScreen lang={lang} onComplete={() => setShowSplash(false)} />}
+      {showSplash && <SplashScreen lang={lang} onComplete={handleSplashComplete} />}
 
       <header className="bg-card border-b border-border text-card-foreground py-2.5 px-4 md:px-6 flex justify-between items-center gap-4 shrink-0 relative z-20 transition-colors">
         <div className="flex items-center gap-3 min-w-0">
@@ -428,6 +479,19 @@ export default function App() {
               <span>{t.library_btn}</span>
             </Button>
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setHermesModalTab('export');
+              setShowHermesModal(true);
+            }}
+            className="h-8 px-2.5 text-xs font-medium gap-1.5 bg-background/70 hover:bg-muted border-border text-foreground whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Package className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>{t.hermes_share_btn}</span>
+          </Button>
 
           <Button
             variant="outline"
@@ -552,11 +616,20 @@ export default function App() {
               >
                 {t.cfd || 'CFD Animation'}
               </TabsTrigger>
+              <TabsTrigger
+                value="study"
+                data-tour="tab-trigger-study"
+                className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+              >
+                {t.tab_study || 'Estudio'}
+              </TabsTrigger>
             </TabsList>
             <Button
               data-tour="simulate-btn"
               onClick={simulate}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold whitespace-nowrap min-w-[156px] h-9 px-4 shrink-0 transition-colors cursor-pointer"
+              disabled={motorValidation.hasBlockingError}
+              title={motorValidation.hasBlockingError ? t.sim_error_msg : undefined}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold whitespace-nowrap min-w-[156px] h-9 px-4 shrink-0 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t.run}
             </Button>
@@ -641,7 +714,7 @@ export default function App() {
                         </div>
                       )}
                       <div className="flex flex-col flex-1 min-h-[460px] bg-card rounded-lg shadow-sm border overflow-hidden shrink-0 w-full">
-                        <PlaybackWrapper results={results} t_parent={t} motor={motor} nozzle={nozzle} />
+                        <PlaybackWrapper results={results} t_parent={t} lang={lang} motor={motor} nozzle={nozzle} />
                       </div>
                     </div>
                     <div className="flex-1 flex flex-col min-h-[400px]">
@@ -649,6 +722,12 @@ export default function App() {
                         simApogee={simApogee}
                         expApogee={expApogee}
                         t={t}
+                        lang={lang}
+                        avgChamberPressureMPa={
+                          results?.summary.Pmed_MPa
+                            ? results.summary.Pmed_MPa + (motor.Pamb || 0.101325)
+                            : undefined
+                        }
                         propellantType={results?.propellantType || 1}
                         motor={motor}
                         nozzle={nozzle}
@@ -715,6 +794,20 @@ export default function App() {
               </ErrorBoundary>
             )}
           </TabsContent>
+
+          <TabsContent value="study" data-tour="study-panel" className="flex-1 flex flex-col min-h-0 gap-2 px-1 overflow-y-auto pt-2">
+            <ErrorBoundary fallbackTitle="Error in Study Module">
+              <StudyPanel
+                lang={lang}
+                results={results}
+                motor={motor}
+                nozzle={nozzle}
+                grains={grains}
+                customPropellants={customPropellants}
+                savedSimulations={savedSimulations}
+              />
+            </ErrorBoundary>
+          </TabsContent>
         </Tabs>
       </main>
 
@@ -747,16 +840,20 @@ export default function App() {
             </button>
           </div>
         </div>
+      </footer>
 
-        <SimulationModals
+      <SimulationModals
           t={t}
+          lang={lang}
           showExportModal={showExportModal}
           setShowExportModal={setShowExportModal}
           exportFilename={exportFilename}
           setExportFilename={setExportFilename}
           exportFormat={exportFormat}
           setExportFormat={setExportFormat}
-          exportData={exportData}
+          results={results}
+          customPropellants={customPropellants}
+          simApogee={simApogee}
           showFeedbackModal={showFeedbackModal}
           setShowFeedbackModal={setShowFeedbackModal}
           feedbackMessage={feedbackMessage}
@@ -774,16 +871,31 @@ export default function App() {
           setSavedSimulations={setSavedSimulations}
           showLibraryModal={showLibraryModal}
           setShowLibraryModal={setShowLibraryModal}
-          onLoadSimulation={(loadedMotor, loadedNozzle, loadedGrains) => {
-            setMotor(loadedMotor);
-            setNozzle(loadedNozzle);
-            setGrains(loadedGrains);
+          onLoadSimulation={handleLoadLibrarySimulation}
+          onOpenHermesImport={() => {
+            setHermesModalTab('import');
+            setShowHermesModal(true);
           }}
           showPadmInfo={showPadmInfo}
           setShowPadmInfo={setShowPadmInfo}
           motorStruct={motorStruct}
           simToDelete={simToDelete}
           setSimToDelete={setSimToDelete}
+        />
+
+        <HermesShareModals
+          isOpen={showHermesModal}
+          onClose={() => setShowHermesModal(false)}
+          initialTab={hermesModalTab}
+          t={t}
+          motor={motor}
+          nozzle={nozzle}
+          grains={grains}
+          customPropellants={customPropellants}
+          motorClassHint={results?.summary.motorClass}
+          onApplyImportedWorkspace={handleApplyHermesWorkspace}
+          onSaveImportedToLibrary={(entry) => setSavedSimulations((prev) => [...prev, entry])}
+          onPersistCustomPropellants={persistPropellants}
         />
 
         <GuideBookModal
@@ -863,7 +975,6 @@ export default function App() {
           onOpenFeedback={() => setShowFeedbackModal(true)}
           t={t}
         />
-      </footer>
     </div>
   );
 }

@@ -11,3 +11,10 @@ export {
   getMinStarValleyDiameterMm,
   getOrComputeStarBurnbackTable,
 } from './starGrain';
+export { finocylGrainModule, getMaxFinocylWidthMm } from './finocylGrain';
+export { moonburnerGrainModule, getMaxMoonburnerOffsetMm } from './moonburnerGrain';
+export { cSlotGrainModule, getMaxCSlotDepthMm } from './cSlotGrain';
+export { dGrainModule } from './dGrain';
+export { rodAndTubeGrainModule } from './rodAndTubeGrain';
+export { wagonWheelGrainModule, getMaxWagonWheelSpokeWidthMm } from './wagonWheelGrain';
+export * from './labels';

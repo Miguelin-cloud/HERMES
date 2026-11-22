@@ -16,13 +16,20 @@ export const batesGrainModule: GrainGeometryModule = {
   solverMode: 'analytical',
 
   getInitialGeometry(
-    grain: Pick<GrainInput, 'shape' | 'D0' | 'd0' | 'd0mayor' | 'L0' | 'N' | 'Np'>
+    grain: Pick<GrainInput, 'shape' | 'D0' | 'd0' | 'd0mayor' | 'L0' | 'N' | 'Np'> &
+      Partial<Pick<GrainInput, 'osi' | 'ci' | 'ei'>>
   ): GrainInitialGeometry {
     const crossSectionAreaMm2 = Math.max(0, (Math.PI / 4) * (Math.pow(grain.D0, 2) - Math.pow(grain.d0, 2)));
     const portAreaMm2 = Math.max(0, (Math.PI / 4) * Math.pow(grain.d0, 2));
     const blockVolumeMm3 = Math.max(0, crossSectionAreaMm2 * grain.L0);
     const totalVolumeMm3 = Math.max(0, blockVolumeMm3 * (grain.N || 0));
-    const tweb0 = (grain.D0 - grain.d0) / 2;
+
+    const hasFaceFlags = grain.osi !== undefined || grain.ci !== undefined || grain.ei !== undefined;
+    const radialRate = hasFaceFlags ? (grain.osi ? 1 : 0) + (grain.ci ? 1 : 0) : 1;
+    const radialWeb = radialRate > 0 ? Math.max(0, (grain.D0 - grain.d0) / (2 * radialRate)) : Infinity;
+    const axialWeb = grain.ei && grain.L0 > 0 ? grain.L0 * 0.5 : Infinity;
+    const minWeb = Math.min(radialWeb, axialWeb);
+    const tweb0 = Number.isFinite(minWeb) ? minWeb : Math.max(0, (grain.D0 - grain.d0) / 2);
 
     return {
       blockVolumeMm3,
@@ -93,7 +100,6 @@ export const batesGrainModule: GrainGeometryModule = {
     const d = state.d0 + state.ci * 2 * xMm;
     const D = state.D0 - state.osi * 2 * xMm;
     const L = state.L0 * state.N - state.ei * 2 * state.N * xMm;
-    const tweb = (D - d) / 2;
 
     if (d >= D || L <= 0) {
       return {
@@ -108,10 +114,16 @@ export const batesGrainModule: GrainGeometryModule = {
         Abe: 0,
         Abc: 0,
         Abs: 0,
-        Ab: 1e-4,
+        Ab: 0,
         Aduct: (Math.PI / 4) * Math.pow(motorDcMm, 2),
       };
     }
+
+    const radialRate = (state.osi ? 1 : 0) + (state.ci ? 1 : 0);
+    const radialTweb = radialRate > 0 ? Math.max(0, (D - d) / (2 * radialRate)) : Infinity;
+    const axialTweb = state.ei && state.N > 0 ? Math.max(0, L / (2 * state.N)) : Infinity;
+    const minTweb = Math.min(radialTweb, axialTweb);
+    const tweb = Number.isFinite(minTweb) ? minTweb : Math.max(0, (D - d) / 2);
 
     const crossArea = (Math.PI / 4) * (Math.pow(D, 2) - Math.pow(d, 2));
     const Aduct = (Math.PI / 4) * Math.pow(motorDcMm, 2) - crossArea;

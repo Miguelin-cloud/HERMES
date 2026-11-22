@@ -8,6 +8,7 @@ import {
   getPropellantData 
 } from '../lib/types';
 import { translations, Language } from '../lib/i18n';
+import { getGrainShapeLabel } from '../lib/grains';
 import { 
   ResponsiveContainer, 
   LineChart, 
@@ -231,9 +232,17 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
   const massFlowAnalysis = useMemo(() => {
     const mdotMax_gs = (results.summary.mdot_max ?? 0) * 1000;
     const mdotAvg_gs = (results.summary.mdot_avg ?? 0) * 1000;
-    const initialMass_g = results.summary.initial_mass_g ?? 0;
+    const initialMass_g = results.summary.initial_mass_g ?? (results.mgra_total?.[0] || 0) * 1000;
+    const finalMass_g =
+      results.mgra_total && results.mgra_total.length > 0
+        ? Math.max(0, (results.mgra_total[results.mgra_total.length - 1] || 0) * 1000)
+        : 0;
+    const consumedPct =
+      initialMass_g > 1e-6
+        ? Math.min(100, Math.max(0, ((initialMass_g - finalMass_g) / initialMass_g) * 100))
+        : 0;
 
-    return { mdotMax_gs, mdotAvg_gs, initialMass_g };
+    return { mdotMax_gs, mdotAvg_gs, initialMass_g, consumedPct };
   }, [results]);
 
   return (
@@ -427,7 +436,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
                     <div className="flex items-center gap-2">
                       <Layers size={15} className="text-primary" />
                       <span className="text-xs font-mono font-semibold uppercase tracking-wider text-card-header-foreground">
-                        {t.grains} {idx + 1} · {g.shape === 1 ? 'BATES / Cyl' : g.shape === 2 ? 'Star Core' : 'Solid End'}
+                        {t.grains} {idx + 1} · {getGrainShapeLabel(g.shape, t)}
                       </span>
                     </div>
                     <span className="text-[11px] font-mono text-muted-foreground">cm² vs Time</span>
@@ -827,7 +836,9 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
             <div className="p-3 rounded-lg bg-card border border-border flex flex-col">
               <span className="text-[11px] font-mono text-muted-foreground uppercase">{t.consumed_mass}</span>
               <div className="flex items-baseline gap-1 mt-1 font-mono tabular-nums">
-                <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">100.0</span>
+                <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {massFlowAnalysis.consumedPct.toFixed(1)}
+                </span>
                 <span className="text-[10px] text-muted-foreground">%</span>
               </div>
             </div>

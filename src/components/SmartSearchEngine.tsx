@@ -58,9 +58,22 @@ import {
   ZAxis
 } from 'recharts';
 import { smartLoc } from '../lib/smartSearchI18n';
+import { translations } from '../lib/i18n';
 import { ThemeColors } from '../lib/theme';
 import { calculateMotorStructure } from '../lib/motorStructure';
-import { getMinStarValleyDiameterMm } from '../lib/grains';
+import {
+  getAllGrainModules,
+  getDefaultGrainParamsForShape,
+  getGrainShapeDesc,
+  getGrainShapeLabel,
+  getMaxCSlotDepthMm,
+  getMaxFinocylWidthMm,
+  getMaxMoonburnerOffsetMm,
+  getMaxWagonWheelSpokeWidthMm,
+  getMinStarValleyDiameterMm,
+  isComplexGrain,
+} from '../lib/grains';
+import { GrainShapeIcon } from './MotorInputsPanel';
 import { 
   SmartSearchGoal, 
   CandidateResult, 
@@ -75,9 +88,158 @@ import {
   MotorInput, 
   NozzleInput, 
   GrainInput, 
+  GrainShapeId,
   CustomPropellant, 
   DEFAULT_PROPELLANTS 
 } from '../lib/types';
+
+interface SmartVarCardProps {
+  title: string;
+  subtitle: string;
+  unit?: string;
+  step?: string;
+  mode: VariableConstraintMode;
+  setMode: (m: VariableConstraintMode) => void;
+  val: string;
+  minVal: string;
+  maxVal: string;
+  onChangeVal: (v: string) => void;
+  onChangeMin: (v: string) => void;
+  onChangeMax: (v: string) => void;
+  onBlurVal?: () => void;
+  freeText: string;
+  placeholderFixed?: string;
+  placeholderMin?: string;
+  placeholderMax?: string;
+  errorText?: string | null;
+  warningText?: string | null;
+  loc: (es: string, en: string, fr?: string, it?: string) => string;
+}
+
+function SmartVarConstraintCard({
+  title,
+  subtitle,
+  unit = 'mm',
+  step = '0.5',
+  mode,
+  setMode,
+  val,
+  minVal,
+  maxVal,
+  onChangeVal,
+  onChangeMin,
+  onChangeMax,
+  onBlurVal,
+  freeText,
+  placeholderFixed,
+  placeholderMin,
+  placeholderMax,
+  errorText,
+  warningText,
+  loc,
+}: SmartVarCardProps) {
+  const hasErr = Boolean(errorText);
+  return (
+    <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
+      <div>
+        <div className="text-xs font-bold text-foreground">{title}</div>
+        <div className="text-[10px] text-muted-foreground font-mono tabular-nums">{subtitle}</div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-1 p-1 bg-muted/60 rounded-lg text-[11px] font-mono">
+        <button
+          type="button"
+          onClick={() => setMode('free')}
+          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+            mode === 'free' ? 'bg-emerald-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {loc('Libre', 'Free')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('fixed')}
+          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+            mode === 'fixed' ? 'bg-amber-500 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {loc('Fijo', 'Fixed')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('range')}
+          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
+            mode === 'range' ? 'bg-blue-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {loc('Rango', 'Range')}
+        </button>
+      </div>
+
+      {mode === 'free' && (
+        <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center">
+          {freeText}
+        </div>
+      )}
+
+      {mode === 'fixed' && (
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="number"
+            step={step}
+            value={val}
+            onChange={(e) => onChangeVal(e.target.value)}
+            onBlur={onBlurVal}
+            placeholder={placeholderFixed}
+            className={`h-8 text-xs font-mono font-bold flex-1 tabular-nums ${hasErr ? 'border-red-500 bg-red-500/10' : ''}`}
+          />
+          {unit && <span className="text-xs font-mono text-muted-foreground">{unit}</span>}
+          {hasErr && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
+        </div>
+      )}
+
+      {mode === 'range' && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <span className="text-[10px] text-muted-foreground font-mono">Mín {unit ? `(${unit})` : ''}</span>
+            <Input
+              type="number"
+              step={step}
+              value={minVal}
+              onChange={(e) => onChangeMin(e.target.value)}
+              placeholder={placeholderMin}
+              className={`h-8 text-xs font-mono font-bold tabular-nums ${hasErr ? 'border-red-500 bg-red-500/10' : ''}`}
+            />
+          </div>
+          <div>
+            <span className="text-[10px] text-muted-foreground font-mono">Máx {unit ? `(${unit})` : ''}</span>
+            <Input
+              type="number"
+              step={step}
+              value={maxVal}
+              onChange={(e) => onChangeMax(e.target.value)}
+              placeholder={placeholderMax}
+              className={`h-8 text-xs font-mono font-bold tabular-nums ${hasErr ? 'border-red-500 bg-red-500/10' : ''}`}
+            />
+          </div>
+        </div>
+      )}
+
+      {errorText && (
+        <p className="text-[10px] text-red-500 font-medium flex items-start gap-1">
+          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+          <span>{errorText}</span>
+        </p>
+      )}
+      {!errorText && warningText && (
+        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-start gap-1">
+          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+          <span>{warningText}</span>
+        </p>
+      )}
+    </div>
+  );
+}
 
 interface SmartSearchEngineProps {
   initialMotor: MotorInput;
@@ -104,6 +266,7 @@ export function SmartSearchEngine({
   const isFrench = lang === 'fr';
   const isItalian = lang === 'it';
   const isLight = theme === 'light';
+  const t = translations[lang] || translations.en;
 
   const chartThrustColor = themeColors?.chartThrust || '#059669';
   const chartPressureColor = themeColors?.chartPressure || '#2563eb';
@@ -194,20 +357,68 @@ export function SmartSearchEngine({
     minD0: Math.max(10, parseFloat((initialAvailableD0 - 3.0).toFixed(1))).toString(),
     maxD0: Math.max(10.5, parseFloat(initialAvailableD0.toFixed(1))).toString(),
     // d0 modes
-    vald0: (initialGrains[0]?.d0 && initialGrains[0].d0 > 0 ? initialGrains[0].d0 : 10.0).toString(),
+    vald0: (initialGrains[0]?.d0 && initialGrains[0].d0 > 0
+      ? initialGrains[0].d0
+      : parseFloat(Math.max(6, initialAvailableD0 * 0.3).toFixed(1))
+    ).toString(),
     mind0: '6.0',
-    maxd0: '16.0',
-    // Star valley diameter (d0mayor / Dp) modes
-    vald0mayor: (initialGrains[0]?.shape === 2 && initialGrains[0]?.d0mayor > 0
+    maxd0: Math.max(16, parseFloat((initialAvailableD0 * 0.65).toFixed(1))).toString(),
+    // Radial feature outer diameter (d0mayor / Dp / Dfin / Dwin) modes
+    vald0mayor: (initialGrains[0]?.d0mayor && initialGrains[0].d0mayor > 0
       ? initialGrains[0].d0mayor
-      : Math.max(16, parseFloat((initialAvailableD0 * 0.65).toFixed(1)))
+      : Math.max(16, parseFloat((initialAvailableD0 * 0.68).toFixed(1)))
     ).toString(),
     mind0mayor: Math.max(14, parseFloat((initialAvailableD0 * 0.45).toFixed(1))).toString(),
-    maxd0mayor: Math.max(20, parseFloat((initialAvailableD0 - 4.0).toFixed(1))).toString(),
-    // Star points count (Np) modes
-    valNp: (initialGrains[0]?.shape === 2 && initialGrains[0]?.Np >= 3 ? initialGrains[0].Np : 5).toString(),
-    minNp: '3',
+    maxd0mayor: Math.max(20, parseFloat((initialAvailableD0 - 3.0).toFixed(1))).toString(),
+    // Feature count (Np: Star points / Finocyl fins / Wagon Wheel spokes) modes
+    valNp: (initialGrains[0]?.Np && initialGrains[0].Np >= 2
+      ? initialGrains[0].Np
+      : initialGrains[0]?.shape === 4 || initialGrains[0]?.shape === 9 ? 6 : 5
+    ).toString(),
+    minNp: initialGrains[0]?.shape === 4 ? '2' : '3',
     maxNp: '8',
+    // Finocyl finWidth modes
+    valFinWidth: (initialGrains[0]?.finWidth && initialGrains[0].finWidth > 0
+      ? initialGrains[0].finWidth
+      : parseFloat(Math.max(1.5, initialAvailableD0 * 0.08).toFixed(1))
+    ).toString(),
+    minFinWidth: '1.2',
+    maxFinWidth: parseFloat(Math.max(3.0, initialAvailableD0 * 0.16).toFixed(1)).toString(),
+    // Wagon Wheel spokeWidth modes
+    valSpokeWidth: (initialGrains[0]?.spokeWidth && initialGrains[0].spokeWidth > 0
+      ? initialGrains[0].spokeWidth
+      : parseFloat(Math.max(1.5, initialAvailableD0 * 0.075).toFixed(1))
+    ).toString(),
+    minSpokeWidth: '1.2',
+    maxSpokeWidth: parseFloat(Math.max(3.0, initialAvailableD0 * 0.14).toFixed(1)).toString(),
+    // Moonburner coreOffset modes
+    valCoreOffset: (initialGrains[0]?.coreOffset !== undefined && initialGrains[0].coreOffset >= 0
+      ? initialGrains[0].coreOffset
+      : parseFloat(Math.max(2.0, initialAvailableD0 * 0.15).toFixed(1))
+    ).toString(),
+    minCoreOffset: '1.0',
+    maxCoreOffset: parseFloat(Math.max(4.0, initialAvailableD0 * 0.3).toFixed(1)).toString(),
+    // C-Slot slotWidth modes
+    valSlotWidth: (initialGrains[0]?.slotWidth && initialGrains[0].slotWidth > 0
+      ? initialGrains[0].slotWidth
+      : parseFloat(Math.max(2.5, initialAvailableD0 * 0.15).toFixed(1))
+    ).toString(),
+    minSlotWidth: '2.0',
+    maxSlotWidth: parseFloat(Math.max(5.0, initialAvailableD0 * 0.35).toFixed(1)).toString(),
+    // C-Slot / D-Grain slotDepth modes
+    valSlotDepth: (initialGrains[0]?.slotDepth && initialGrains[0].slotDepth > 0
+      ? initialGrains[0].slotDepth
+      : parseFloat(Math.max(6.0, initialAvailableD0 * 0.5).toFixed(1))
+    ).toString(),
+    minSlotDepth: parseFloat(Math.max(3.0, initialAvailableD0 * 0.2).toFixed(1)).toString(),
+    maxSlotDepth: parseFloat(Math.max(8.0, initialAvailableD0 * 0.72).toFixed(1)).toString(),
+    // Rod & Tube rodDiameter modes
+    valRodDiameter: (initialGrains[0]?.rodDiameter && initialGrains[0].rodDiameter > 0
+      ? initialGrains[0].rodDiameter
+      : parseFloat(Math.max(3.0, initialAvailableD0 * 0.28).toFixed(1))
+    ).toString(),
+    minRodDiameter: '2.5',
+    maxRodDiameter: parseFloat(Math.max(5.0, initialAvailableD0 * 0.45).toFixed(1)).toString(),
     // L0 modes
     valL0: '50.0',
     minL0: '30.0',
@@ -228,10 +439,10 @@ export function SmartSearchEngine({
   const [propellantId, setPropellantId] = useState<number>(() => {
     return initialGrains[0]?.propellantType || 1;
   });
-  const [shape, setShape] = useState<1 | 2 | 3>(() => {
+  const [shape, setShape] = useState<GrainShapeId>(() => {
     const s = initialGrains[0]?.shape;
-    return s === 2 ? 2 : s === 3 ? 3 : 1;
-  }); // 1: BATES/Tubular, 2: Star, 3: Solid
+    return s && s >= 1 && s <= 9 ? (s as GrainShapeId) : 1;
+  });
   const [grainCountMode, setGrainCountMode] = useState<'range' | 'fixed'>('range');
   
   // Advanced Variable Constraint Modes: 'free' | 'fixed' | 'range'
@@ -239,14 +450,23 @@ export function SmartSearchEngine({
   const [moded0, setModed0] = useState<VariableConstraintMode>('free');
   const [moded0mayor, setModed0mayor] = useState<VariableConstraintMode>('free');
   const [modeNp, setModeNp] = useState<VariableConstraintMode>('range');
+  const [modeFinWidth, setModeFinWidth] = useState<VariableConstraintMode>('free');
+  const [modeSpokeWidth, setModeSpokeWidth] = useState<VariableConstraintMode>('free');
+  const [modeCoreOffset, setModeCoreOffset] = useState<VariableConstraintMode>('free');
+  const [modeSlotWidth, setModeSlotWidth] = useState<VariableConstraintMode>('free');
+  const [modeSlotDepth, setModeSlotDepth] = useState<VariableConstraintMode>('free');
+  const [modeRodDiameter, setModeRodDiameter] = useState<VariableConstraintMode>('free');
   const [modeL0, setModeL0] = useState<VariableConstraintMode>('free');
   const [modeMprop, setModeMprop] = useState<VariableConstraintMode>('free');
 
   // Burn surfaces: 1 = Burns (active), 0 = Inhibited (protected)
-  // Default BATES: Outer surface inhibited (osi=0), Core burns (ci=1), Ends burn (ei=1)
-  const [outerBurns, setOuterBurns] = useState<boolean>(false);
-  const [coreBurns, setCoreBurns] = useState<boolean>(true);
-  const [endsBurn, setEndsBurn] = useState<boolean>(true);
+  const [outerBurns, setOuterBurns] = useState<boolean>(() => Boolean(initialGrains[0]?.osi));
+  const [coreBurns, setCoreBurns] = useState<boolean>(() =>
+    initialGrains[0] ? Boolean(initialGrains[0].ci || initialGrains[0].shape !== 3) : true
+  );
+  const [endsBurn, setEndsBurn] = useState<boolean>(() =>
+    initialGrains[0] ? Boolean(initialGrains[0].ei) : true
+  );
 
   const [goal, setGoal] = useState<SmartSearchGoal>('max_impulse');
   const [budgetPreset, setBudgetPreset] = useState<OptimizationBudgetPreset>('standard');
@@ -307,17 +527,18 @@ export function SmartSearchEngine({
       ? (!inputValues.maxGrainCount.trim() || parseInt(inputValues.maxGrainCount) < 1)
       : (!inputValues.fixedGrainCount.trim() || parseInt(inputValues.fixedGrainCount) < 1)
   );
+  const hasCorePort = shape === 1 || shape === 2 || shape === 4 || shape === 5 || shape === 8 || shape === 9;
+  const usesRadialD0MayorAndNp = shape === 2 || shape === 4 || shape === 9;
+
   const isD0EmptyOrInvalid = modeD0 === 'fixed' && touched['valD0'] && (!inputValues.valD0.trim() || parseFloat(inputValues.valD0) <= 0);
-  const isd0EmptyOrInvalid = shape !== 3 && moded0 === 'fixed' && touched['vald0'] && (!inputValues.vald0.trim() || parseFloat(inputValues.vald0) <= 0);
-  const isd0mayorEmptyOrInvalid = shape === 2 && moded0mayor === 'fixed' && touched['vald0mayor'] && (!inputValues.vald0mayor.trim() || parseFloat(inputValues.vald0mayor) <= 0);
+  const isd0EmptyOrInvalid = hasCorePort && moded0 === 'fixed' && touched['vald0'] && (!inputValues.vald0.trim() || parseFloat(inputValues.vald0) <= 0);
+  const isd0mayorEmptyOrInvalid = usesRadialD0MayorAndNp && moded0mayor === 'fixed' && touched['vald0mayor'] && (!inputValues.vald0mayor.trim() || parseFloat(inputValues.vald0mayor) <= 0);
   const isL0EmptyOrInvalid = modeL0 === 'fixed' && touched['valL0'] && (!inputValues.valL0.trim() || parseFloat(inputValues.valL0) <= 0);
 
   // Geometric & Physical validation helpers for Phase 1 & 2
-  // Phase 1 (Chamber & Nozzle):
   const isDt0GeDs = Dt0Val >= DsVal;
   const isDt0GeDc = Dt0Val >= DcVal;
 
-  // Phase 2 (Grains):
   const valD0Num = parseFloat(inputValues.valD0) || 0;
   const minD0Num = parseFloat(inputValues.minD0) || 0;
   const maxD0Num = parseFloat(inputValues.maxD0) || 0;
@@ -334,6 +555,30 @@ export function SmartSearchEngine({
   const minNpNum = parseInt(inputValues.minNp) || 0;
   const maxNpNum = parseInt(inputValues.maxNp) || 0;
 
+  const valFinWidthNum = parseFloat(inputValues.valFinWidth) || 0;
+  const minFinWidthNum = parseFloat(inputValues.minFinWidth) || 0;
+  const maxFinWidthNum = parseFloat(inputValues.maxFinWidth) || 0;
+
+  const valSpokeWidthNum = parseFloat(inputValues.valSpokeWidth) || 0;
+  const minSpokeWidthNum = parseFloat(inputValues.minSpokeWidth) || 0;
+  const maxSpokeWidthNum = parseFloat(inputValues.maxSpokeWidth) || 0;
+
+  const valCoreOffsetNum = parseFloat(inputValues.valCoreOffset);
+  const minCoreOffsetNum = parseFloat(inputValues.minCoreOffset);
+  const maxCoreOffsetNum = parseFloat(inputValues.maxCoreOffset);
+
+  const valSlotWidthNum = parseFloat(inputValues.valSlotWidth) || 0;
+  const minSlotWidthNum = parseFloat(inputValues.minSlotWidth) || 0;
+  const maxSlotWidthNum = parseFloat(inputValues.maxSlotWidth) || 0;
+
+  const valSlotDepthNum = parseFloat(inputValues.valSlotDepth) || 0;
+  const minSlotDepthNum = parseFloat(inputValues.minSlotDepth) || 0;
+  const maxSlotDepthNum = parseFloat(inputValues.maxSlotDepth) || 0;
+
+  const valRodDiameterNum = parseFloat(inputValues.valRodDiameter) || 0;
+  const minRodDiameterNum = parseFloat(inputValues.minRodDiameter) || 0;
+  const maxRodDiameterNum = parseFloat(inputValues.maxRodDiameter) || 0;
+
   const valL0Num = parseFloat(inputValues.valL0) || 0;
   const minL0Num = parseFloat(inputValues.minL0) || 0;
   const maxL0Num = parseFloat(inputValues.maxL0) || 0;
@@ -346,18 +591,33 @@ export function SmartSearchEngine({
   const isMinD0ExceedsClearance = !isClearanceCollapsed && modeD0 === 'range' && minD0Num > availableD0 + 1e-6 && minD0Num > 0;
   const isD0RangeInverted = modeD0 === 'range' && minD0Num > 0 && maxD0Num > 0 && minD0Num >= maxD0Num;
 
-  // d0 checks:
+  // d0 checks for core-bearing shapes (1, 2, 4, 5, 8, 9):
   const effectiveOuterD = modeD0 === 'fixed' && valD0Num > 0
     ? Math.min(valD0Num, Math.max(0, availableD0))
     : modeD0 === 'range' && maxD0Num > 0
       ? Math.min(maxD0Num, Math.max(0, availableD0))
       : Math.max(0, availableD0);
-  const isd0GeD0 = shape !== 3 && moded0 === 'fixed' && vald0Num > 0 && vald0Num >= effectiveOuterD;
-  const isd0RangeInverted = shape !== 3 && moded0 === 'range' && mind0Num > 0 && maxd0Num > 0 && mind0Num >= maxd0Num;
-  const isMind0GeD0 = shape !== 3 && moded0 === 'range' && mind0Num > 0 && mind0Num >= effectiveOuterD;
+  const effectiveMinOuterD = modeD0 === 'fixed' && valD0Num > 0
+    ? valD0Num
+    : modeD0 === 'range' && minD0Num > 0
+      ? minD0Num
+      : Math.max(10, availableD0 - 4);
+  const effectiveMaxd0Ref = moded0 === 'fixed' && vald0Num > 0
+    ? vald0Num
+    : moded0 === 'range' && maxd0Num > 0
+      ? maxd0Num
+      : effectiveOuterD * 0.6;
+  const effectiveMind0Ref = moded0 === 'fixed' && vald0Num > 0
+    ? vald0Num
+    : moded0 === 'range' && mind0Num > 0
+      ? mind0Num
+      : 4.0;
 
-  // Star checks (d0mayor & Np when shape === 2):
-  // Concave star condition matching Inputs tab: d0mayor > d0 / cos(pi / Np)
+  const isd0GeD0 = hasCorePort && moded0 === 'fixed' && vald0Num > 0 && vald0Num >= effectiveOuterD;
+  const isd0RangeInverted = hasCorePort && moded0 === 'range' && mind0Num > 0 && maxd0Num > 0 && mind0Num >= maxd0Num;
+  const isMind0GeD0 = hasCorePort && moded0 === 'range' && mind0Num > 0 && mind0Num >= effectiveOuterD;
+
+  // Star checks (shape === 2):
   const starMaxNpPossible =
     modeNp === 'fixed'
       ? Math.max(3, valNpNum)
@@ -392,12 +652,12 @@ export function SmartSearchEngine({
     vald0mayorNum > 0 &&
     minStarD0mayorStrict > 0 &&
     vald0mayorNum <= minStarD0mayorStrict + 1e-6;
-  const isd0mayorGeD0 = shape === 2 && moded0mayor === 'fixed' && vald0mayorNum > 0 && vald0mayorNum >= effectiveOuterD;
-  const isd0mayorRangeInverted = shape === 2 && moded0mayor === 'range' && mind0mayorNum > 0 && maxd0mayorNum > 0 && mind0mayorNum >= maxd0mayorNum;
-  const isMaxd0mayorGeD0 = shape === 2 && moded0mayor === 'range' && maxd0mayorNum > 0 && maxd0mayorNum >= effectiveOuterD;
-  const isMind0mayorGeD0 = shape === 2 && moded0mayor === 'range' && mind0mayorNum > 0 && mind0mayorNum >= effectiveOuterD;
-  const isMaxd0mayorLeqd0 = shape === 2 && moded0mayor === 'range' && moded0 === 'fixed' && maxd0mayorNum > 0 && vald0Num > 0 && maxd0mayorNum <= vald0Num;
-  const isMaxd0mayorLeqMind0 = shape === 2 && moded0mayor === 'range' && moded0 === 'range' && maxd0mayorNum > 0 && mind0Num > 0 && maxd0mayorNum <= mind0Num;
+  const isd0mayorGeD0 = usesRadialD0MayorAndNp && moded0mayor === 'fixed' && vald0mayorNum > 0 && vald0mayorNum >= effectiveOuterD;
+  const isd0mayorRangeInverted = usesRadialD0MayorAndNp && moded0mayor === 'range' && mind0mayorNum > 0 && maxd0mayorNum > 0 && mind0mayorNum >= maxd0mayorNum;
+  const isMaxd0mayorGeD0 = usesRadialD0MayorAndNp && moded0mayor === 'range' && maxd0mayorNum > 0 && maxd0mayorNum >= effectiveOuterD;
+  const isMind0mayorGeD0 = usesRadialD0MayorAndNp && moded0mayor === 'range' && mind0mayorNum > 0 && mind0mayorNum >= effectiveOuterD;
+  const isMaxd0mayorLeqd0 = usesRadialD0MayorAndNp && moded0mayor === 'range' && moded0 === 'fixed' && maxd0mayorNum > 0 && vald0Num > 0 && maxd0mayorNum <= vald0Num;
+  const isMaxd0mayorLeqMind0 = usesRadialD0MayorAndNp && moded0mayor === 'range' && moded0 === 'range' && maxd0mayorNum > 0 && mind0Num > 0 && maxd0mayorNum <= mind0Num;
   const isStarMaxDpBelowGeomMin =
     shape === 2 &&
     moded0mayor === 'range' &&
@@ -417,8 +677,10 @@ export function SmartSearchEngine({
     minStarD0mayorStrict > 0 &&
     effectiveOuterD > 0 &&
     minStarD0mayorStrict >= effectiveOuterD - 0.5;
-  const isNpInvalid = shape === 2 && modeNp === 'fixed' && valNpNum < 3;
-  const isNpRangeInvalid = shape === 2 && modeNp === 'range' && (minNpNum < 3 || maxNpNum < 3 || minNpNum > maxNpNum);
+
+  const minNpRequired = shape === 4 ? 2 : 3;
+  const isNpInvalid = usesRadialD0MayorAndNp && modeNp === 'fixed' && valNpNum < minNpRequired;
+  const isNpRangeInvalid = usesRadialD0MayorAndNp && modeNp === 'range' && (minNpNum < minNpRequired || maxNpNum < minNpRequired || minNpNum > maxNpNum);
   const hasStarGeometricAlert =
     shape === 2 &&
     (isNpInvalid ||
@@ -433,6 +695,52 @@ export function SmartSearchEngine({
       isMaxd0mayorLeqMind0 ||
       isStarMaxDpBelowGeomMin ||
       isStarGeomExceedsD0);
+
+  // Finocyl (4) & Wagon Wheel (9) radial feature checks
+  const isRadialTipLeqd0 = (shape === 4 || shape === 9) && moded0mayor === 'fixed' && moded0 === 'fixed' && vald0mayorNum > 0 && vald0Num > 0 && vald0mayorNum <= vald0Num;
+  const refNpForMaxWidth = modeNp === 'fixed' ? Math.max(minNpRequired, valNpNum) : modeNp === 'range' ? Math.max(minNpRequired, minNpNum) : 6;
+  const maxFinWidthAllowed = shape === 4 ? getMaxFinocylWidthMm(effectiveMaxd0Ref, refNpForMaxWidth) : 999;
+  const isFinWidthInvalid = shape === 4 && (
+    (modeFinWidth === 'fixed' && (valFinWidthNum <= 0 || valFinWidthNum >= maxFinWidthAllowed - 1e-6)) ||
+    (modeFinWidth === 'range' && ((minFinWidthNum > 0 && maxFinWidthNum > 0 && minFinWidthNum >= maxFinWidthNum) || minFinWidthNum >= maxFinWidthAllowed - 1e-6))
+  );
+  const maxSpokeWidthAllowed = shape === 9 ? getMaxWagonWheelSpokeWidthMm(effectiveMaxd0Ref, refNpForMaxWidth) : 999;
+  const isSpokeWidthInvalid = shape === 9 && (
+    (modeSpokeWidth === 'fixed' && (valSpokeWidthNum <= 0 || valSpokeWidthNum >= maxSpokeWidthAllowed - 1e-6)) ||
+    (modeSpokeWidth === 'range' && ((minSpokeWidthNum > 0 && maxSpokeWidthNum > 0 && minSpokeWidthNum >= maxSpokeWidthNum) || minSpokeWidthNum >= maxSpokeWidthAllowed - 1e-6))
+  );
+
+  // Moonburner (5) checks
+  const maxMoonOffsetAllowed = shape === 5 ? getMaxMoonburnerOffsetMm(effectiveOuterD, effectiveMind0Ref) : 999;
+  const isMoonOffsetInvalid = shape === 5 && (
+    (modeCoreOffset === 'fixed' && (isNaN(valCoreOffsetNum) || valCoreOffsetNum < 0 || valCoreOffsetNum >= maxMoonOffsetAllowed - 0.1)) ||
+    (modeCoreOffset === 'range' && ((!isNaN(minCoreOffsetNum) && !isNaN(maxCoreOffsetNum) && minCoreOffsetNum >= maxCoreOffsetNum) || (!isNaN(minCoreOffsetNum) && (minCoreOffsetNum < 0 || minCoreOffsetNum >= maxMoonOffsetAllowed - 0.1))))
+  );
+
+  // C-Slot (6) checks
+  const refCSlotWidth = modeSlotWidth === 'fixed' ? valSlotWidthNum : modeSlotWidth === 'range' ? minSlotWidthNum : Math.max(2, effectiveOuterD * 0.1);
+  const maxCSlotDepthAllowed = shape === 6 ? getMaxCSlotDepthMm(effectiveOuterD, refCSlotWidth) : 999;
+  const isCSlotWidthInvalid = shape === 6 && (
+    (modeSlotWidth === 'fixed' && (valSlotWidthNum <= 0 || valSlotWidthNum >= effectiveOuterD)) ||
+    (modeSlotWidth === 'range' && ((minSlotWidthNum > 0 && maxSlotWidthNum > 0 && minSlotWidthNum >= maxSlotWidthNum) || minSlotWidthNum >= effectiveOuterD))
+  );
+  const isCSlotDepthInvalid = shape === 6 && (
+    (modeSlotDepth === 'fixed' && (valSlotDepthNum <= 0 || valSlotDepthNum >= maxCSlotDepthAllowed - 0.1)) ||
+    (modeSlotDepth === 'range' && ((minSlotDepthNum > 0 && maxSlotDepthNum > 0 && minSlotDepthNum >= maxSlotDepthNum) || minSlotDepthNum >= maxCSlotDepthAllowed - 0.1))
+  );
+
+  // D-Grain (7) checks
+  const isDGrainDepthInvalid = shape === 7 && (
+    (modeSlotDepth === 'fixed' && (valSlotDepthNum <= 0 || valSlotDepthNum >= effectiveOuterD - 1.0)) ||
+    (modeSlotDepth === 'range' && ((minSlotDepthNum > 0 && maxSlotDepthNum > 0 && minSlotDepthNum >= maxSlotDepthNum) || minSlotDepthNum >= effectiveOuterD - 1.0))
+  );
+
+  // Rod & Tube (8) checks
+  const maxRodAllowed = shape === 8 ? Math.max(0, effectiveMaxd0Ref - 0.5) : 999;
+  const isRodTubeInvalid = shape === 8 && (
+    (modeRodDiameter === 'fixed' && (valRodDiameterNum <= 0 || valRodDiameterNum >= maxRodAllowed)) ||
+    (modeRodDiameter === 'range' && ((minRodDiameterNum > 0 && maxRodDiameterNum > 0 && minRodDiameterNum >= maxRodDiameterNum) || minRodDiameterNum >= maxRodAllowed))
+  );
 
   // L0 checks:
   const isL0ExceedsLc = modeL0 === 'fixed' && grainCountMode === 'fixed' && valL0Num > 0 && (valL0Num * fixedNNum) > LcVal;
@@ -462,8 +770,39 @@ export function SmartSearchEngine({
     isStarGeomExceedsD0 ||
     isNpInvalid ||
     isNpRangeInvalid ||
+    isRadialTipLeqd0 ||
+    isFinWidthInvalid ||
+    isSpokeWidthInvalid ||
+    isMoonOffsetInvalid ||
+    isCSlotWidthInvalid ||
+    isCSlotDepthInvalid ||
+    isDGrainDepthInvalid ||
+    isRodTubeInvalid ||
     isL0ExceedsLc ||
     isL0RangeInverted;
+
+  const handleShapeSelect = (newShape: GrainShapeId) => {
+    setShape(newShape);
+    const defs = getDefaultGrainParamsForShape(newShape, effectiveMinOuterD);
+    if (newShape === 3) {
+      setCoreBurns(false);
+      setOuterBurns(true);
+    } else if (shape === 3) {
+      setCoreBurns(true);
+    }
+    setInputValues((prev) => ({
+      ...prev,
+      ...(defs.d0 && defs.d0 > 0 ? { vald0: defs.d0.toString() } : {}),
+      ...(defs.d0mayor && defs.d0mayor > 0 ? { vald0mayor: defs.d0mayor.toString() } : {}),
+      ...(defs.Np && defs.Np > 0 ? { valNp: defs.Np.toString(), minNp: newShape === 4 ? '2' : '3' } : {}),
+      ...(defs.finWidth !== undefined ? { valFinWidth: defs.finWidth.toString() } : {}),
+      ...(defs.spokeWidth !== undefined ? { valSpokeWidth: defs.spokeWidth.toString() } : {}),
+      ...(defs.coreOffset !== undefined ? { valCoreOffset: defs.coreOffset.toString() } : {}),
+      ...(defs.slotWidth !== undefined ? { valSlotWidth: defs.slotWidth.toString() } : {}),
+      ...(defs.slotDepth !== undefined ? { valSlotDepth: defs.slotDepth.toString() } : {}),
+      ...(defs.rodDiameter !== undefined ? { valRodDiameter: defs.rodDiameter.toString() } : {}),
+    }));
+  };
 
 
   // Available Propellants List
@@ -594,13 +933,39 @@ export function SmartSearchEngine({
       const mind0NumExec = parseFloat(inputValues.mind0) || 6.0;
       const maxd0NumExec = parseFloat(inputValues.maxd0) || 16.0;
 
-      // d0mayor & Np (Star)
-      const vald0mayorNumExec = parseFloat(inputValues.vald0mayor) || Math.max(16, availableD0 * 0.65);
+      // d0mayor & Np (Star / Finocyl / Wagon Wheel)
+      const vald0mayorNumExec = parseFloat(inputValues.vald0mayor) || Math.max(16, availableD0 * 0.68);
       const mind0mayorNumExec = parseFloat(inputValues.mind0mayor) || Math.max(14, availableD0 * 0.45);
       const maxd0mayorNumExec = parseFloat(inputValues.maxd0mayor) || Math.max(20, availableD0 - 3.0);
-      const valNpNumExec = Math.max(3, parseInt(inputValues.valNp) || 5);
-      const minNpNumExec = Math.max(3, parseInt(inputValues.minNp) || 3);
+      const minNpFloor = shape === 4 ? 2 : 3;
+      const valNpNumExec = Math.max(minNpFloor, parseInt(inputValues.valNp) || (shape === 2 ? 5 : 6));
+      const minNpNumExec = Math.max(minNpFloor, parseInt(inputValues.minNp) || minNpFloor);
       const maxNpNumExec = Math.max(minNpNumExec, parseInt(inputValues.maxNp) || 8);
+
+      // Shape-specific parameter values
+      const valFinWidthExec = parseFloat(inputValues.valFinWidth) || 3.0;
+      const minFinWidthExec = parseFloat(inputValues.minFinWidth) || 1.2;
+      const maxFinWidthExec = parseFloat(inputValues.maxFinWidth) || 6.0;
+
+      const valSpokeWidthExec = parseFloat(inputValues.valSpokeWidth) || 3.0;
+      const minSpokeWidthExec = parseFloat(inputValues.minSpokeWidth) || 1.2;
+      const maxSpokeWidthExec = parseFloat(inputValues.maxSpokeWidth) || 6.0;
+
+      const valCoreOffsetExec = parseFloat(inputValues.valCoreOffset);
+      const minCoreOffsetExec = parseFloat(inputValues.minCoreOffset);
+      const maxCoreOffsetExec = parseFloat(inputValues.maxCoreOffset);
+
+      const valSlotWidthExec = parseFloat(inputValues.valSlotWidth) || 5.0;
+      const minSlotWidthExec = parseFloat(inputValues.minSlotWidth) || 2.0;
+      const maxSlotWidthExec = parseFloat(inputValues.maxSlotWidth) || 12.0;
+
+      const valSlotDepthExec = parseFloat(inputValues.valSlotDepth) || 16.0;
+      const minSlotDepthExec = parseFloat(inputValues.minSlotDepth) || 6.0;
+      const maxSlotDepthExec = parseFloat(inputValues.maxSlotDepth) || 30.0;
+
+      const valRodDiameterExec = parseFloat(inputValues.valRodDiameter) || 10.0;
+      const minRodDiameterExec = parseFloat(inputValues.minRodDiameter) || 2.5;
+      const maxRodDiameterExec = parseFloat(inputValues.maxRodDiameter) || 18.0;
       
       // L0
       const valL0NumExec = parseFloat(inputValues.valL0) || 50.0;
@@ -611,12 +976,16 @@ export function SmartSearchEngine({
       const targetAltNum = parseFloat(inputValues.targetAltitudeVal) || 1500;
       const dryMassNum = parseFloat(inputValues.rocketDryMassKg) || 1.5;
 
-      const etacNum = parseFloat(inputValues.etac) || 0.85;
-      const etanozNum = parseFloat(inputValues.etanoz) || 0.75;
-      const PambNum = parseFloat(inputValues.Pamb) || 0.101325;
-      const GstarNum = parseFloat(inputValues.Gstar) || 1.0;
-      const kvNum = parseFloat(inputValues.kv) || 0.1;
-      const eNum = parseFloat(inputValues.e) || 0;
+      const numOr = (raw: string | undefined, fallback: number) => {
+        const parsed = parseFloat(raw ?? '');
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const etacNum = numOr(inputValues.etac, 0.85);
+      const etanozNum = numOr(inputValues.etanoz, 0.75);
+      const PambNum = numOr(inputValues.Pamb, 0.101325);
+      const GstarNum = numOr(inputValues.Gstar, 1.0);
+      const kvNum = numOr(inputValues.kv, 0.1);
+      const eNum = numOr(inputValues.e, 0);
 
       const valMpropNum = parseFloat(inputValues.valMprop) || 250.0;
       const minMpropNum = parseFloat(inputValues.minMprop) || 150.0;
@@ -632,7 +1001,15 @@ export function SmartSearchEngine({
         inhibitorThickness: inhibitorThicknessNum,
         wallThickness: initialMotor.wallThickness,
         materialId: initialMotor.materialId,
+        customMaterialName: initialMotor.customMaterialName,
+        customMaterialDensity: initialMotor.customMaterialDensity,
+        customMaterialYieldMPa: initialMotor.customMaterialYieldMPa,
         safetyFactor: initialMotor.safetyFactor,
+        hasBoltedClosure: initialMotor.hasBoltedClosure,
+        boltMetric: initialMotor.boltMetric,
+        boltGrade: initialMotor.boltGrade,
+        boltCount: initialMotor.boltCount,
+        paso_de_tiempo: initialMotor.paso_de_tiempo || 0.0005,
         Dt0: Dt0Num,
         Ds: DsNum,
         alpha: alphaNum,
@@ -664,6 +1041,30 @@ export function SmartSearchEngine({
         valNp: valNpNumExec,
         minNp: minNpNumExec,
         maxNp: maxNpNumExec,
+        modeFinWidth,
+        valFinWidth: valFinWidthExec,
+        minFinWidth: minFinWidthExec,
+        maxFinWidth: maxFinWidthExec,
+        modeSpokeWidth,
+        valSpokeWidth: valSpokeWidthExec,
+        minSpokeWidth: minSpokeWidthExec,
+        maxSpokeWidth: maxSpokeWidthExec,
+        modeCoreOffset,
+        valCoreOffset: Number.isFinite(valCoreOffsetExec) ? valCoreOffsetExec : 5.0,
+        minCoreOffset: Number.isFinite(minCoreOffsetExec) ? minCoreOffsetExec : 1.0,
+        maxCoreOffset: Number.isFinite(maxCoreOffsetExec) ? maxCoreOffsetExec : 12.0,
+        modeSlotWidth,
+        valSlotWidth: valSlotWidthExec,
+        minSlotWidth: minSlotWidthExec,
+        maxSlotWidth: maxSlotWidthExec,
+        modeSlotDepth,
+        valSlotDepth: valSlotDepthExec,
+        minSlotDepth: minSlotDepthExec,
+        maxSlotDepth: maxSlotDepthExec,
+        modeRodDiameter,
+        valRodDiameter: valRodDiameterExec,
+        minRodDiameter: minRodDiameterExec,
+        maxRodDiameter: maxRodDiameterExec,
         modeL0,
         valL0: valL0NumExec,
         minL0: minL0NumExec,
@@ -674,7 +1075,7 @@ export function SmartSearchEngine({
         minMprop: minMpropNum,
         maxMprop: maxMpropNum,
         osi: outerBurns ? 1 : 0,
-        ci: coreBurns ? 1 : 0,
+        ci: shape === 3 ? 0 : (coreBurns ? 1 : 0),
         ei: endsBurn ? 1 : 0,
         goal: goal,
         evaluationsPerN: evaluationsPerN,
@@ -849,7 +1250,7 @@ export function SmartSearchEngine({
               <div className="p-2 rounded-lg bg-card/80 border border-border space-y-0.5">
                 <span className="font-bold text-emerald-600 dark:text-emerald-400 block font-mono">2. Fase 2: Granos</span>
                 <p className="text-[10px] text-muted-foreground">
-                  {loc('Geometría (BATES, Estrella, Macizo), N granos, modos Libre/Fijo/Rango (D0, d0, L0), caras activas y restricción de masa.', 'Shape, segment count, Free/Fixed/Range modes for D0, d0, L0, active faces, and total propellant mass limits.')}
+                  {loc('9 geometrías (BATES, Estrella, Macizo, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube, Wagon Wheel), N granos, modos Libre/Fijo/Rango y caras activas.', '9 shapes (BATES, Star, Solid, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube, Wagon Wheel), N grains, Free/Fixed/Range bounds & burn faces.')}
                 </p>
               </div>
               <div className="p-2 rounded-lg bg-card/80 border border-border space-y-0.5">
@@ -1185,8 +1586,18 @@ export function SmartSearchEngine({
                     {loc('⚠️ Recomendación: define un límite de presión (ej: 6.0 MPa) para una simulación realista', '⚠️ Recommendation: define a pressure limit (e.g. 6.0 MPa) for realistic simulation')}
                   </p>
                 ) : (
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[10px] text-muted-foreground leading-snug">
                     {loc('Límite estructural admisible para descartar sobrepresiones', 'Maximum allowable MEOP / proof pressure threshold')}
+                    {liveMotorStruct.maxAdmissiblePressureMPa > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('Pmax_lim', liveMotorStruct.maxAdmissiblePressureMPa.toFixed(2))}
+                        className="ml-1.5 inline-flex items-center text-[10px] font-mono font-bold text-primary hover:underline cursor-pointer"
+                        title={loc('Aplicar Padm calculada según tubo y tornillos', 'Apply calculated Padm from casing & bolts')}
+                      >
+                        (Padm: {liveMotorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa)
+                      </button>
+                    )}
                   </p>
                 )}
               </div>
@@ -1577,43 +1988,49 @@ export function SmartSearchEngine({
             {/* 1. Grain Shape & Segment Count Mode */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
-              {/* Shape Selector */}
-              <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2">
-                <UiLabel className="text-xs font-bold text-foreground block font-mono uppercase tracking-wider">
-                  {loc('Geometría Base del Grano', 'Base Grain Geometry')}
-                </UiLabel>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => setShape(1)}
-                    className={`p-2.5 rounded-lg border text-center flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                      shape === 1 
-                        ? 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold shadow-xs' 
-                        : 'border-border hover:bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    <span className="text-xs">BATES / Tubular</span>
-                  </button>
-                  <button
-                    onClick={() => setShape(2)}
-                    className={`p-2.5 rounded-lg border text-center flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                      shape === 2 
-                        ? 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold shadow-xs' 
-                        : 'border-border hover:bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    <span className="text-xs">{loc('Estrella (Star Core)', 'Star Core')}</span>
-                  </button>
-                  <button
-                    onClick={() => setShape(3)}
-                    className={`p-2.5 rounded-lg border text-center flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                      shape === 3 
-                        ? 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold shadow-xs' 
-                        : 'border-border hover:bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    <span className="text-xs">{loc('Macizo (End-burner)', 'Solid (End-burner)')}</span>
-                  </button>
+              {/* Shape Selector (All 9 Geometries) */}
+              <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <UiLabel className="text-xs font-bold text-foreground block font-mono uppercase tracking-wider">
+                    {loc('Geometría Base del Grano', 'Base Grain Geometry')}
+                  </UiLabel>
+                  {isComplexGrain(shape) && (
+                    <span className="text-[9.5px] font-mono font-bold px-2 py-0.5 rounded bg-primary/15 text-primary border border-primary/25">
+                      Clipper2 2D
+                    </span>
+                  )}
                 </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {getAllGrainModules().map((mod) => {
+                    const isActive = shape === mod.shape;
+                    const label = getGrainShapeLabel(mod.shape, t);
+                    const desc = getGrainShapeDesc(mod.shape, t);
+                    return (
+                      <button
+                        key={mod.shape}
+                        type="button"
+                        title={desc}
+                        onClick={() => handleShapeSelect(mod.shape)}
+                        className={`p-2 rounded-lg border text-left flex items-center gap-2 transition-all cursor-pointer ${
+                          isActive
+                            ? 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold shadow-xs ring-1 ring-emerald-500/30'
+                            : 'border-border bg-background/70 hover:bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        <GrainShapeIcon shape={mod.shape} grainId={`ss-${mod.shape}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] leading-tight truncate">{label}</div>
+                          <div className="text-[9px] font-mono opacity-75 truncate">
+                            {mod.solverMode === 'clipper' ? 'Clipper2' : loc('Analítico', 'Analytical')}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10.5px] text-muted-foreground leading-snug pt-0.5">
+                  {getGrainShapeDesc(shape, t)}
+                </p>
               </div>
 
               {/* Segment Count (N) */}
@@ -1838,19 +2255,25 @@ export function SmartSearchEngine({
                 </div>
 
                 {/* Variable 2: Diámetro Núcleo (d0) */}
-                {shape !== 3 ? (
+                {hasCorePort ? (
                   <div className="p-3.5 rounded-xl border border-border bg-card/60 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs font-bold text-foreground">
                           {shape === 2
                             ? loc('Diámetro Puntas Internas (d0)', 'Inner Star Tip Diameter (d0)')
-                            : loc('Diámetro Núcleo (d0)', 'Core Diameter (d0)')}
+                            : shape === 8
+                              ? loc('Diámetro Interior Tubo (d0)', 'Outer Tube Inner Dia. (d0)')
+                              : loc('Diámetro Núcleo / Canal (d0)', 'Core / Port Diameter (d0)')}
                         </div>
                         <div className="text-[10px] text-muted-foreground">
                           {shape === 2
                             ? loc('Diámetro interior entre puntas de la estrella', 'Inner diameter across star tips')
-                            : loc('Canal central de gas', 'Central combustion port')}
+                            : shape === 8
+                              ? loc('Pared interna del tubo exterior (d0 > varilla)', 'Inner bore of outer tube (d0 > rod)')
+                              : shape === 5
+                                ? loc('Canal circular excéntrico del grano', 'Eccentric circular bore diameter')
+                                : loc('Canal central de gas', 'Central combustion port')}
                         </div>
                       </div>
                     </div>
@@ -1968,9 +2391,16 @@ export function SmartSearchEngine({
                     )}
                   </div>
                 ) : (
-                  <div className="p-3.5 rounded-xl border border-border bg-muted/10 flex flex-col items-center justify-center text-xs text-muted-foreground font-mono text-center">
-                    <span>{loc('Grano macizo (Solid):', 'Solid grain configuration:')}</span>
-                    <strong className="text-foreground mt-1">d0 = 0 mm</strong>
+                  <div className="p-3.5 rounded-xl border border-border bg-muted/10 flex flex-col items-center justify-center text-xs text-muted-foreground font-mono text-center space-y-1">
+                    <span>{getGrainShapeLabel(shape, t)}:</span>
+                    <strong className="text-foreground">d0 = 0 mm</strong>
+                    <span className="text-[10px] opacity-80">
+                      {shape === 6
+                        ? loc('Usa anchura y profundidad de ranura abajo', 'Configured via Slot Width & Depth below')
+                        : shape === 7
+                          ? loc('Usa profundidad de corte cordal abajo', 'Configured via Chord Cut Depth below')
+                          : loc('Sin canal interior (combustión extrema/exterior)', 'No internal bore (end/outer burn)')}
+                    </span>
                   </div>
                 )}
 
@@ -2096,7 +2526,7 @@ export function SmartSearchEngine({
 
               </div>
 
-              {/* Dedicated Star Geometry Inputs when shape === 2 */}
+              {/* Dedicated Shape Parameters Panel for Complex Shapes (2, 4, 5, 6, 7, 8, 9) */}
               {shape === 2 && (
                 <div className="mt-3 p-4 rounded-xl border border-primary/35 bg-primary/5 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/20">
@@ -2112,7 +2542,6 @@ export function SmartSearchEngine({
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Star Variable A: Valley Diameter (d0mayor / Dp) */}
                     <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
                       <div>
                         <div className="text-xs font-bold text-foreground">
@@ -2133,9 +2562,7 @@ export function SmartSearchEngine({
                           type="button"
                           onClick={() => setModed0mayor('free')}
                           className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
-                            moded0mayor === 'free'
-                              ? 'bg-emerald-600 text-white shadow-xs'
-                              : 'text-muted-foreground hover:text-foreground'
+                            moded0mayor === 'free' ? 'bg-emerald-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
                           }`}
                         >
                           {loc('Libre', 'Free')}
@@ -2144,9 +2571,7 @@ export function SmartSearchEngine({
                           type="button"
                           onClick={() => setModed0mayor('fixed')}
                           className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
-                            moded0mayor === 'fixed'
-                              ? 'bg-amber-500 text-white shadow-xs'
-                              : 'text-muted-foreground hover:text-foreground'
+                            moded0mayor === 'fixed' ? 'bg-amber-500 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
                           }`}
                         >
                           {loc('Fijo', 'Fixed')}
@@ -2155,9 +2580,7 @@ export function SmartSearchEngine({
                           type="button"
                           onClick={() => setModed0mayor('range')}
                           className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
-                            moded0mayor === 'range'
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-muted-foreground hover:text-foreground'
+                            moded0mayor === 'range' ? 'bg-blue-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
                           }`}
                         >
                           {loc('Rango', 'Range')}
@@ -2290,127 +2713,35 @@ export function SmartSearchEngine({
                       )}
                     </div>
 
-                    {/* Star Variable B: Number of Star Points (Np) */}
-                    <div className="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
-                      <div>
-                        <div className="text-xs font-bold text-foreground">
-                          {loc('Número de Puntas de Estrella (Np)', 'Number of Star Points (Np)')}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          {loc('Entero ≥ 3 puntas (controla área inicial y progresividad)', 'Integer ≥ 3 points (controls initial port area & progressivity)')}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-1 p-1 bg-muted/60 rounded-lg text-[11px] font-mono">
-                        <button
-                          type="button"
-                          onClick={() => setModeNp('free')}
-                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
-                            modeNp === 'free'
-                              ? 'bg-emerald-600 text-white shadow-xs'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          {loc('Libre', 'Free')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setModeNp('fixed')}
-                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
-                            modeNp === 'fixed'
-                              ? 'bg-amber-500 text-white shadow-xs'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          {loc('Fijo', 'Fixed')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setModeNp('range')}
-                          className={`py-1 rounded text-center font-bold transition-all cursor-pointer ${
-                            modeNp === 'range'
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          {loc('Rango', 'Range')}
-                        </button>
-                      </div>
-
-                      {modeNp === 'free' && (
-                        <div className="text-[11px] text-muted-foreground font-mono bg-muted/20 p-2 rounded-lg text-center">
-                          {loc('Auto: Búsqueda global de puntas Np ∈ [3, 10]', 'Auto: Global search over Np ∈ [3, 10] points')}
-                        </div>
-                      )}
-
-                      {modeNp === 'fixed' && (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <Input
-                              type="number"
-                              step="1"
-                              min="3"
-                              max="24"
-                              value={inputValues.valNp}
-                              onChange={(e) => handleInputChange('valNp', e.target.value)}
-                              onBlur={() => handleBlur('valNp')}
-                              placeholder="5"
-                              className={`h-8 text-xs font-mono font-bold flex-1 tabular-nums ${isNpInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
-                            />
-                            <span className="text-xs font-mono text-muted-foreground">{loc('puntas', 'pts')}</span>
-                            {isNpInvalid && <AlertTriangle size={14} className="text-red-500 shrink-0" />}
-                          </div>
-                          {isNpInvalid && (
-                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
-                              <AlertTriangle size={12} className="shrink-0" />
-                              {loc('Una estrella requiere al menos Np ≥ 3 puntas.', 'Star grain requires at least Np ≥ 3 points.')}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {modeNp === 'range' && (
-                        <div className="space-y-1">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-[10px] text-muted-foreground font-mono">Mín (puntas)</span>
-                              <Input
-                                type="number"
-                                step="1"
-                                min="3"
-                                max="24"
-                                value={inputValues.minNp}
-                                onChange={(e) => handleInputChange('minNp', e.target.value)}
-                                placeholder="3"
-                                className={`h-8 text-xs font-mono font-bold tabular-nums ${isNpRangeInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-muted-foreground font-mono">Máx (puntas)</span>
-                              <Input
-                                type="number"
-                                step="1"
-                                min="3"
-                                max="24"
-                                value={inputValues.maxNp}
-                                onChange={(e) => handleInputChange('maxNp', e.target.value)}
-                                placeholder="8"
-                                className={`h-8 text-xs font-mono font-bold tabular-nums ${isNpRangeInvalid ? 'border-red-500 bg-red-500/10' : ''}`}
-                              />
-                            </div>
-                          </div>
-                          {isNpRangeInvalid && (
-                            <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
-                              <AlertTriangle size={12} className="shrink-0" />
-                              {loc('Rango de Np inválido: ambos deben ser ≥ 3 y Mín ≤ Máx.', 'Invalid Np range: both must be ≥ 3 and Min ≤ Max.')}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <SmartVarConstraintCard
+                      title={loc('Número de Puntas de Estrella (Np)', 'Number of Star Points (Np)')}
+                      subtitle={loc('Entero ≥ 3 puntas (controla área inicial y progresividad)', 'Integer ≥ 3 points (controls initial port area & progressivity)')}
+                      unit={loc('puntas', 'pts')}
+                      step="1"
+                      mode={modeNp}
+                      setMode={setModeNp}
+                      val={inputValues.valNp}
+                      minVal={inputValues.minNp}
+                      maxVal={inputValues.maxNp}
+                      onChangeVal={(v) => handleInputChange('valNp', v)}
+                      onChangeMin={(v) => handleInputChange('minNp', v)}
+                      onChangeMax={(v) => handleInputChange('maxNp', v)}
+                      onBlurVal={() => handleBlur('valNp')}
+                      freeText={loc('Auto: Búsqueda global de puntas Np ∈ [3, 10]', 'Auto: Global search over Np ∈ [3, 10] points')}
+                      placeholderFixed="5"
+                      placeholderMin="3"
+                      placeholderMax="8"
+                      errorText={
+                        isNpInvalid
+                          ? loc('Una estrella requiere al menos Np ≥ 3 puntas.', 'Star grain requires at least Np ≥ 3 points.')
+                          : isNpRangeInvalid
+                            ? loc('Rango de Np inválido: ambos deben ser ≥ 3 y Mín ≤ Máx.', 'Invalid Np range: both must be ≥ 3 and Min ≤ Max.')
+                            : null
+                      }
+                      loc={loc}
+                    />
                   </div>
 
-                  {/* Inputs-style Unified Star Alert Box */}
                   {hasStarGeometricAlert && (
                     <div className="p-2.5 rounded-lg border border-red-500/45 bg-red-500/10 text-red-700 dark:text-red-300 flex flex-col gap-0.5 text-[11px] font-mono">
                       <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5">
@@ -2423,7 +2754,7 @@ export function SmartSearchEngine({
                       {(isd0mayorLeqd0 || isStarDpBelowGeomMin || isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0 || isStarMaxDpBelowGeomMin) && (
                         <span>
                           • {loc(
-                            `Valle (Dp) > mín. geom. (${(minStarD0mayorStrict > 0 ? minStarD0mayorStrict : vald0Num).toFixed(1)} mm) para formar estrella real (si es menor o igual degenera en polígono)`,
+                            `Valle (Dp) > mín. geom. (${(minStarD0mayorStrict > 0 ? minStarD0mayorStrict : vald0Num).toFixed(1)} mm) para formar estrella real`,
                             `Valley (Dp) > geom. min (${(minStarD0mayorStrict > 0 ? minStarD0mayorStrict : vald0Num).toFixed(1)} mm) for genuine star arms`
                           )}
                         </span>
@@ -2434,13 +2765,388 @@ export function SmartSearchEngine({
                       {isStarGeomExceedsD0 && (
                         <span>
                           • {loc(
-                            `Con d0 ≥ ${starMinD0Ref.toFixed(1)} mm y Np ≤ ${starMaxNpPossible}, el mín. geom. de valles (${minStarD0mayorStrict.toFixed(1)} mm) iguala o supera D0 útil (${effectiveOuterD.toFixed(1)} mm). Reduce d0 o aumenta Np/D0.`,
-                            `With d0 ≥ ${starMinD0Ref.toFixed(1)} mm & Np ≤ ${starMaxNpPossible}, star valley geom. min (${minStarD0mayorStrict.toFixed(1)} mm) reaches outer D0 (${effectiveOuterD.toFixed(1)} mm). Lower d0 or raise Np/D0.`
+                            `Con d0 ≥ ${starMinD0Ref.toFixed(1)} mm y Np ≤ ${starMaxNpPossible}, el mín. geom. de valles (${minStarD0mayorStrict.toFixed(1)} mm) supera D0 útil (${effectiveOuterD.toFixed(1)} mm).`,
+                            `With d0 ≥ ${starMinD0Ref.toFixed(1)} mm & Np ≤ ${starMaxNpPossible}, valley geom. min (${minStarD0mayorStrict.toFixed(1)} mm) reaches outer D0 (${effectiveOuterD.toFixed(1)} mm).`
                           )}
                         </span>
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Finocyl (4) Specific Panel */}
+              {shape === 4 && (
+                <div className="mt-3 p-4 rounded-xl border border-primary/35 bg-primary/5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <Sliders size={15} className="text-primary shrink-0" />
+                      <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
+                        {loc('Parámetros Finocyl Longitudinal (Clipper2)', 'Full-Length Finocyl Parameters (Clipper2)')}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {loc('Aletas continuas de longitud completa en cada segmento L0', 'Radial fin slots spanning full grain length L0')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <SmartVarConstraintCard
+                      title={t.finocyl_tip_d0 || 'Fin Tip Dia.'}
+                      subtitle={loc(`Debe cumplir d0 < D_fin < ${effectiveOuterD.toFixed(1)} mm`, `Must satisfy d0 < D_fin < ${effectiveOuterD.toFixed(1)} mm`)}
+                      mode={moded0mayor}
+                      setMode={setModed0mayor}
+                      val={inputValues.vald0mayor}
+                      minVal={inputValues.mind0mayor}
+                      maxVal={inputValues.maxd0mayor}
+                      onChangeVal={(v) => handleInputChange('vald0mayor', v)}
+                      onChangeMin={(v) => handleInputChange('mind0mayor', v)}
+                      onChangeMax={(v) => handleInputChange('maxd0mayor', v)}
+                      freeText={loc('Auto: Entre canal central d0 y pared exterior D0', 'Auto: Between core d0 and outer wall D0')}
+                      placeholderFixed="32"
+                      placeholderMin="18"
+                      placeholderMax="44"
+                      errorText={
+                        isd0mayorGeD0 || isMaxd0mayorGeD0 || isMind0mayorGeD0
+                          ? loc(`Debe ser < D0 (${effectiveOuterD.toFixed(1)} mm)`, `Must be < D0 (${effectiveOuterD.toFixed(1)} mm)`)
+                          : isRadialTipLeqd0 || isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0
+                            ? loc('Debe superar al diámetro central d0', 'Must exceed central bore d0')
+                            : isd0mayorRangeInverted
+                              ? loc('Rango invertido (Mín ≥ Máx)', 'Inverted range (Min ≥ Max)')
+                              : null
+                      }
+                      loc={loc}
+                    />
+                    <SmartVarConstraintCard
+                      title={t.finocyl_n_fins || 'Fin Count (Np)'}
+                      subtitle={loc('Entero ≥ 2 aletas simétricas', 'Integer ≥ 2 symmetric fins')}
+                      unit={loc('aletas', 'fins')}
+                      step="1"
+                      mode={modeNp}
+                      setMode={setModeNp}
+                      val={inputValues.valNp}
+                      minVal={inputValues.minNp}
+                      maxVal={inputValues.maxNp}
+                      onChangeVal={(v) => handleInputChange('valNp', v)}
+                      onChangeMin={(v) => handleInputChange('minNp', v)}
+                      onChangeMax={(v) => handleInputChange('maxNp', v)}
+                      freeText={loc('Auto: Búsqueda en Np ∈ [2, 8] aletas', 'Auto: Sweep Np ∈ [2, 8] fins')}
+                      placeholderFixed="6"
+                      placeholderMin="2"
+                      placeholderMax="8"
+                      errorText={
+                        isNpInvalid || isNpRangeInvalid
+                          ? loc('Finocyl requiere ≥ 2 aletas y Mín ≤ Máx.', 'Finocyl requires ≥ 2 fins and Min ≤ Max.')
+                          : null
+                      }
+                      loc={loc}
+                    />
+                    <SmartVarConstraintCard
+                      title={t.finocyl_width || 'Fin Slot Width'}
+                      subtitle={loc(`Máx sin solape ≈ ${maxFinWidthAllowed.toFixed(1)} mm`, `Non-overlap max ≈ ${maxFinWidthAllowed.toFixed(1)} mm`)}
+                      step="0.2"
+                      mode={modeFinWidth}
+                      setMode={setModeFinWidth}
+                      val={inputValues.valFinWidth}
+                      minVal={inputValues.minFinWidth}
+                      maxVal={inputValues.maxFinWidth}
+                      onChangeVal={(v) => handleInputChange('valFinWidth', v)}
+                      onChangeMin={(v) => handleInputChange('minFinWidth', v)}
+                      onChangeMax={(v) => handleInputChange('maxFinWidth', v)}
+                      freeText={loc('Auto: Anchura óptima sin solapamiento entre aletas', 'Auto: Optimal width without fin overlap')}
+                      placeholderFixed="3.0"
+                      placeholderMin="1.2"
+                      placeholderMax="6.0"
+                      errorText={
+                        isFinWidthInvalid
+                          ? loc(`Anchura inválida o solapa aletas adyacentes (máx ${maxFinWidthAllowed.toFixed(1)} mm).`, `Invalid width or overlaps adjacent fins (max ${maxFinWidthAllowed.toFixed(1)} mm).`)
+                          : null
+                      }
+                      loc={loc}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Moonburner (5) Specific Panel */}
+              {shape === 5 && (
+                <div className="mt-3 p-4 rounded-xl border border-primary/35 bg-primary/5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <Sliders size={15} className="text-primary shrink-0" />
+                      <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
+                        {loc('Parámetros Moonburner (Clipper2)', 'Moonburner Specific Parameters (Clipper2)')}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {loc(`Excentricidad radial respecto al eje (máx ≈ ${maxMoonOffsetAllowed.toFixed(1)} mm)`, `Radial core eccentricity (max ≈ ${maxMoonOffsetAllowed.toFixed(1)} mm)`)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <SmartVarConstraintCard
+                      title={t.moonburner_offset || 'Core Offset'}
+                      subtitle={loc(`0 ≤ offset < (D0 - d0)/2 (${maxMoonOffsetAllowed.toFixed(1)} mm)`, `0 ≤ offset < (D0 - d0)/2 (${maxMoonOffsetAllowed.toFixed(1)} mm)`)}
+                      step="0.5"
+                      mode={modeCoreOffset}
+                      setMode={setModeCoreOffset}
+                      val={inputValues.valCoreOffset}
+                      minVal={inputValues.minCoreOffset}
+                      maxVal={inputValues.maxCoreOffset}
+                      onChangeVal={(v) => handleInputChange('valCoreOffset', v)}
+                      onChangeMin={(v) => handleInputChange('minCoreOffset', v)}
+                      onChangeMax={(v) => handleInputChange('maxCoreOffset', v)}
+                      freeText={loc('Auto: Excentricidad óptima respetando pared exterior', 'Auto: Optimal eccentricity keeping wall clearance')}
+                      placeholderFixed="6.0"
+                      placeholderMin="1.0"
+                      placeholderMax="12.0"
+                      errorText={
+                        isMoonOffsetInvalid
+                          ? loc(`Desfase inválido o perfora la pared exterior (máx ${maxMoonOffsetAllowed.toFixed(1)} mm).`, `Invalid offset or breaches outer wall (max ${maxMoonOffsetAllowed.toFixed(1)} mm).`)
+                          : null
+                      }
+                      loc={loc}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* C-Slot (6) Specific Panel */}
+              {shape === 6 && (
+                <div className="mt-3 p-4 rounded-xl border border-primary/35 bg-primary/5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <Sliders size={15} className="text-primary shrink-0" />
+                      <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
+                        {loc('Parámetros C-Slot (Clipper2)', 'C-Slot Specific Parameters (Clipper2)')}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {loc('Ranura lateral abierta desde la superficie exterior', 'Lateral slot cut inward from outer perimeter')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <SmartVarConstraintCard
+                      title={t.cslot_width || 'Slot Width'}
+                      subtitle={loc(`0 < anchura < D0 (${effectiveOuterD.toFixed(1)} mm)`, `0 < width < D0 (${effectiveOuterD.toFixed(1)} mm)`)}
+                      step="0.5"
+                      mode={modeSlotWidth}
+                      setMode={setModeSlotWidth}
+                      val={inputValues.valSlotWidth}
+                      minVal={inputValues.minSlotWidth}
+                      maxVal={inputValues.maxSlotWidth}
+                      onChangeVal={(v) => handleInputChange('valSlotWidth', v)}
+                      onChangeMin={(v) => handleInputChange('minSlotWidth', v)}
+                      onChangeMax={(v) => handleInputChange('maxSlotWidth', v)}
+                      freeText={loc('Auto: Anchura óptima de ranura C-Slot', 'Auto: Optimal C-Slot width')}
+                      placeholderFixed="6.0"
+                      placeholderMin="2.0"
+                      placeholderMax="14.0"
+                      errorText={
+                        isCSlotWidthInvalid
+                          ? loc(`Anchura inválida o ≥ D0 (${effectiveOuterD.toFixed(1)} mm).`, `Invalid width or ≥ D0 (${effectiveOuterD.toFixed(1)} mm).`)
+                          : null
+                      }
+                      loc={loc}
+                    />
+                    <SmartVarConstraintCard
+                      title={t.cslot_depth || 'Slot Depth'}
+                      subtitle={loc(`0 < profundidad < ${maxCSlotDepthAllowed.toFixed(1)} mm (sin partir el grano)`, `0 < depth < ${maxCSlotDepthAllowed.toFixed(1)} mm (must not split grain)`)}
+                      step="0.5"
+                      mode={modeSlotDepth}
+                      setMode={setModeSlotDepth}
+                      val={inputValues.valSlotDepth}
+                      minVal={inputValues.minSlotDepth}
+                      maxVal={inputValues.maxSlotDepth}
+                      onChangeVal={(v) => handleInputChange('valSlotDepth', v)}
+                      onChangeMin={(v) => handleInputChange('minSlotDepth', v)}
+                      onChangeMax={(v) => handleInputChange('maxSlotDepth', v)}
+                      freeText={loc('Auto: Profundidad óptima sin dividir el grano en dos', 'Auto: Optimal depth without splitting grain')}
+                      placeholderFixed="20.0"
+                      placeholderMin="8.0"
+                      placeholderMax="35.0"
+                      errorText={
+                        isCSlotDepthInvalid
+                          ? loc(`La ranura parte el grano en dos (máx ${maxCSlotDepthAllowed.toFixed(1)} mm).`, `Slot splits grain in two (max ${maxCSlotDepthAllowed.toFixed(1)} mm).`)
+                          : null
+                      }
+                      loc={loc}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* D-Grain (7) Specific Panel */}
+              {shape === 7 && (
+                <div className="mt-3 p-4 rounded-xl border border-primary/35 bg-primary/5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <Sliders size={15} className="text-primary shrink-0" />
+                      <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
+                        {loc('Parámetros D-Grain (Clipper2)', 'D-Grain Specific Parameters (Clipper2)')}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {loc('Corte plano cordal desde el borde exterior', 'Flat chordal cut inward from outer edge')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <SmartVarConstraintCard
+                      title={t.dgrain_cut_depth || 'Chord Cut Depth'}
+                      subtitle={loc(`0 < corte < D0 (${effectiveOuterD.toFixed(1)} mm)`, `0 < cut < D0 (${effectiveOuterD.toFixed(1)} mm)`)}
+                      step="0.5"
+                      mode={modeSlotDepth}
+                      setMode={setModeSlotDepth}
+                      val={inputValues.valSlotDepth}
+                      minVal={inputValues.minSlotDepth}
+                      maxVal={inputValues.maxSlotDepth}
+                      onChangeVal={(v) => handleInputChange('valSlotDepth', v)}
+                      onChangeMin={(v) => handleInputChange('minSlotDepth', v)}
+                      onChangeMax={(v) => handleInputChange('maxSlotDepth', v)}
+                      freeText={loc('Auto: Profundidad cordal óptima', 'Auto: Optimal chord cut depth')}
+                      placeholderFixed="18.0"
+                      placeholderMin="5.0"
+                      placeholderMax="32.0"
+                      errorText={
+                        isDGrainDepthInvalid
+                          ? loc(`Corte inválido o ≥ D0 (${effectiveOuterD.toFixed(1)} mm).`, `Invalid cut or ≥ D0 (${effectiveOuterD.toFixed(1)} mm).`)
+                          : null
+                      }
+                      loc={loc}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Rod & Tube (8) Specific Panel */}
+              {shape === 8 && (
+                <div className="mt-3 p-4 rounded-xl border border-primary/35 bg-primary/5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <Sliders size={15} className="text-primary shrink-0" />
+                      <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
+                        {loc('Parámetros Rod & Tube (Clipper2)', 'Rod & Tube Specific Parameters (Clipper2)')}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {loc('Varilla central sólida + tubo concéntrico exterior (combustión neutra)', 'Inner solid rod + outer tube (neutral burn)')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <SmartVarConstraintCard
+                      title={t.rodtube_rod_d || 'Center Rod Dia.'}
+                      subtitle={loc(`0 < varilla < d0 tubo (${effectiveMaxd0Ref.toFixed(1)} mm)`, `0 < rod < tube ID d0 (${effectiveMaxd0Ref.toFixed(1)} mm)`)}
+                      step="0.5"
+                      mode={modeRodDiameter}
+                      setMode={setModeRodDiameter}
+                      val={inputValues.valRodDiameter}
+                      minVal={inputValues.minRodDiameter}
+                      maxVal={inputValues.maxRodDiameter}
+                      onChangeVal={(v) => handleInputChange('valRodDiameter', v)}
+                      onChangeMin={(v) => handleInputChange('minRodDiameter', v)}
+                      onChangeMax={(v) => handleInputChange('maxRodDiameter', v)}
+                      freeText={loc('Auto: Diámetro óptimo dejando canal anular de paso', 'Auto: Optimal rod keeping annular gas channel')}
+                      placeholderFixed="10.0"
+                      placeholderMin="3.0"
+                      placeholderMax="20.0"
+                      errorText={
+                        isRodTubeInvalid
+                          ? loc(`La varilla debe ser > 0 y menor que d0 del tubo (${effectiveMaxd0Ref.toFixed(1)} mm).`, `Rod must be > 0 and smaller than tube ID (${effectiveMaxd0Ref.toFixed(1)} mm).`)
+                          : null
+                      }
+                      loc={loc}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Wagon Wheel (9) Specific Panel */}
+              {shape === 9 && (
+                <div className="mt-3 p-4 rounded-xl border border-primary/35 bg-primary/5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <Sliders size={15} className="text-primary shrink-0" />
+                      <span className="text-xs font-bold uppercase font-mono tracking-wider text-foreground">
+                        {loc('Parámetros Wagon Wheel (Clipper2)', 'Wagon Wheel Specific Parameters (Clipper2)')}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {loc('Cavidad anular segmentada por radios sólidos de propelente', 'Annular cavity segmented by radial propellant spokes')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <SmartVarConstraintCard
+                      title={t.wagon_outer_d0 || 'Window Outer Dia.'}
+                      subtitle={loc(`Debe cumplir d0 < D_win < ${effectiveOuterD.toFixed(1)} mm`, `Must satisfy d0 < D_win < ${effectiveOuterD.toFixed(1)} mm`)}
+                      mode={moded0mayor}
+                      setMode={setModed0mayor}
+                      val={inputValues.vald0mayor}
+                      minVal={inputValues.mind0mayor}
+                      maxVal={inputValues.maxd0mayor}
+                      onChangeVal={(v) => handleInputChange('vald0mayor', v)}
+                      onChangeMin={(v) => handleInputChange('mind0mayor', v)}
+                      onChangeMax={(v) => handleInputChange('maxd0mayor', v)}
+                      freeText={loc('Auto: Entre canal central d0 y pared exterior D0', 'Auto: Between core d0 and outer wall D0')}
+                      placeholderFixed="34"
+                      placeholderMin="18"
+                      placeholderMax="44"
+                      errorText={
+                        isd0mayorGeD0 || isMaxd0mayorGeD0 || isMind0mayorGeD0
+                          ? loc(`Debe ser < D0 (${effectiveOuterD.toFixed(1)} mm)`, `Must be < D0 (${effectiveOuterD.toFixed(1)} mm)`)
+                          : isRadialTipLeqd0 || isMaxd0mayorLeqd0 || isMaxd0mayorLeqMind0
+                            ? loc('Debe superar al diámetro central d0', 'Must exceed central bore d0')
+                            : isd0mayorRangeInverted
+                              ? loc('Rango invertido (Mín ≥ Máx)', 'Inverted range (Min ≥ Max)')
+                              : null
+                      }
+                      loc={loc}
+                    />
+                    <SmartVarConstraintCard
+                      title={t.wagon_spokes || 'Spoke Count (Np)'}
+                      subtitle={loc('Entero ≥ 3 radios simétricos', 'Integer ≥ 3 symmetric spokes')}
+                      unit={loc('radios', 'spokes')}
+                      step="1"
+                      mode={modeNp}
+                      setMode={setModeNp}
+                      val={inputValues.valNp}
+                      minVal={inputValues.minNp}
+                      maxVal={inputValues.maxNp}
+                      onChangeVal={(v) => handleInputChange('valNp', v)}
+                      onChangeMin={(v) => handleInputChange('minNp', v)}
+                      onChangeMax={(v) => handleInputChange('maxNp', v)}
+                      freeText={loc('Auto: Búsqueda en Np ∈ [3, 8] radios', 'Auto: Sweep Np ∈ [3, 8] spokes')}
+                      placeholderFixed="6"
+                      placeholderMin="3"
+                      placeholderMax="8"
+                      errorText={
+                        isNpInvalid || isNpRangeInvalid
+                          ? loc('Wagon Wheel requiere ≥ 3 radios y Mín ≤ Máx.', 'Wagon Wheel requires ≥ 3 spokes and Min ≤ Max.')
+                          : null
+                      }
+                      loc={loc}
+                    />
+                    <SmartVarConstraintCard
+                      title={t.wagon_spoke_width || 'Spoke Thickness'}
+                      subtitle={loc(`Máx sin solape ≈ ${maxSpokeWidthAllowed.toFixed(1)} mm`, `Non-overlap max ≈ ${maxSpokeWidthAllowed.toFixed(1)} mm`)}
+                      step="0.2"
+                      mode={modeSpokeWidth}
+                      setMode={setModeSpokeWidth}
+                      val={inputValues.valSpokeWidth}
+                      minVal={inputValues.minSpokeWidth}
+                      maxVal={inputValues.maxSpokeWidth}
+                      onChangeVal={(v) => handleInputChange('valSpokeWidth', v)}
+                      onChangeMin={(v) => handleInputChange('minSpokeWidth', v)}
+                      onChangeMax={(v) => handleInputChange('maxSpokeWidth', v)}
+                      freeText={loc('Auto: Espesor de radio óptimo sin cierre del núcleo', 'Auto: Optimal spoke thickness without core pinch')}
+                      placeholderFixed="2.8"
+                      placeholderMin="1.2"
+                      placeholderMax="5.5"
+                      errorText={
+                        isSpokeWidthInvalid
+                          ? loc(`Espesor inválido o solapa en el núcleo (máx ${maxSpokeWidthAllowed.toFixed(1)} mm).`, `Invalid thickness or overlaps at core (max ${maxSpokeWidthAllowed.toFixed(1)} mm).`)
+                          : null
+                      }
+                      loc={loc}
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -2485,30 +3191,43 @@ export function SmartSearchEngine({
                   </span>
                 </button>
 
-                {/* Botón 2: Núcleo */}
+                {/* Botón 2: Núcleo / Ranura / Varilla */}
                 <button
                   type="button"
-                  onClick={() => setCoreBurns(!coreBurns)}
-                  className={`p-3 rounded-xl border text-center transition-all flex items-center justify-between gap-2 cursor-pointer ${
-                    coreBurns 
-                      ? 'border-red-500 bg-red-500/15 text-red-700 dark:text-red-300 font-bold shadow-xs' 
-                      : 'border-slate-800 bg-slate-900/10 text-slate-800 dark:text-slate-200'
+                  disabled={shape === 3}
+                  onClick={() => shape !== 3 && setCoreBurns(!coreBurns)}
+                  className={`p-3 rounded-xl border text-center transition-all flex items-center justify-between gap-2 ${
+                    shape === 3
+                      ? 'border-border bg-muted/40 text-muted-foreground opacity-60 cursor-not-allowed'
+                      : coreBurns
+                        ? 'border-red-500 bg-red-500/15 text-red-700 dark:text-red-300 font-bold shadow-xs cursor-pointer'
+                        : 'border-slate-800 bg-slate-900/10 text-slate-800 dark:text-slate-200 cursor-pointer'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      coreBurns ? 'border-red-600 bg-red-600 text-white' : 'border-slate-700 bg-slate-950 text-white'
+                      shape === 3
+                        ? 'border-muted-foreground/40 bg-muted text-transparent'
+                        : coreBurns
+                          ? 'border-red-600 bg-red-600 text-white'
+                          : 'border-slate-700 bg-slate-950 text-white'
                     }`}>
-                      {coreBurns && <Check size={11} strokeWidth={3} />}
+                      {shape !== 3 && coreBurns && <Check size={11} strokeWidth={3} />}
                     </div>
                     <span className="text-xs font-bold font-mono">
-                      {coreBurns 
-                        ? (loc('Núcleo: Quema', 'Core: Burns')) 
-                        : (loc('Núcleo: Inhibido', 'Core: Inhibited'))}
+                      {shape === 3
+                        ? loc('Núcleo: N/A (Macizo)', 'Core: N/A (Solid)')
+                        : shape === 6 || shape === 7
+                          ? (coreBurns ? loc('Pared Ranura/Corte: Quema', 'Slot/Cut Face: Burns') : loc('Pared Ranura/Corte: Inhibida', 'Slot/Cut Face: Inhibited'))
+                          : (coreBurns ? loc('Núcleo: Quema', 'Core: Burns') : loc('Núcleo: Inhibido', 'Core: Inhibited'))}
                     </span>
                   </div>
                   <span className="text-[10px] font-mono font-bold">
-                    {coreBurns ? (loc('🔥 Quema (Rojo)', '🔥 Burns (Red)')) : (loc('🛡️ Inhibido (Negro)', '🛡️ Inhibited (Black)'))}
+                    {shape === 3
+                      ? '—'
+                      : coreBurns
+                        ? loc('🔥 Quema (Rojo)', '🔥 Burns (Red)')
+                        : loc('🛡️ Inhibido (Negro)', '🛡️ Inhibited (Black)')}
                   </span>
                 </button>
 
@@ -2763,7 +3482,7 @@ export function SmartSearchEngine({
                   <div className="p-2 rounded-lg bg-card border border-border/60">
                     <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Estrategia', 'Strategy')}</div>
                     <div className="font-bold text-foreground mt-0.5">
-                      {shape === 2 ? 'DE/rand/1/bin + Clipper2' : 'DE/rand/1/bin (LHS)'}
+                      {isComplexGrain(shape) ? 'DE/rand/1/bin + Clipper2' : 'DE/rand/1/bin (LHS)'}
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
@@ -2772,18 +3491,26 @@ export function SmartSearchEngine({
                       {(() => {
                         const vars: string[] = [];
                         if (modeD0 !== 'fixed') vars.push('D0');
-                        if (shape !== 3 && moded0 !== 'fixed') vars.push('d0');
-                        if (shape === 2 && moded0mayor !== 'fixed') vars.push('Dp');
+                        if (hasCorePort && moded0 !== 'fixed') vars.push('d0');
+                        if (usesRadialD0MayorAndNp && moded0mayor !== 'fixed') {
+                          vars.push(shape === 4 ? 'Df' : shape === 9 ? 'Dw' : 'Dp');
+                        }
+                        if (usesRadialD0MayorAndNp && modeNp !== 'fixed') vars.push('Np');
+                        if (shape === 4 && modeFinWidth !== 'fixed') vars.push('wf');
+                        if (shape === 9 && modeSpokeWidth !== 'fixed') vars.push('ws');
+                        if (shape === 5 && modeCoreOffset !== 'fixed') vars.push('off');
+                        if (shape === 6 && modeSlotWidth !== 'fixed') vars.push('w');
+                        if ((shape === 6 || shape === 7) && modeSlotDepth !== 'fixed') vars.push(shape === 7 ? 'cut' : 'depth');
+                        if (shape === 8 && modeRodDiameter !== 'fixed') vars.push('rod');
                         if (modeL0 !== 'fixed') vars.push('L0');
-                        if (shape === 2 && modeNp !== 'fixed') vars.push('Np');
                         return vars.length > 0 ? vars.join(' · ') : loc('Ninguna (Fijadas)', 'None (Fixed)');
                       })()}
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
                     <div className="text-[10px] text-muted-foreground uppercase font-semibold">{loc('Geometría y Granos', 'Shape & Grains')}</div>
-                    <div className="font-bold text-foreground mt-0.5">
-                      {shape === 2 ? loc('Estrella', 'Star') : shape === 3 ? loc('Macizo', 'Solid') : 'BATES'} · {grainCountMode === 'range' ? `N=1..${inputValues.maxGrainCount || 5}` : `N=${inputValues.fixedGrainCount || 3}`}
+                    <div className="font-bold text-foreground mt-0.5 truncate">
+                      {getGrainShapeLabel(shape, t)} · {grainCountMode === 'range' ? `N=1..${inputValues.maxGrainCount || 5}` : `N=${inputValues.fixedGrainCount || 3}`}
                     </div>
                   </div>
                   <div className="p-2 rounded-lg bg-card border border-border/60">
@@ -3086,7 +3813,31 @@ export function SmartSearchEngine({
                       <span className="block">• {loc(`Estrella: el mínimo geométrico de valles (${minStarD0mayorStrict.toFixed(1)} mm) iguala o supera D0 útil (${effectiveOuterD.toFixed(1)} mm). Reduce d0 o aumenta Np/D0.`, `Star: valley geom. min (${minStarD0mayorStrict.toFixed(1)} mm) reaches outer D0 (${effectiveOuterD.toFixed(1)} mm). Lower d0 or raise Np/D0.`)}</span>
                     )}
                     {(isNpInvalid || isNpRangeInvalid) && (
-                      <span className="block">• {loc('Estrella: el número de puntas Np debe ser ≥ 3 (y Mín ≤ Máx).', 'Star: star point count Np must be ≥ 3 (and Min ≤ Max).')}</span>
+                      <span className="block">• {loc(`${getGrainShapeLabel(shape, t)}: Np debe ser ≥ ${minNpRequired} (y Mín ≤ Máx).`, `${getGrainShapeLabel(shape, t)}: Np must be ≥ ${minNpRequired} (and Min ≤ Max).`)}</span>
+                    )}
+                    {isRadialTipLeqd0 && (
+                      <span className="block">• {loc(`${getGrainShapeLabel(shape, t)}: el diámetro exterior del rasgo debe superar a d0.`, `${getGrainShapeLabel(shape, t)}: outer feature diameter must exceed core d0.`)}</span>
+                    )}
+                    {isFinWidthInvalid && (
+                      <span className="block">• {loc(`Finocyl: anchura de aleta inválida o solapa aletas adyacentes (máx ${maxFinWidthAllowed.toFixed(1)} mm).`, `Finocyl: fin slot width invalid or overlaps adjacent fins (max ${maxFinWidthAllowed.toFixed(1)} mm).`)}</span>
+                    )}
+                    {isSpokeWidthInvalid && (
+                      <span className="block">• {loc(`Wagon Wheel: espesor de radio inválido o solapa en el núcleo (máx ${maxSpokeWidthAllowed.toFixed(1)} mm).`, `Wagon Wheel: spoke thickness invalid or overlaps at core (max ${maxSpokeWidthAllowed.toFixed(1)} mm).`)}</span>
+                    )}
+                    {isMoonOffsetInvalid && (
+                      <span className="block">• {loc(`Moonburner: excentricidad inválida o perfora la pared exterior (máx ${maxMoonOffsetAllowed.toFixed(1)} mm).`, `Moonburner: core offset invalid or breaches outer wall (max ${maxMoonOffsetAllowed.toFixed(1)} mm).`)}</span>
+                    )}
+                    {isCSlotWidthInvalid && (
+                      <span className="block">• {loc(`C-Slot: anchura de ranura inválida o ≥ D0 (${effectiveOuterD.toFixed(1)} mm).`, `C-Slot: slot width invalid or ≥ D0 (${effectiveOuterD.toFixed(1)} mm).`)}</span>
+                    )}
+                    {isCSlotDepthInvalid && (
+                      <span className="block">• {loc(`C-Slot: profundidad de ranura parte el grano (máx ${maxCSlotDepthAllowed.toFixed(1)} mm).`, `C-Slot: slot depth splits grain (max ${maxCSlotDepthAllowed.toFixed(1)} mm).`)}</span>
+                    )}
+                    {isDGrainDepthInvalid && (
+                      <span className="block">• {loc(`D-Grain: profundidad de corte cordal inválida o ≥ D0 (${effectiveOuterD.toFixed(1)} mm).`, `D-Grain: chord cut depth invalid or ≥ D0 (${effectiveOuterD.toFixed(1)} mm).`)}</span>
+                    )}
+                    {isRodTubeInvalid && (
+                      <span className="block">• {loc(`Rod & Tube: diámetro de varilla inválido o ≥ d0 tubo (${effectiveMaxd0Ref.toFixed(1)} mm).`, `Rod & Tube: rod diameter invalid or ≥ tube ID (${effectiveMaxd0Ref.toFixed(1)} mm).`)}</span>
                     )}
                     {isL0ExceedsLc && (
                       <span className="block">• {loc(`Longitud total N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) supera longitud útil de cámara Lc (${LcVal} mm).`, `Total length N×L0 (${(fixedNNum * valL0Num).toFixed(1)} mm) exceeds chamber Lc (${LcVal} mm).`)}</span>
@@ -3358,10 +4109,24 @@ export function SmartSearchEngine({
                         </div>
 
                         <div className="text-xs font-bold text-foreground font-mono">
-                          {cand.config.grainCount}x L={cand.config.L0}mm
+                          {cand.config.grainCount}x L={cand.config.L0}mm · {getGrainShapeLabel(cand.config.shape, t)}
                         </div>
-                        <div className="text-[11px] text-muted-foreground font-mono">
-                          D={cand.config.D0} / d={cand.config.d0}{cand.config.shape === 2 ? ` / Dp=${cand.config.d0mayor} (${cand.config.Np}p)` : ''} mm
+                        <div className="text-[11px] text-muted-foreground font-mono truncate">
+                          {cand.config.shape === 3
+                            ? `D=${cand.config.D0} mm`
+                            : cand.config.shape === 6
+                              ? `D=${cand.config.D0} / w=${cand.config.slotWidth} / d=${cand.config.slotDepth} mm`
+                              : cand.config.shape === 7
+                                ? `D=${cand.config.D0} / cut=${cand.config.slotDepth} mm`
+                                : cand.config.shape === 5
+                                  ? `D=${cand.config.D0} / d=${cand.config.d0} / off=${cand.config.coreOffset} mm`
+                                  : cand.config.shape === 8
+                                    ? `D=${cand.config.D0} / d=${cand.config.d0} / rod=${cand.config.rodDiameter} mm`
+                                    : cand.config.shape === 4
+                                      ? `D=${cand.config.D0} / d=${cand.config.d0} / Df=${cand.config.d0mayor} (${cand.config.Np}f)`
+                                      : cand.config.shape === 9
+                                        ? `D=${cand.config.D0} / d=${cand.config.d0} / Dw=${cand.config.d0mayor} (${cand.config.Np}s)`
+                                        : `D=${cand.config.D0} / d=${cand.config.d0}${cand.config.shape === 2 ? ` / Dp=${cand.config.d0mayor} (${cand.config.Np}p)` : ''} mm`}
                         </div>
                       </div>
 
@@ -3660,7 +4425,7 @@ export function SmartSearchEngine({
                                 return (
                                   <div className="p-2.5 rounded-lg border border-border bg-card text-foreground shadow-md text-xs font-mono tabular-nums space-y-1">
                                     <div className="font-bold text-foreground">
-                                      {pt.grainCount}x L={pt.L0}mm (D={pt.D0} / d={pt.d0}{pt.d0mayor > 0 ? ` / Dp=${pt.d0mayor} / ${pt.Np}p` : ''}mm)
+                                      {pt.configLabel || `${pt.grainCount}x L=${pt.L0}mm (D=${pt.D0}${pt.d0 > 0 ? ` / d=${pt.d0}` : ''}mm)`}
                                     </div>
                                     <div className="text-primary font-semibold">
                                       {loc('Impulso Total:', 'Total Impulse:')} <strong>{pt.totalImpulse} N·s</strong>

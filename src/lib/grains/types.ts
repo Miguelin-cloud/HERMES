@@ -1,11 +1,11 @@
-import { CustomPropellant, GrainInput, MotorInput, NozzleInput } from '../types';
+import { CustomPropellant, GrainInput, GrainShapeId, MotorInput, NozzleInput } from '../types';
 
-export type GrainShapeId = 1 | 2 | 3;
+export type { GrainShapeId };
 
 /**
  * Estrategia de cálculo de regresión por tipo de grano:
  * - 'analytical': ecuaciones cerradas exactas y ultrarrápidas (BATES, Macizo).
- * - 'clipper': Polygon Offsetting vectorial exacto con Clipper2 para geometrías complejas (Estrella y futuras formas).
+ * - 'clipper': Polygon Offsetting vectorial exacto con Clipper2 para geometrías complejas.
  */
 export type GrainSolverMode = 'analytical' | 'clipper';
 
@@ -29,11 +29,18 @@ export interface GrainBurnbackSample {
   contoursMm?: GrainContourLoop[]; // Polilíneas de referencia para visores 2D/3D
 }
 
+export interface GrainBurnbackSlopes {
+  area: number[];
+  innerPerim: number[];
+  outerPerim: number[];
+}
+
 export interface GrainBurnbackTable {
   solver: 'clipper';
   gridSize: number;
   xMaxMm: number; // Espesor de alma real (tweb0) extraído de la geometría
   samples: GrainBurnbackSample[];
+  pchipSlopes?: GrainBurnbackSlopes;
 }
 
 export interface GrainInitialGeometry {
@@ -91,6 +98,7 @@ export interface GrainRuntimeState extends GrainInput {
   At: number;
   solverMode: GrainSolverMode;
   burnbackTable?: GrainBurnbackTable;
+  isConsumed?: boolean;
 }
 
 export interface GrainStepEvaluation {
@@ -131,15 +139,44 @@ export interface GrainValidationChecks {
   isStarValleyTooSmall: boolean;
   isStarValleyExceedsD0: boolean;
   hasStarError: boolean;
+  hasShapeGeometryError?: boolean;
+  geometryErrorCode?: string | null;
+  geometryErrorLimitMm?: number;
 }
+
+export type GrainShapeKey =
+  | 'bates'
+  | 'star'
+  | 'solid'
+  | 'finocyl'
+  | 'moonburner'
+  | 'cslot'
+  | 'dgrain'
+  | 'rodtube'
+  | 'wagonwheel';
 
 export interface GrainGeometryModule {
   readonly shape: GrainShapeId;
-  readonly key: 'bates' | 'star' | 'solid';
+  readonly key: GrainShapeKey;
   readonly solverMode: GrainSolverMode;
 
   getInitialGeometry(
-    grain: Pick<GrainInput, 'shape' | 'D0' | 'd0' | 'd0mayor' | 'L0' | 'N' | 'Np'>
+    grain: Pick<
+      GrainInput,
+      | 'shape'
+      | 'D0'
+      | 'd0'
+      | 'd0mayor'
+      | 'L0'
+      | 'N'
+      | 'Np'
+      | 'finWidth'
+      | 'spokeWidth'
+      | 'coreOffset'
+      | 'slotWidth'
+      | 'slotDepth'
+      | 'rodDiameter'
+    > & Partial<Pick<GrainInput, 'osi' | 'ci' | 'ei'>>
   ): GrainInitialGeometry;
 
   computeInitialAduct(grain: GrainInput, motorDcMm: number): number;
@@ -161,20 +198,134 @@ export interface GrainGeometryModule {
   ): GrainValidationChecks;
 
   getCrossSectionPrimitives(
-    grain: Pick<GrainInput, 'shape' | 'D0' | 'd0' | 'd0mayor' | 'Np' | 'osi' | 'ci'>,
+    grain: Pick<
+      GrainInput,
+      | 'shape'
+      | 'D0'
+      | 'd0'
+      | 'd0mayor'
+      | 'Np'
+      | 'osi'
+      | 'ci'
+      | 'finWidth'
+      | 'spokeWidth'
+      | 'coreOffset'
+      | 'slotWidth'
+      | 'slotDepth'
+      | 'rodDiameter'
+    >,
     xBurnMm?: number
   ): GrainCrossSectionPrimitives;
 
   getCrossSectionContoursMm?(
-    grain: Pick<GrainInput, 'shape' | 'D0' | 'd0' | 'd0mayor' | 'L0' | 'Np' | 'osi' | 'ci'>,
+    grain: Pick<
+      GrainInput,
+      | 'shape'
+      | 'D0'
+      | 'd0'
+      | 'd0mayor'
+      | 'L0'
+      | 'Np'
+      | 'osi'
+      | 'ci'
+      | 'finWidth'
+      | 'spokeWidth'
+      | 'coreOffset'
+      | 'slotWidth'
+      | 'slotDepth'
+      | 'rodDiameter'
+    >,
     xBurnMm: number,
     burnbackTable?: GrainBurnbackTable | null
   ): GrainContourLoop[] | null;
 }
 
+function computePchipSlopes(xs: number[], ys: number[]): number[] {
+  const n = xs.length;
+  const d = new Array<number>(n).fill(0);
+  if (n < 2) return d;
+  if (n === 2) {
+    const h = xs[1] - xs[0];
+    const s = h > 1e-12 ? (ys[1] - ys[0]) / h : 0;
+    return [s, s];
+  }
+
+  const h = new Array<number>(n - 1);
+  const delta = new Array<number>(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    h[i] = Math.max(1e-12, xs[i + 1] - xs[i]);
+    delta[i] = (ys[i + 1] - ys[i]) / h[i];
+  }
+
+  for (let k = 1; k < n - 1; k++) {
+    const d0 = delta[k - 1];
+    const d1 = delta[k];
+    if (d0 * d1 <= 0) {
+      d[k] = 0;
+    } else {
+      const w1 = 2 * h[k] + h[k - 1];
+      const w2 = h[k] + 2 * h[k - 1];
+      d[k] = (w1 + w2) / (w1 / d0 + w2 / d1);
+    }
+  }
+
+  const edgeSlope = (h0: number, h1: number, del0: number, del1: number): number => {
+    let s = ((2 * h0 + h1) * del0 - h0 * del1) / (h0 + h1);
+    if (s * del0 <= 0) {
+      s = 0;
+    } else if (del0 * del1 <= 0 && Math.abs(s) > Math.abs(3 * del0)) {
+      s = 3 * del0;
+    } else if (Math.abs(s) > Math.abs(3 * del0)) {
+      s = 3 * del0;
+    }
+    return s;
+  };
+
+  d[0] = edgeSlope(h[0], h[1], delta[0], delta[1]);
+  d[n - 1] = edgeSlope(h[n - 2], h[n - 3], delta[n - 2], delta[n - 3]);
+  return d;
+}
+
+function getOrBuildTablePchipSlopes(table: GrainBurnbackTable): GrainBurnbackSlopes {
+  if (table.pchipSlopes && table.pchipSlopes.area.length === table.samples.length) {
+    return table.pchipSlopes;
+  }
+  const samples = table.samples;
+  const xs = samples.map((s) => s.xMm);
+  const slopes: GrainBurnbackSlopes = {
+    area: computePchipSlopes(xs, samples.map((s) => s.crossSectionAreaMm2)),
+    innerPerim: computePchipSlopes(xs, samples.map((s) => s.innerBurnPerimeterMm)),
+    outerPerim: computePchipSlopes(xs, samples.map((s) => s.outerBurnPerimeterMm)),
+  };
+  table.pchipSlopes = slopes;
+  return slopes;
+}
+
+function evalPchipSegment(
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  d0: number,
+  d1: number,
+  x: number
+): number {
+  const h = x1 - x0;
+  if (h <= 1e-12) return y0;
+  const t = Math.max(0, Math.min(1, (x - x0) / h));
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+  return h00 * y0 + h10 * h * d0 + h01 * y1 + h11 * h * d1;
+}
+
 /**
- * Interpola linealmente una tabla de quemado precalculada (Clipper2)
- * y la traduce directamente a las áreas, volumen y paso libre que espera simulator.ts.
+ * Interpola con Hermite cúbica monótona (PCHIP C1) una tabla de quemado precalculada (Clipper2)
+ * para garantizar derivada dVg/dx continua sin dientes de sierra ni escalones artificiales,
+ * respetando exactamente todos los puntos físicos medidos.
  */
 export function evaluateBurnbackTableAtDepth(
   table: GrainBurnbackTable,
@@ -182,10 +333,14 @@ export function evaluateBurnbackTableAtDepth(
   grain: Pick<GrainInput, 'D0' | 'd0' | 'd0mayor' | 'L0' | 'N' | 'ei' | 'ci' | 'osi'>,
   motorDcMm: number
 ): GrainStepEvaluation {
-  const L = grain.L0 * grain.N - grain.ei * 2 * grain.N * xMm;
   const chamberArea = (Math.PI / 4) * Math.pow(motorDcMm, 2);
+  const L = grain.L0 * grain.N - grain.ei * 2 * grain.N * xMm;
+  const effectiveMaxX =
+    grain.ei && grain.L0 > 0
+      ? Math.min(table.xMaxMm, grain.L0 * 0.5)
+      : table.xMaxMm;
 
-  if (L <= 0 || xMm >= table.xMaxMm || table.samples.length === 0) {
+  if (L <= 0 || xMm >= effectiveMaxX || table.samples.length === 0) {
     return {
       isConsumed: true,
       d: 0,
@@ -198,7 +353,7 @@ export function evaluateBurnbackTableAtDepth(
       Abe: 0,
       Abc: 0,
       Abs: 0,
-      Ab: 1e-4,
+      Ab: 0,
       Aduct: chamberArea,
     };
   }
@@ -206,31 +361,66 @@ export function evaluateBurnbackTableAtDepth(
   const samples = table.samples;
   const clampedX = Math.max(0, xMm);
 
-  let s0 = samples[0];
-  let s1 = samples[samples.length - 1];
+  let lo = 0;
+  let hi = samples.length - 1;
 
-  if (clampedX <= s0.xMm) {
-    s1 = s0;
-  } else if (clampedX >= s1.xMm) {
-    s0 = s1;
+  if (clampedX <= samples[0].xMm) {
+    hi = 0;
+  } else if (clampedX >= samples[hi].xMm) {
+    lo = hi;
   } else {
-    let lo = 0;
-    let hi = samples.length - 1;
     while (hi - lo > 1) {
       const mid = (lo + hi) >> 1;
       if (samples[mid].xMm <= clampedX) lo = mid;
       else hi = mid;
     }
-    s0 = samples[lo];
-    s1 = samples[hi];
   }
 
-  const span = s1.xMm - s0.xMm;
-  const alpha = span > 1e-12 ? (clampedX - s0.xMm) / span : 0;
+  const s0 = samples[lo];
+  const s1 = samples[hi];
+  let crossArea = s0.crossSectionAreaMm2;
+  let innerPerim = s0.innerBurnPerimeterMm;
+  let outerPerim = s0.outerBurnPerimeterMm;
 
-  const crossArea = s0.crossSectionAreaMm2 + alpha * (s1.crossSectionAreaMm2 - s0.crossSectionAreaMm2);
-  const innerPerim = s0.innerBurnPerimeterMm + alpha * (s1.innerBurnPerimeterMm - s0.innerBurnPerimeterMm);
-  const outerPerim = s0.outerBurnPerimeterMm + alpha * (s1.outerBurnPerimeterMm - s0.outerBurnPerimeterMm);
+  if (lo !== hi) {
+    const slopes = getOrBuildTablePchipSlopes(table);
+    crossArea = Math.max(
+      0,
+      evalPchipSegment(
+        s0.xMm,
+        s1.xMm,
+        s0.crossSectionAreaMm2,
+        s1.crossSectionAreaMm2,
+        slopes.area[lo],
+        slopes.area[hi],
+        clampedX
+      )
+    );
+    innerPerim = Math.max(
+      0,
+      evalPchipSegment(
+        s0.xMm,
+        s1.xMm,
+        s0.innerBurnPerimeterMm,
+        s1.innerBurnPerimeterMm,
+        slopes.innerPerim[lo],
+        slopes.innerPerim[hi],
+        clampedX
+      )
+    );
+    outerPerim = Math.max(
+      0,
+      evalPchipSegment(
+        s0.xMm,
+        s1.xMm,
+        s0.outerBurnPerimeterMm,
+        s1.outerBurnPerimeterMm,
+        slopes.outerPerim[lo],
+        slopes.outerPerim[hi],
+        clampedX
+      )
+    );
+  }
 
   if (crossArea <= 1e-6) {
     return {
@@ -245,7 +435,7 @@ export function evaluateBurnbackTableAtDepth(
       Abe: 0,
       Abc: 0,
       Abs: 0,
-      Ab: 1e-4,
+      Ab: 0,
       Aduct: chamberArea,
     };
   }
@@ -253,13 +443,13 @@ export function evaluateBurnbackTableAtDepth(
   const Abe = grain.ei * 2 * grain.N * crossArea;
   const Abc = grain.ci * innerPerim * L;
   const Abs = grain.osi * outerPerim * L;
-  const Ab = Math.max(1e-4, Abe + Abc + Abs);
+  const Ab = Math.max(0, Abe + Abc + Abs);
   const Vg = crossArea * L;
   const Aduct = Math.max(1e-6, chamberArea - crossArea);
-  const tweb = Math.max(0, table.xMaxMm - clampedX);
+  const tweb = Math.max(0, effectiveMaxX - clampedX);
   const D = Math.max(1e-4, grain.D0 - grain.osi * 2 * clampedX);
-  const d = Math.min(D, grain.d0 + grain.ci * 2 * clampedX);
-  const dmayor = Math.min(D, grain.d0mayor + grain.ci * 2 * clampedX);
+  const d = Math.min(D, Math.max(0, grain.d0 || 0) + grain.ci * 2 * clampedX);
+  const dmayor = Math.min(D, Math.max(0, grain.d0mayor || 0) + grain.ci * 2 * clampedX);
 
   return {
     isConsumed: false,

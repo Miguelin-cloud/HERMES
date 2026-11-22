@@ -23,27 +23,59 @@ export interface CustomPropellant {
   description?: string;
 }
 
+export type GrainShapeId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
 export interface GrainInput {
   id: string;
-  shape: 1 | 2 | 3;
+  shape: GrainShapeId;
   propellantType: number; // 1..7 for defaults, 8+ for custom propellants
-  D0: number; // mm
-  d0: number; // mm
-  d0mayor: number; // mm
-  L0: number; // mm
-  N: number;
-  Np: number;
+  D0: number; // mm (Outer diameter)
+  d0: number; // mm (Inner port / Star tip / Tube ID)
+  d0mayor: number; // mm (Star valley / Finocyl outer fin dia / Wagon Wheel outer slot dia)
+  L0: number; // mm (Segment length)
+  N: number; // Number of segments
+  Np: number; // Star points / Finocyl fins / Wagon Wheel spokes
   osi: number; // 0 or 1
   ci: number; // 0 or 1
   ei: number; // 0 or 1
   rhorat: number;
+  // Optional parameters for openMotor-style geometries (backward compatible)
+  finWidth?: number; // mm (Finocyl radial slot width)
+  spokeWidth?: number; // mm (Wagon Wheel solid propellant spoke thickness)
+  coreOffset?: number; // mm (Moonburner radial core eccentricity)
+  slotWidth?: number; // mm (C-Slot radial slot width)
+  slotDepth?: number; // mm (C-Slot radial cut depth or D-Grain chord cut depth from outer wall)
+  rodDiameter?: number; // mm (Rod & Tube central propellant rod outer diameter)
 }
 
-export type MotorMaterialId = 'al6082' | 'ss174ph' | 'custom';
+export type MotorMaterialId = 'al6082' | 'ss304' | 'custom';
 
-export const MOTOR_MATERIALS: Record<'al6082' | 'ss174ph', { densityKgM3: number; yieldStrengthMPa: number }> = {
+export const MOTOR_MATERIALS: Record<'al6082' | 'ss304', { densityKgM3: number; yieldStrengthMPa: number }> = {
   al6082: { densityKgM3: 2700, yieldStrengthMPa: 250 }, // EN AW-6082-T6
-  ss174ph: { densityKgM3: 7800, yieldStrengthMPa: 1000 }, // AISI 630 / 17-4PH (H1025) Stainless Steel
+  ss304: { densityKgM3: 7900, yieldStrengthMPa: 215 }, // AISI 304 / EN 1.4301 Stainless Steel (annealed seamless tube)
+};
+
+export type BoltMetricId = 'M3' | 'M4' | 'M5' | 'M6' | 'M8' | 'M10' | 'M12';
+export type BoltGradeId = 'a2_70' | 'a4_80' | 'c8_8' | 'c10_9' | 'c12_9';
+
+// Standard ISO metric coarse thread tensile stress area As (mm²) & nominal diameter d (mm)
+export const BOLT_METRICS: Record<BoltMetricId, { diameterMm: number; stressAreaMm2: number; pitchMm: number }> = {
+  M3: { diameterMm: 3, stressAreaMm2: 5.03, pitchMm: 0.5 },
+  M4: { diameterMm: 4, stressAreaMm2: 8.78, pitchMm: 0.7 },
+  M5: { diameterMm: 5, stressAreaMm2: 14.2, pitchMm: 0.8 },
+  M6: { diameterMm: 6, stressAreaMm2: 20.1, pitchMm: 1.0 },
+  M8: { diameterMm: 8, stressAreaMm2: 36.6, pitchMm: 1.25 },
+  M10: { diameterMm: 10, stressAreaMm2: 58.0, pitchMm: 1.5 },
+  M12: { diameterMm: 12, stressAreaMm2: 84.3, pitchMm: 1.75 },
+};
+
+// Standard ISO 898-1 / ISO 3506 room-temperature yield & ultimate strength (MPa)
+export const BOLT_GRADES: Record<BoltGradeId, { yieldStrengthMPa: number; ultimateStrengthMPa: number }> = {
+  a2_70: { yieldStrengthMPa: 450, ultimateStrengthMPa: 700 },
+  a4_80: { yieldStrengthMPa: 600, ultimateStrengthMPa: 800 },
+  c8_8: { yieldStrengthMPa: 640, ultimateStrengthMPa: 800 },
+  c10_9: { yieldStrengthMPa: 940, ultimateStrengthMPa: 1040 },
+  c12_9: { yieldStrengthMPa: 1100, ultimateStrengthMPa: 1220 },
 };
 
 export interface MotorInput {
@@ -65,6 +97,11 @@ export interface MotorInput {
   linerThickness?: number; // mm
   hasInhibitor?: boolean;
   inhibitorThickness?: number; // mm
+  // Radial bolted closure retention (smooth tube + inserted bulkhead/nozzle with O-ring)
+  hasBoltedClosure?: boolean;
+  boltMetric?: BoltMetricId;
+  boltGrade?: BoltGradeId;
+  boltCount?: number;
 }
 
 export interface NozzleInput {
@@ -433,16 +470,32 @@ export function getBurnRate(P: number, type: number, customList?: CustomPropella
     const custom = customList.find(p => p.id === type);
     if (custom) {
       if (custom.pressureRanges && custom.pressureRanges.length > 0) {
-        for (const range of custom.pressureRanges) {
-          if (P >= range.pMin && P < range.pMax) {
-            return { a: range.a, n: range.n };
+        const sorted = custom.pressureRanges
+          .filter((r) => Number.isFinite(r.pMin) && Number.isFinite(r.pMax) && Number.isFinite(r.a) && r.a > 0)
+          .slice()
+          .sort((a, b) => a.pMin - b.pMin);
+        if (sorted.length > 0) {
+          if (P <= sorted[0].pMin) {
+            return { a: sorted[0].a, n: sorted[0].n };
           }
+          for (let idx = 0; idx < sorted.length; idx++) {
+            const range = sorted[idx];
+            if (P >= range.pMin && P < range.pMax) {
+              return { a: range.a, n: range.n };
+            }
+            const next = sorted[idx + 1];
+            if (next && P >= range.pMax && P < next.pMin) {
+              const span = Math.max(1e-9, next.pMin - range.pMax);
+              const frac = (P - range.pMax) / span;
+              return {
+                a: range.a + (next.a - range.a) * frac,
+                n: range.n + (next.n - range.n) * frac,
+              };
+            }
+          }
+          const last = sorted[sorted.length - 1];
+          return { a: last.a, n: last.n };
         }
-        if (P < custom.pressureRanges[0].pMin) {
-          return { a: custom.pressureRanges[0].a, n: custom.pressureRanges[0].n };
-        }
-        const last = custom.pressureRanges[custom.pressureRanges.length - 1];
-        return { a: last.a, n: last.n };
       }
       return { a: custom.a ?? 1.0, n: custom.n ?? 0.5 };
     }

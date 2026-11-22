@@ -92,6 +92,15 @@ export const SimulationResultsPanel: React.FC<SimulationResultsPanelProps> = ({
     color: 'var(--foreground)',
   };
 
+  const governingLimitLabel =
+    motorStruct.governingLimit === 'bolt_shear'
+      ? t.padm_limit_bolt_shear
+      : motorStruct.governingLimit === 'wall_bearing'
+        ? t.padm_limit_wall_bearing
+        : motorStruct.governingLimit === 'net_section'
+          ? t.padm_limit_net_section
+          : t.padm_limit_cylinder;
+
   return (
     <div className="flex flex-col gap-4 pb-20">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -100,7 +109,7 @@ export const SimulationResultsPanel: React.FC<SimulationResultsPanelProps> = ({
             <ShieldAlert className="w-4 h-4 shrink-0" />
             <span>
               {t.overpressure_warning} ({results.summary.Pmax_MPa.toFixed(2)} MPa &gt; {t.max_admissible_p}:{' '}
-              {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa)
+              {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa · {governingLimitLabel})
             </span>
           </div>
         ) : (
@@ -108,7 +117,7 @@ export const SimulationResultsPanel: React.FC<SimulationResultsPanelProps> = ({
             <ShieldCheck className="w-4 h-4 shrink-0" />
             <span>
               {t.pressure_safe}: {results.summary.Pmax_MPa.toFixed(2)} / {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa (
-              {((results.summary.Pmax_MPa / Math.max(1e-6, motorStruct.maxAdmissiblePressureMPa)) * 100).toFixed(0)}%)
+              {((results.summary.Pmax_MPa / Math.max(1e-6, motorStruct.maxAdmissiblePressureMPa)) * 100).toFixed(0)}%) · {governingLimitLabel}
             </span>
           </div>
         )}
@@ -187,8 +196,8 @@ export const SimulationResultsPanel: React.FC<SimulationResultsPanelProps> = ({
               {(results.summary.Pmax_MPa || 0).toFixed(4)}
               <span className="text-[11px] font-mono font-normal text-muted-foreground ml-1">MPa</span>
             </h3>
-            <p className="text-[10px] font-mono tabular-nums text-muted-foreground mt-1 leading-none">
-              Padm: {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa
+            <p className="text-[9.5px] font-mono tabular-nums text-muted-foreground mt-1 leading-tight truncate" title={governingLimitLabel}>
+              Padm: {motorStruct.maxAdmissiblePressureMPa.toFixed(2)} MPa ({governingLimitLabel})
             </p>
           </CardContent>
         </Card>

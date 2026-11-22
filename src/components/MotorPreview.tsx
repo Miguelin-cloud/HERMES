@@ -66,13 +66,13 @@ export function MotorPreview({
 
   // Material visual tones
   const casingFill =
-    struct.materialId === 'ss174ph'
+    struct.materialId === 'ss304'
       ? 'url(#casingSteelGrad)'
       : struct.materialId === 'custom'
         ? 'url(#casingCustomGrad)'
         : 'url(#casingAlGrad)';
   const casingStroke =
-    struct.materialId === 'ss174ph'
+    struct.materialId === 'ss304'
       ? '#64748b'
       : struct.materialId === 'custom'
         ? '#8b5cf6'
@@ -225,15 +225,24 @@ export function MotorPreview({
                   const propTop = centerY - grainHalfPx;
                   const propH = grainHalfPx * 2;
 
-                  let coreTop = centerY;
-                  let coreHeight = 0;
-                  if (g.shape === 1) {
-                    coreTop = centerY - (g.d0 / 2) * scale;
-                    coreHeight = g.d0 * scale;
-                  } else if (g.shape === 2) {
-                    coreTop = centerY - (g.d0mayor / 2) * scale;
-                    coreHeight = g.d0mayor * scale;
-                  }
+                  const coreHeight =
+                    g.shape === 1 || g.shape === 5 || g.shape === 8
+                      ? (g.d0 || 0) * scale
+                      : g.shape === 2 || g.shape === 4 || g.shape === 9
+                        ? Math.max(g.d0 || 0, g.d0mayor || 0) * scale
+                        : 0;
+                  const coreTop =
+                    g.shape === 5
+                      ? centerY - ((Number(g.coreOffset) || 0) + (g.d0 || 0) / 2) * scale
+                      : centerY - coreHeight / 2;
+
+                  const slotCutH =
+                    g.shape === 6 || g.shape === 7
+                      ? Math.min(propH - 1, Math.max(1, (Number(g.slotDepth) || g.D0 * 0.45) * scale))
+                      : 0;
+                  const innerCoreOnlyH = Math.max(0, (g.d0 || 0) * scale);
+                  const innerCoreOnlyTop = centerY - innerCoreOnlyH / 2;
+                  const rodH = g.shape === 8 ? Math.max(1, (Number(g.rodDiameter) || 0) * scale) : 0;
 
                   return (
                     <g key={j}>
@@ -296,18 +305,83 @@ export function MotorPreview({
                         opacity={grainOverlap ? 0.8 : 1}
                       />
 
-                      {/* Inner Port / Core */}
-                      {g.shape !== 3 && coreHeight > 0 && (
+                      {/* Shape-specific Inner Port / Cutaway */}
+                      {(g.shape === 1 || g.shape === 5) && coreHeight > 0 && (
                         <rect
                           x={segX}
-                          y={coreTop}
+                          y={Math.max(propTop + 0.5, coreTop)}
                           width={segW}
-                          height={Math.min(propH, coreHeight)}
+                          height={Math.min(propH - 1, coreHeight)}
                           fill="#0b1120"
                           stroke="#64748b"
                           strokeWidth="0.5"
                           strokeDasharray="2 1"
                         />
+                      )}
+
+                      {(g.shape === 2 || g.shape === 4 || g.shape === 9) && coreHeight > 0 && (
+                        <>
+                          <rect
+                            x={segX}
+                            y={Math.max(propTop + 0.5, coreTop)}
+                            width={segW}
+                            height={Math.min(propH - 1, coreHeight)}
+                            fill="#1e293b"
+                            fillOpacity="0.65"
+                            stroke="#64748b"
+                            strokeWidth="0.45"
+                            strokeDasharray="2 1"
+                          />
+                          {innerCoreOnlyH > 0 && (
+                            <rect
+                              x={segX}
+                              y={Math.max(propTop + 0.5, innerCoreOnlyTop)}
+                              width={segW}
+                              height={Math.min(propH - 1, innerCoreOnlyH)}
+                              fill="#0b1120"
+                            />
+                          )}
+                        </>
+                      )}
+
+                      {(g.shape === 6 || g.shape === 7) && slotCutH > 0 && (
+                        <rect
+                          x={segX}
+                          y={propTop}
+                          width={segW}
+                          height={slotCutH}
+                          fill="#0b1120"
+                          fillOpacity={g.shape === 7 ? 0.92 : 0.72}
+                          stroke="#64748b"
+                          strokeWidth="0.5"
+                          strokeDasharray="2 1"
+                        />
+                      )}
+
+                      {g.shape === 8 && coreHeight > 0 && (
+                        <>
+                          <rect
+                            x={segX}
+                            y={Math.max(propTop + 0.5, centerY - coreHeight / 2)}
+                            width={segW}
+                            height={Math.min(propH - 1, coreHeight)}
+                            fill="#0b1120"
+                            stroke="#64748b"
+                            strokeWidth="0.5"
+                            strokeDasharray="2 1"
+                          />
+                          {rodH > 0 && (
+                            <rect
+                              x={segX}
+                              y={centerY - rodH / 2}
+                              width={segW}
+                              height={rodH}
+                              fill={fillColor}
+                              stroke="#475569"
+                              strokeWidth="0.6"
+                            />
+                          )}
+                        </>
                       )}
 
                       {/* Segment Index */}
@@ -316,7 +390,7 @@ export function MotorPreview({
                           x={segX + segW / 2}
                           y={centerY}
                           fontSize="8.5"
-                          fill={g.shape !== 3 && coreHeight > 10 ? '#e2e8f0' : '#0f172a'}
+                          fill={g.shape !== 3 && g.shape !== 8 && coreHeight > 10 ? '#e2e8f0' : '#0f172a'}
                           textAnchor="middle"
                           dominantBaseline="middle"
                           fontWeight="bold"

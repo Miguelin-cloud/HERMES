@@ -14,7 +14,9 @@ import { getExitMach } from '../lib/apogee';
 import {
   classifyContoursToOutersAndHoles,
   clipContoursToRightHalfPlane,
+  evaluateBurnbackTableAtDepth,
   getGrainModule,
+  hasCrossSectionContours,
   isComplexGrain,
   signedLoopArea2D,
 } from '../lib/grains';
@@ -302,8 +304,8 @@ export function Motor3DViewer({
   }, [effectiveMotor.Pamb, results, timeIndex, currentP, Ds, currentThroatMm, normThrust]);
 
   const profile = useMemo(() => {
-    return getPropellantVisualProfile(results.propellantType);
-  }, [results.propellantType]);
+    return getPropellantVisualProfile(results.propellantType, 'en', results.customPropellants);
+  }, [results.propellantType, results.customPropellants]);
 
   const propellantAppearance = useMemo(() => {
     return {
@@ -768,7 +770,7 @@ export function Motor3DViewer({
     const grooveInset = Math.min(0.32, wallThick * 0.35);
 
     // Choose material textures matching selected Chamber Material
-    const isSteel = motorStruct.materialId === 'ss174ph';
+    const isSteel = motorStruct.materialId === 'ss304';
     const isCustom = motorStruct.materialId === 'custom';
     const metalTex = isSteel
       ? { map: textures.ssMap, roughnessMap: textures.ssRough, color: 0x9aa5b4, metalness: 0.94, roughness: 0.28 }
@@ -1396,10 +1398,12 @@ export function Motor3DViewer({
       const currentRInner = initialDInner / 2 + (grain.ci * xBurn) / 10;
       const currentRValley = initialDStarValley / 2 + (grain.ci * xBurn) / 10;
 
-      const isComplex = isComplexGrain(grain.shape);
+      const isComplex = hasCrossSectionContours(grain.shape);
       let complexShapes: THREE.Shape[] | null = null;
       let isConsumed =
-        currentL <= 0.05 || (grain.shape !== 3 && currentRInner >= currentROuter) || currentROuter <= 0.05;
+        currentL <= 0.05 ||
+        (grain.shape !== 3 && grain.shape !== 8 && currentRInner >= currentROuter) ||
+        currentROuter <= 0.05;
 
       if (isComplex) {
         if (currentL <= 0.05) {
@@ -1414,9 +1418,15 @@ export function Motor3DViewer({
           if (!complexLoops || complexLoops.length === 0 || (table && xBurn >= table.xMaxMm)) {
             isConsumed = true;
           } else {
+            // Rotate asymmetric shapes (5: Moonburner, 6: C-Slot, 7: D-Grain) +90 deg so the feature sits on top (+y),
+            // matching longitudinal views and ensuring cutaway (x >= 0) never loses remaining bottom propellant late in burn
+            const orientedLoops =
+              grain.shape === 5 || grain.shape === 6 || grain.shape === 7
+                ? complexLoops.map((loop) => loop.map((pt) => ({ x: -pt.y, y: pt.x })))
+                : complexLoops;
             const classified = isCutaway
-              ? clipContoursToRightHalfPlane(complexLoops)
-              : classifyContoursToOutersAndHoles(complexLoops);
+              ? clipContoursToRightHalfPlane(orientedLoops)
+              : classifyContoursToOutersAndHoles(orientedLoops);
             const builtShapes: THREE.Shape[] = [];
             for (const item of classified) {
               if (item.outer.length < 3 || Math.abs(signedLoopArea2D(item.outer)) < 0.05) continue;
@@ -1486,8 +1496,8 @@ export function Motor3DViewer({
         const segCenterX = currentX + initialL / 2;
         currentX += initialL + 0.3;
 
-        // Render outer Grain Inhibitor sleeve if enabled & outer surface inhibited or visible
-        if (effectiveMotor.hasInhibitor && inhibThick > 0.015) {
+        // Render outer Grain Inhibitor sleeve only when enabled AND outer grain surface is inhibited (osi === 0)
+        if (effectiveMotor.hasInhibitor && inhibThick > 0.015 && grain.osi !== 1) {
           const rInhibIn = initialDOuter / 2;
           const rInhibOut = rInhibIn + inhibThick;
           const inhibShape = buildGrainCrossSection(false, rInhibOut, rInhibIn, 0, 5);
@@ -1555,10 +1565,22 @@ export function Motor3DViewer({
           mesh.receiveShadow = true;
           grainsGroup.add(mesh);
 
+          const moonOffsetCm = grain.shape === 5 ? Math.max(0, Number(grain.coreOffset) || 0) / 10 : 0;
+          const hasCenterFlamePort = grain.shape !== 3 && grain.shape !== 6 && grain.shape !== 7;
+          const isFlameEnclosed =
+            grain.shape === 5
+              ? currentRInner + moonOffsetCm < currentROuter * 0.96
+              : currentRInner < currentROuter;
           const showComplexCoreFlame =
-            !isComplex || (complexShapes !== null && complexShapes.length === 1 && currentRInner < currentROuter * 0.85);
-          if (normThrust > 0.05 && grain.shape !== 3 && currentRInner < currentROuter && showComplexCoreFlame) {
-            const flameRadius = isComplex ? Math.min(currentRInner * 0.82, currentROuter * 0.72) : currentRInner * 0.88;
+            !isComplex ||
+            (complexShapes !== null &&
+              complexShapes.length === 1 &&
+              (grain.shape === 5 ? isFlameEnclosed : currentRInner < currentROuter * 0.85));
+
+          if (normThrust > 0.05 && hasCenterFlamePort && isFlameEnclosed && showComplexCoreFlame) {
+            const flameRadius = isComplex
+              ? Math.max(0.05, Math.min(currentRInner * 0.82, currentROuter * 0.72))
+              : Math.max(0.05, currentRInner * 0.88);
             const phiStart = isCutaway ? Math.PI * 0.5 : 0;
             const phiLength = isCutaway ? Math.PI : Math.PI * 2;
             const flameCoreGeom = new THREE.LatheGeometry(
@@ -1572,7 +1594,7 @@ export function Motor3DViewer({
             );
             flameCoreGeom.rotateZ(-Math.PI / 2);
             const flameCoreMesh = new THREE.Mesh(flameCoreGeom, burningFaceMat);
-            flameCoreMesh.position.x = segCenterX;
+            flameCoreMesh.position.set(segCenterX, moonOffsetCm, 0);
             grainsGroup.add(flameCoreMesh);
           }
         }
@@ -1768,7 +1790,7 @@ export function Motor3DViewer({
             <div className="text-[10px] text-slate-300 font-mono flex items-center gap-1.5 mt-0.5">
               <span className="text-purple-300 font-semibold">{propellantAppearance.name}</span>
               <span>•</span>
-              <span>{motorStruct.materialId === 'ss174ph' ? '17-4PH' : motorStruct.materialId === 'custom' ? (effectiveMotor.customMaterialName || 'Custom') : 'Al 6082-T6'}</span>
+              <span>{motorStruct.materialId === 'ss304' ? 'AISI 304' : motorStruct.materialId === 'custom' ? (effectiveMotor.customMaterialName || 'Custom') : 'Al 6082-T6'}</span>
               <span>•</span>
               <span className="text-slate-400">{motorStruct.wallThicknessMm.toFixed(1)}mm</span>
             </div>
@@ -1960,8 +1982,34 @@ export function Motor3DViewer({
         <div className="absolute bottom-2.5 left-2.5 z-10 flex flex-wrap items-center gap-1 font-mono text-[10px]">
           {results.grains.map((g, idx) => {
             const xBurn = results.grains_x && results.grains_x[idx] ? results.grains_x[idx][timeIndex] || 0 : 0;
-            const currentL = Math.max(0, g.L0 - g.ei * xBurn * 2);
-            const burnPct = Math.min(100, Math.max(0, (1 - currentL / g.L0) * 100));
+            const table = results.grains_burnback?.[idx];
+            let burnPct = 0;
+            if (isComplexGrain(g.shape) && table) {
+              const eval0 = evaluateBurnbackTableAtDepth(table, 0, g, effectiveMotor.Dc || g.D0);
+              const evalNow = evaluateBurnbackTableAtDepth(table, xBurn, g, effectiveMotor.Dc || g.D0);
+              burnPct = eval0.Vg > 0 ? Math.min(100, Math.max(0, (1 - evalNow.Vg / eval0.Vg) * 100)) : 100;
+            } else {
+              const curL = Math.max(0, g.L0 - g.ei * xBurn * 2);
+              const curROut = Math.max(0, g.D0 * 0.5 - g.osi * xBurn);
+              const initVol = Math.max(1e-6, getGrainModule(g.shape).getInitialGeometry(g).totalVolumeMm3);
+              let sliceArea = 0;
+              if (curL > 0) {
+                if (g.shape === 1) {
+                  const curRIn = (g.d0 || 0) * 0.5 + g.ci * xBurn;
+                  sliceArea = curROut > curRIn ? Math.PI * (curROut * curROut - curRIn * curRIn) : 0;
+                } else if (g.shape === 3) {
+                  sliceArea = Math.PI * curROut * curROut;
+                } else if (g.shape === 8) {
+                  const curRIn = (g.d0 || 0) * 0.5 + g.ci * xBurn;
+                  const curRRod = Math.max(0, ((Number(g.rodDiameter) || g.d0 * 0.45) * 0.5) - g.ci * xBurn);
+                  const tubeA = curROut > curRIn ? Math.PI * (curROut * curROut - curRIn * curRIn) : 0;
+                  const rodA = curRRod > 0 ? Math.PI * curRRod * curRRod : 0;
+                  sliceArea = tubeA + rodA;
+                }
+              }
+              const curVol = Math.max(0, curL * Math.max(1, g.N) * sliceArea);
+              burnPct = Math.min(100, Math.max(0, (1 - curVol / initVol) * 100));
+            }
 
             return (
               <button

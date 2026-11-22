@@ -147,6 +147,367 @@ function interpolateSeries(arr: number[] | undefined, lo: number, hi: number, fr
   return v0 + (v1 - v0) * frac;
 }
 
+export interface CanonicalTTIResult {
+  regime: NozzleFlowRegime;
+  exprat: number;
+  Ms1: number;
+  Ms2: number;
+  pis1: number;
+  pis2: number;
+  pich_correct: number;
+  Pp: number;
+  isChoked: boolean;
+  Mt: number;
+  Me_actual: number;
+  Pe_MPa: number;
+  Pe_over_Pa: number;
+  Te_K: number;
+  ve_ms: number;
+  mDot_kg_s: number;
+  mDot_choked: number;
+  MachFactor: number;
+  lambdaDiv: number;
+  momentumThrust_N: number;
+  pressureThrust_N: number;
+  TTI_Thrust_N: number;
+  betaObliqueDeg: number | null;
+  alphaDeflectDeg: number | null;
+  thetaPMDeg: number | null;
+  MextJet: number;
+  ms_ocn?: number;
+}
+
+/**
+ * Núcleo unificado de Teoría de Toberas Ideales (TTI) compartido entre el integrador 0D
+ * (`simulator.ts`) y el visor de choques 2D (`nozzleShock.ts`).
+ */
+export function computeCanonicalTTI(params: {
+  P0_MPa: number;
+  Patm_MPa: number;
+  At_mm2: number;
+  Ae_mm2: number;
+  k: number;
+  R_tot: number;
+  T0r_K: number;
+  alphaDeg: number;
+  etanoz: number;
+  isIdle?: boolean;
+}): CanonicalTTIResult {
+  const Patm_MPa = Math.max(1e-6, params.Patm_MPa || 0.101325);
+  const P0_MPa = Math.max(Patm_MPa, params.P0_MPa);
+  const At_mm2 = Math.max(1e-6, params.At_mm2);
+  const Ae_mm2 = Math.max(At_mm2, params.Ae_mm2);
+  const exprat = Math.max(1.0, Ae_mm2 / At_mm2);
+  const k = Math.max(1.04, params.k || 1.13);
+  const R_tot = Math.max(10, params.R_tot || 287);
+  const T0r_K = Math.max(200, params.T0r_K || 1710);
+  const alphaDeg = Math.min(89, Math.max(0, params.alphaDeg ?? 12));
+  const etanoz = Math.min(1, Math.max(0, params.etanoz ?? 0.95));
+  const lambdaDiv = 0.5 * (1 + Math.cos((alphaDeg * Math.PI) / 180));
+
+  let Ms1 = 1;
+  let Ms2 = 1;
+  if (exprat > 1.0002) {
+    const funMs = (Ms: number) => areaMachRatio(Ms, k) - exprat;
+    Ms1 = bisectSolve(funMs, 0.005, 0.9999);
+    Ms2 = bisectSolve(funMs, 1.0001, 20.0);
+    if (!Number.isFinite(Ms1) || Ms1 <= 0) Ms1 = 0.3;
+    if (!Number.isFinite(Ms2) || Ms2 <= 1) Ms2 = 2.0;
+  }
+
+  const pis1 = Math.pow(1 + ((k - 1) / 2) * Ms1 * Ms1, -k / (k - 1));
+  const pis2 = Math.pow(1 + ((k - 1) / 2) * Ms2 * Ms2, -k / (k - 1));
+  const pich = (2 * k * Ms2 * Ms2 - (k - 1)) / (k + 1);
+  const pich_correct = pis2 * pich;
+  const Pp = Patm_MPa / Math.max(1e-9, P0_MPa);
+
+  const mDot_choked =
+    P0_MPa *
+    1e6 *
+    (At_mm2 / 1e6) *
+    Math.sqrt(k / (R_tot * T0r_K)) *
+    Math.pow(2 / (k + 1), (k + 1) / (2 * (k - 1)));
+
+  if (params.isIdle || P0_MPa <= Patm_MPa + 1e-4) {
+    return {
+      regime: 'idle',
+      exprat,
+      Ms1,
+      Ms2,
+      pis1,
+      pis2,
+      pich_correct,
+      Pp: 1,
+      isChoked: false,
+      Mt: 0,
+      Me_actual: 0,
+      Pe_MPa: Patm_MPa,
+      Pe_over_Pa: 1,
+      Te_K: 288.15,
+      ve_ms: 0,
+      mDot_kg_s: 0,
+      mDot_choked,
+      MachFactor: 1,
+      lambdaDiv,
+      momentumThrust_N: 0,
+      pressureThrust_N: 0,
+      TTI_Thrust_N: 0,
+      betaObliqueDeg: null,
+      alphaDeflectDeg: null,
+      thetaPMDeg: null,
+      MextJet: 0,
+    };
+  }
+
+  // 1. Subsonic Venturi flow (Pp >= pis1)
+  if (Pp >= pis1) {
+    const Me_sub = Math.min(
+      Ms1,
+      Math.sqrt(Math.max(0, ((Math.pow(1 / Pp, (k - 1) / k) - 1) * 2) / (k - 1)))
+    );
+    const Ae_over_Astar_sub = areaMachRatio(Math.max(0.005, Me_sub), k);
+    const At_over_Astar_sub = Math.max(1.0, Ae_over_Astar_sub / exprat);
+    const Mt =
+      At_over_Astar_sub <= 1.0001
+        ? 1.0
+        : bisectSolve((m) => areaMachRatio(m, k) - At_over_Astar_sub, 0.005, 0.9999);
+    const Te_K = T0r_K / (1 + ((k - 1) / 2) * Me_sub * Me_sub);
+    const ve_ms = Math.sqrt(k * R_tot * Te_K) * Me_sub;
+    const rhoE = (Patm_MPa * 1e6) / (R_tot * Te_K);
+    const mDot_sub = Math.min(mDot_choked, Math.max(0, rhoE * (Ae_mm2 / 1e6) * ve_ms));
+    const momentumThrust_N = mDot_sub * ve_ms;
+    const TTI_Thrust_N = Math.max(0, etanoz * lambdaDiv * momentumThrust_N);
+
+    return {
+      regime: 'subsonic',
+      exprat,
+      Ms1,
+      Ms2,
+      pis1,
+      pis2,
+      pich_correct,
+      Pp,
+      isChoked: false,
+      Mt,
+      Me_actual: Me_sub,
+      Pe_MPa: Patm_MPa,
+      Pe_over_Pa: 1,
+      Te_K,
+      ve_ms,
+      mDot_kg_s: mDot_sub,
+      mDot_choked,
+      MachFactor: 1,
+      lambdaDiv,
+      momentumThrust_N,
+      pressureThrust_N: 0,
+      TTI_Thrust_N,
+      betaObliqueDeg: null,
+      alphaDeflectDeg: null,
+      thetaPMDeg: null,
+      MextJet: Me_sub,
+    };
+  }
+
+  // 2. Normal Shock inside divergent cone (OCN: pich_correct <= Pp < pis1)
+  if (Pp >= pich_correct) {
+    const funOCN = (Ms: number) =>
+      exprat *
+        Pp *
+        Math.pow((k + 1) / 2, (k + 1) / (2 * (k - 1))) *
+        Ms *
+        Math.sqrt(1 + ((k - 1) / 2) * Ms * Ms) -
+      1;
+    let ms_ocn = bisectSolve(funOCN, 0.005, 0.9999);
+    if (!Number.isFinite(ms_ocn) || ms_ocn <= 0) ms_ocn = 0.5;
+    const Ts_ocn = T0r_K / (1 + ((k - 1) / 2) * ms_ocn * ms_ocn);
+    const ve_ms = Math.sqrt(k * R_tot * Ts_ocn) * ms_ocn;
+    const momentumThrust_N = mDot_choked * ve_ms;
+    const TTI_Thrust_N = Math.max(0, etanoz * lambdaDiv * momentumThrust_N);
+
+    return {
+      regime: 'normal_shock',
+      exprat,
+      Ms1,
+      Ms2,
+      pis1,
+      pis2,
+      pich_correct,
+      Pp,
+      isChoked: true,
+      Mt: 1,
+      Me_actual: ms_ocn,
+      Pe_MPa: Patm_MPa,
+      Pe_over_Pa: 1,
+      Te_K: Ts_ocn,
+      ve_ms,
+      mDot_kg_s: mDot_choked,
+      mDot_choked,
+      MachFactor: 1,
+      lambdaDiv,
+      momentumThrust_N,
+      pressureThrust_N: 0,
+      TTI_Thrust_N,
+      betaObliqueDeg: null,
+      alphaDeflectDeg: null,
+      thetaPMDeg: null,
+      MextJet: ms_ocn,
+      ms_ocn,
+    };
+  }
+
+  // Common supersonic exit properties for Adapted / Overexpanded / Underexpanded
+  const Pe_MPa = P0_MPa * pis2;
+  const Pe_over_Pa = Pe_MPa / Patm_MPa;
+  const Ts_out = T0r_K * Math.pow(pis2, (k - 1) / k);
+  const ve_ms = Math.sqrt(k * R_tot * Ts_out) * Ms2;
+  const momentumThrust_N = mDot_choked * ve_ms;
+  const pressureThrust_N = (Pe_MPa - Patm_MPa) * 1e6 * (Ae_mm2 / 1e6);
+
+  // 3. Adapted nozzle band
+  if (Math.abs(Pp - pis2) / Math.max(1e-6, pis2) <= 0.005) {
+    const machAngleRad = Math.asin(Math.min(1, 1 / Math.max(1, Ms2)));
+    const TTI_Thrust_N = Math.max(
+      0,
+      etanoz * (lambdaDiv * momentumThrust_N + pressureThrust_N)
+    );
+    return {
+      regime: 'adapted',
+      exprat,
+      Ms1,
+      Ms2,
+      pis1,
+      pis2,
+      pich_correct,
+      Pp,
+      isChoked: true,
+      Mt: 1,
+      Me_actual: Ms2,
+      Pe_MPa: Patm_MPa,
+      Pe_over_Pa: 1,
+      Te_K: Ts_out,
+      ve_ms,
+      mDot_kg_s: mDot_choked,
+      mDot_choked,
+      MachFactor: 1,
+      lambdaDiv,
+      momentumThrust_N,
+      pressureThrust_N: 0,
+      TTI_Thrust_N,
+      betaObliqueDeg: (machAngleRad * 180) / Math.PI,
+      alphaDeflectDeg: 0,
+      thetaPMDeg: 0,
+      MextJet: Ms2,
+    };
+  }
+
+  // 4. Overexpanded with external Oblique Shock (OCO: pis2 < Pp < pich_correct)
+  if (Pp > pis2) {
+    const Mn_s2_val = ((Patm_MPa / Math.max(1e-9, Pe_MPa)) * (k + 1) + (k - 1)) / (2 * k);
+    const Mn_s2 = Math.sqrt(Math.max(1, Mn_s2_val));
+    const sinBeta = Math.min(1, Math.max(1 / Math.max(1, Ms2), Mn_s2 / Math.max(1, Ms2)));
+    const betaRad = Math.asin(sinBeta);
+    const betaObliqueDeg = (betaRad * 180) / Math.PI;
+
+    // Exact gas-dynamic theta-beta-M relation
+    const tanBeta = Math.tan(betaRad);
+    const numTheta = 2 * (1 / Math.max(1e-9, tanBeta)) * (Ms2 * Ms2 * sinBeta * sinBeta - 1);
+    const denTheta = Ms2 * Ms2 * (k + Math.cos(2 * betaRad)) + 2;
+    const thetaRad =
+      betaRad >= Math.PI * 0.5 - 1e-6 || denTheta <= 1e-9
+        ? 0
+        : Math.max(0, Math.atan(Math.max(0, numTheta / denTheta)));
+    const alphaDeflectDeg = (thetaRad * 180) / Math.PI;
+    const MachFactor = Math.min(1, Math.max(0, Math.cos(thetaRad)));
+
+    // Exact downstream Mach behind oblique shock
+    const Mn_post_sq =
+      ((k - 1) * Mn_s2 * Mn_s2 + 2) / Math.max(1e-9, 2 * k * Mn_s2 * Mn_s2 - (k - 1));
+    const sinDiff = Math.max(0.05, Math.sin(Math.max(1e-4, betaRad - thetaRad)));
+    const MextJet = Math.sqrt(Math.max(0.01, Mn_post_sq)) / sinDiff;
+
+    const TTI_Thrust_N = Math.max(
+      0,
+      etanoz * (lambdaDiv * MachFactor * momentumThrust_N + pressureThrust_N)
+    );
+
+    return {
+      regime: 'overexpanded',
+      exprat,
+      Ms1,
+      Ms2,
+      pis1,
+      pis2,
+      pich_correct,
+      Pp,
+      isChoked: true,
+      Mt: 1,
+      Me_actual: Ms2,
+      Pe_MPa,
+      Pe_over_Pa,
+      Te_K: Ts_out,
+      ve_ms,
+      mDot_kg_s: mDot_choked,
+      mDot_choked,
+      MachFactor,
+      lambdaDiv,
+      momentumThrust_N,
+      pressureThrust_N,
+      TTI_Thrust_N,
+      betaObliqueDeg,
+      alphaDeflectDeg,
+      thetaPMDeg: null,
+      MextJet,
+    };
+  }
+
+  // 5. Underexpanded (Prandtl-Meyer external expansion fan: Pp < pis2)
+  const MextOut = Math.sqrt(
+    Math.max(Ms2 * Ms2, ((Math.pow(Pp, (1 - k) / k) - 1) * 2) / (k - 1))
+  );
+  const Nu_Mext = nuPrandtlMeyer(MextOut, k);
+  const Nu_Ms2 = nuPrandtlMeyer(Ms2, k);
+  const Nu_max = (Math.PI / 2) * (Math.sqrt((k + 1) / (k - 1)) - 1);
+  const thetaPM_rad = Math.max(0, Nu_Mext - Nu_Ms2);
+  const thetaMax_rad = Math.max(0, Nu_max - Nu_Ms2);
+  const thetaLim_rad = Math.min(thetaPM_rad, thetaMax_rad);
+  const thetaPMDeg = (thetaLim_rad * 180) / Math.PI;
+
+  // Canonical TTI axial thrust at the exit plane: pressure-thrust accounts for underexpansion
+  const TTI_Thrust_N = Math.max(
+    0,
+    etanoz * (lambdaDiv * momentumThrust_N + pressureThrust_N)
+  );
+
+  return {
+    regime: 'underexpanded',
+    exprat,
+    Ms1,
+    Ms2,
+    pis1,
+    pis2,
+    pich_correct,
+    Pp,
+    isChoked: true,
+    Mt: 1,
+    Me_actual: Ms2,
+    Pe_MPa,
+    Pe_over_Pa,
+    Te_K: Ts_out,
+    ve_ms,
+    mDot_kg_s: mDot_choked,
+    mDot_choked,
+    MachFactor: 1,
+    lambdaDiv,
+    momentumThrust_N,
+    pressureThrust_N,
+    TTI_Thrust_N,
+    betaObliqueDeg: null,
+    alphaDeflectDeg: null,
+    thetaPMDeg,
+    MextJet: MextOut,
+  };
+}
+
 export function computeNozzleFlowStateFromValues(
   params: {
     timeSec: number;
@@ -168,13 +529,12 @@ export function computeNozzleFlowStateFromValues(
   const Dt0 = nozzle?.Dt0 && nozzle.Dt0 > 0 ? nozzle.Dt0 : 18.8;
   const At_mm2 = params.At_mm2 > 0 ? params.At_mm2 : (Math.PI / 4) * Dt0 * Dt0;
   const Dt_mm = Math.sqrt(Math.max(1e-6, (4 * At_mm2) / Math.PI));
-  const Ds_mm = Math.max(Dt_mm * 1.02, nozzle?.Ds && nozzle.Ds > 0 ? nozzle.Ds : Dt_mm * 2.1);
+  const Ds_mm = Math.max(Dt_mm, nozzle?.Ds && nozzle.Ds > 0 ? nozzle.Ds : Dt_mm * 2.1);
   const Dc_mm = Math.max(Ds_mm * 1.08, motor?.Dc && motor.Dc > 0 ? motor.Dc : Dt_mm * 3.0);
-  const alphaDeg = nozzle?.alpha && nozzle.alpha > 0 ? Math.min(45, Math.max(3, nozzle.alpha)) : 12;
-  const L_div_mm = Math.max(2, (Ds_mm - Dt_mm) / (2 * Math.tan((alphaDeg * Math.PI) / 180)));
+  const alphaDeg = nozzle?.alpha && nozzle.alpha > 0 ? Math.min(89, Math.max(0.5, nozzle.alpha)) : 12;
+  const L_div_mm = Math.max(2, (Ds_mm - Dt_mm) / Math.max(1e-3, 2 * Math.tan((alphaDeg * Math.PI) / 180)));
 
   const Ae_mm2 = (Math.PI / 4) * Ds_mm * Ds_mm;
-  const exprat = Math.max(1.001, Ae_mm2 / Math.max(1e-6, At_mm2));
 
   const prop = getPropellantData(params.propellantType || 1, params.customPropellants);
   const k = Math.max(1.04, params.k_avg && params.k_avg > 1.02 ? params.k_avg : prop.k || 1.13);
@@ -183,30 +543,24 @@ export function computeNozzleFlowStateFromValues(
   const etanoz = nozzle?.etanoz && nozzle.etanoz > 0 ? nozzle.etanoz : 0.95;
   const T0r_K = (prop.T0 || 1710) * etac;
 
-  const funMs = (Ms: number) => areaMachRatio(Ms, k) - exprat;
-  const Ms1 = bisectSolve(funMs, 0.005, 0.9999);
-  const Ms2 = bisectSolve(funMs, 1.0001, 20.0);
+  const tti = computeCanonicalTTI({
+    P0_MPa,
+    Patm_MPa,
+    At_mm2,
+    Ae_mm2,
+    k,
+    R_tot,
+    T0r_K,
+    alphaDeg,
+    etanoz,
+    isIdle: params.isIdleInstant || P0_MPa <= Patm_MPa + 0.00025,
+  });
 
-  const pis1 = Math.pow(1 + ((k - 1) / 2) * Ms1 * Ms1, -k / (k - 1));
-  const pis2 = Math.pow(1 + ((k - 1) / 2) * Ms2 * Ms2, -k / (k - 1));
-  const pich = (2 * k * Ms2 * Ms2 - (k - 1)) / (k + 1);
-  const pich_correct = pis2 * pich;
+  const P_choke_MPa = Patm_MPa / Math.max(1e-6, tti.pis1);
+  const P_exit_shock_MPa = Patm_MPa / Math.max(1e-6, tti.pich_correct);
+  const P_adapt_MPa = Patm_MPa / Math.max(1e-6, tti.pis2);
 
-  const P_choke_MPa = Patm_MPa / Math.max(1e-6, pis1);
-  const P_exit_shock_MPa = Patm_MPa / Math.max(1e-6, pich_correct);
-  const P_adapt_MPa = Patm_MPa / Math.max(1e-6, pis2);
-
-  const Pp = Patm_MPa / Math.max(1e-9, P0_MPa);
-
-  const mDot_choked =
-    P0_MPa *
-    1e6 *
-    (At_mm2 / 1e6) *
-    Math.sqrt(k / (R_tot * T0r_K)) *
-    Math.pow(2 / (k + 1), (k + 1) / (2 * (k - 1)));
-
-  // 1. IDLE
-  if (params.isIdleInstant || P0_MPa <= Patm_MPa + 0.00025) {
+  if (tti.regime === 'idle') {
     return {
       timeSec: params.timeSec,
       regime: 'idle',
@@ -221,12 +575,12 @@ export function computeNozzleFlowStateFromValues(
       k,
       R_tot,
       T0r_K,
-      exprat,
-      Ms1,
-      Ms2,
-      pis1,
-      pis2,
-      pich_correct,
+      exprat: tti.exprat,
+      Ms1: tti.Ms1,
+      Ms2: tti.Ms2,
+      pis1: tti.pis1,
+      pis2: tti.pis2,
+      pich_correct: tti.pich_correct,
       P_choke_MPa,
       P_exit_shock_MPa,
       P_adapt_MPa,
@@ -260,26 +614,13 @@ export function computeNozzleFlowStateFromValues(
     };
   }
 
-  // 2. SUBSONIC (unchoked Venturi)
-  if (Pp >= pis1) {
-    const Me_sub = Math.min(
-      Ms1 * 0.999,
-      Math.sqrt(Math.max(0, ((Math.pow(1 / Pp, (k - 1) / k) - 1) * 2) / (k - 1)))
-    );
-    const Ae_over_Astar_sub = areaMachRatio(Math.max(0.01, Me_sub), k);
-    const At_over_Astar_sub = Math.max(1.0001, Ae_over_Astar_sub / exprat);
-    const Mt = bisectSolve((m) => areaMachRatio(m, k) - At_over_Astar_sub, 0.005, 0.999);
-    const Te_K = T0r_K / (1 + ((k - 1) / 2) * Me_sub * Me_sub);
-    const ve_ms = Math.sqrt(k * R_tot * Te_K) * Me_sub;
-    const rhoE = (Patm_MPa * 1e6) / (R_tot * Te_K);
-    const mDot_sub = rhoE * (Ae_mm2 / 1e6) * ve_ms;
-
+  if (tti.regime === 'subsonic') {
     return {
       timeSec: params.timeSec,
       regime: 'subsonic',
       P0_MPa,
       Patm_MPa,
-      Pp,
+      Pp: tti.Pp,
       Dc_mm,
       Dt_mm,
       Ds_mm,
@@ -288,17 +629,17 @@ export function computeNozzleFlowStateFromValues(
       k,
       R_tot,
       T0r_K,
-      exprat,
-      Ms1,
-      Ms2,
-      pis1,
-      pis2,
-      pich_correct,
+      exprat: tti.exprat,
+      Ms1: tti.Ms1,
+      Ms2: tti.Ms2,
+      pis1: tti.pis1,
+      pis2: tti.pis2,
+      pich_correct: tti.pich_correct,
       P_choke_MPa,
       P_exit_shock_MPa,
       P_adapt_MPa,
       isChoked: false,
-      Mt,
+      Mt: tti.Mt,
       shockPosNorm: null,
       shockDiam_mm: null,
       M1_shock: null,
@@ -306,20 +647,20 @@ export function computeNozzleFlowStateFromValues(
       shockPressureJump: null,
       shockTempJump: null,
       separationPosNorm: null,
-      Me_actual: Me_sub,
+      Me_actual: tti.Me_actual,
       Pe_MPa: Patm_MPa,
       Pe_over_Pa: 1,
-      Te_K,
-      ve_ms,
-      mDot_kg_s: mDot_sub,
-      MachFactor: 1,
-      momentumThrust_N: mDot_sub * ve_ms * etanoz,
+      Te_K: tti.Te_K,
+      ve_ms: tti.ve_ms,
+      mDot_kg_s: tti.mDot_kg_s,
+      MachFactor: tti.MachFactor,
+      momentumThrust_N: tti.momentumThrust_N,
       pressureThrust_N: 0,
-      TTI_Thrust_N: params.E_N !== undefined ? params.E_N : mDot_sub * ve_ms * etanoz,
+      TTI_Thrust_N: params.E_N !== undefined ? params.E_N : tti.TTI_Thrust_N,
       betaObliqueDeg: null,
       alphaDeflectDeg: null,
       thetaPMDeg: null,
-      MextJet: Me_sub,
+      MextJet: tti.MextJet,
       jetExpansionRatio: 1,
       machDiskRatio: 0,
       diamondSpacing_Ds: 1.5,
@@ -327,32 +668,23 @@ export function computeNozzleFlowStateFromValues(
     };
   }
 
-  // 3. NORMAL SHOCK INSIDE NOZZLE (OCN)
-  if (Pp >= pich_correct) {
-    const funOCN = (Ms: number) =>
-      exprat *
-        Pp *
-        Math.pow((k + 1) / 2, (k + 1) / (2 * (k - 1))) *
-        Ms *
-        Math.sqrt(1 + ((k - 1) / 2) * Ms * Ms) -
-      1;
-    const ms_ocn = bisectSolve(funOCN, 0.005, 0.9999);
+  if (tti.regime === 'normal_shock') {
+    const ms_ocn = tti.ms_ocn ?? tti.Me_actual;
     const P02_over_P0 = Math.min(
       0.99999,
-      Math.max(1e-6, Pp * Math.pow(1 + ((k - 1) / 2) * ms_ocn * ms_ocn, k / (k - 1)))
+      Math.max(1e-6, tti.Pp * Math.pow(1 + ((k - 1) / 2) * ms_ocn * ms_ocn, k / (k - 1)))
     );
-
-    const rhAtExit = rankineHugoniotP0Ratio(Ms2, k);
+    const rhAtExit = rankineHugoniotP0Ratio(tti.Ms2, k);
     let M1_shock: number;
     if (P02_over_P0 <= rhAtExit) {
-      M1_shock = Ms2;
+      M1_shock = tti.Ms2;
     } else if (P02_over_P0 >= 0.99999) {
       M1_shock = 1.0001;
     } else {
       M1_shock = bisectSolve(
         (m1) => rankineHugoniotP0Ratio(m1, k) - P02_over_P0,
         1.0001,
-        Ms2
+        Math.max(1.0002, tti.Ms2)
       );
     }
 
@@ -364,23 +696,19 @@ export function computeNozzleFlowStateFromValues(
     const shockTempJump =
       shockPressureJump *
       (((k - 1) * M1_shock * M1_shock + 2) / ((k + 1) * M1_shock * M1_shock));
-    const As_over_At = Math.min(exprat, Math.max(1, areaMachRatio(M1_shock, k)));
+    const As_over_At = Math.min(tti.exprat, Math.max(1, areaMachRatio(M1_shock, k)));
     const shockDiam_mm = Dt_mm * Math.sqrt(As_over_At);
     const shockPosNorm = Math.max(
       0,
       Math.min(1, (shockDiam_mm - Dt_mm) / Math.max(1e-6, Ds_mm - Dt_mm))
     );
-    const Ts_ocn = T0r_K / (1 + ((k - 1) / 2) * ms_ocn * ms_ocn);
-    const ve_ms = Math.sqrt(k * R_tot * Ts_ocn) * ms_ocn;
-    const momN = mDot_choked * ve_ms;
-    const thrustN = params.E_N !== undefined ? params.E_N : etanoz * momN;
 
     return {
       timeSec: params.timeSec,
       regime: 'normal_shock',
       P0_MPa,
       Patm_MPa,
-      Pp,
+      Pp: tti.Pp,
       Dc_mm,
       Dt_mm,
       Ds_mm,
@@ -389,12 +717,12 @@ export function computeNozzleFlowStateFromValues(
       k,
       R_tot,
       T0r_K,
-      exprat,
-      Ms1,
-      Ms2,
-      pis1,
-      pis2,
-      pich_correct,
+      exprat: tti.exprat,
+      Ms1: tti.Ms1,
+      Ms2: tti.Ms2,
+      pis1: tti.pis1,
+      pis2: tti.pis2,
+      pich_correct: tti.pich_correct,
       P_choke_MPa,
       P_exit_shock_MPa,
       P_adapt_MPa,
@@ -410,13 +738,13 @@ export function computeNozzleFlowStateFromValues(
       Me_actual: ms_ocn,
       Pe_MPa: Patm_MPa,
       Pe_over_Pa: 1,
-      Te_K: Ts_ocn,
-      ve_ms,
-      mDot_kg_s: mDot_choked,
-      MachFactor: 1,
-      momentumThrust_N: momN,
+      Te_K: tti.Te_K,
+      ve_ms: tti.ve_ms,
+      mDot_kg_s: tti.mDot_kg_s,
+      MachFactor: tti.MachFactor,
+      momentumThrust_N: tti.momentumThrust_N,
       pressureThrust_N: 0,
-      TTI_Thrust_N: thrustN,
+      TTI_Thrust_N: params.E_N !== undefined ? params.E_N : tti.TTI_Thrust_N,
       betaObliqueDeg: null,
       alphaDeflectDeg: null,
       thetaPMDeg: null,
@@ -428,25 +756,15 @@ export function computeNozzleFlowStateFromValues(
     };
   }
 
-  // Exit supersonic properties common to Overexpanded, Adapted, Underexpanded
-  const Pe_MPa = P0_MPa * pis2;
-  const Pe_over_Pa = Pe_MPa / Patm_MPa;
-  const Ts_out = T0r_K * Math.pow(pis2, (k - 1) / k);
-  const ve_ms = Math.sqrt(k * R_tot * Ts_out) * Ms2;
-  const momentumThrust_N = mDot_choked * ve_ms;
-  const pressureThrust_N = (Pe_MPa - Patm_MPa) * 1e6 * (Ae_mm2 / 1e6);
-
-  // 4. ADAPTED
-  if (Math.abs(Pp - pis2) / Math.max(1e-6, pis2) <= 0.015) {
-    const machAngleRad = Math.asin(1 / Ms2);
-    const spacing = Math.max(0.8, 1.0 / Math.tan(machAngleRad));
-    const thrustN = params.E_N !== undefined ? params.E_N : etanoz * (momentumThrust_N + pressureThrust_N);
+  if (tti.regime === 'adapted') {
+    const machAngleRad = Math.asin(Math.min(1, 1 / Math.max(1, tti.Ms2)));
+    const spacing = Math.max(0.8, 1.0 / Math.max(1e-3, Math.tan(machAngleRad)));
     return {
       timeSec: params.timeSec,
       regime: 'adapted',
       P0_MPa,
       Patm_MPa,
-      Pp,
+      Pp: tti.Pp,
       Dc_mm,
       Dt_mm,
       Ds_mm,
@@ -455,12 +773,12 @@ export function computeNozzleFlowStateFromValues(
       k,
       R_tot,
       T0r_K,
-      exprat,
-      Ms1,
-      Ms2,
-      pis1,
-      pis2,
-      pich_correct,
+      exprat: tti.exprat,
+      Ms1: tti.Ms1,
+      Ms2: tti.Ms2,
+      pis1: tti.pis1,
+      pis2: tti.pis2,
+      pich_correct: tti.pich_correct,
       P_choke_MPa,
       P_exit_shock_MPa,
       P_adapt_MPa,
@@ -473,20 +791,20 @@ export function computeNozzleFlowStateFromValues(
       shockPressureJump: null,
       shockTempJump: null,
       separationPosNorm: null,
-      Me_actual: Ms2,
+      Me_actual: tti.Ms2,
       Pe_MPa: Patm_MPa,
       Pe_over_Pa: 1,
-      Te_K: Ts_out,
-      ve_ms,
-      mDot_kg_s: mDot_choked,
+      Te_K: tti.Te_K,
+      ve_ms: tti.ve_ms,
+      mDot_kg_s: tti.mDot_kg_s,
       MachFactor: 1,
-      momentumThrust_N,
+      momentumThrust_N: tti.momentumThrust_N,
       pressureThrust_N: 0,
-      TTI_Thrust_N: thrustN,
-      betaObliqueDeg: (machAngleRad * 180) / Math.PI,
+      TTI_Thrust_N: params.E_N !== undefined ? params.E_N : tti.TTI_Thrust_N,
+      betaObliqueDeg: tti.betaObliqueDeg,
       alphaDeflectDeg: 0,
       thetaPMDeg: 0,
-      MextJet: Ms2,
+      MextJet: tti.Ms2,
       jetExpansionRatio: 1.0,
       machDiskRatio: 0,
       diamondSpacing_Ds: spacing,
@@ -494,37 +812,27 @@ export function computeNozzleFlowStateFromValues(
     };
   }
 
-  // 5. OVEREXPANDED (OCO)
-  if (Pp > pis2) {
-    const Mn_s2_val = ((Patm_MPa / (P0_MPa * pis2)) * (k + 1) + (k - 1)) / (2 * k);
-    const Mn_s2 = Math.sqrt(Math.max(1, Mn_s2_val));
-    const sinBeta = Math.min(1, Math.max(1 / Ms2, Mn_s2 / Ms2));
-    const betaRad = Math.asin(sinBeta);
-    const betaObliqueDeg = (betaRad * 180) / Math.PI;
-    const Mn_ext = Math.sqrt(
-      Math.max(0, ((k - 1) * Mn_s2 * Mn_s2 + 2) / Math.max(1e-9, 2 * k * Mn_s2 * Mn_s2 - (k - 1)))
+  if (tti.regime === 'overexpanded') {
+    const betaObliqueDeg = tti.betaObliqueDeg ?? 45;
+    const alphaDeflectDeg = tti.alphaDeflectDeg ?? 0;
+    const jetExpansionRatio = Math.max(
+      0.56,
+      1 - 0.36 * Math.tan(Math.min(35, alphaDeflectDeg) * (Math.PI / 180))
     );
-    const alphaDeflectDeg = Math.max(
-      0.2,
-      betaObliqueDeg -
-        (Math.atan(Mn_ext / Math.max(1e-6, Ms2 * Math.cos(betaRad))) * 180) / Math.PI
-    );
-    const MachFactor = Math.min(1, Math.max(0, Math.cos((alphaDeflectDeg * Math.PI) / 180)));
-
-    const pressureMismatch = Math.min(1, Math.max(0.05, (1 - Pe_over_Pa) / Math.max(0.1, 1 - pis2 / pich_correct)));
-    const jetExpansionRatio = Math.max(0.56, 1 - 0.36 * Math.tan(Math.min(35, alphaDeflectDeg) * (Math.PI / 180)));
     const machDiskRatio =
       betaObliqueDeg > 50 ? Math.min(0.5, ((betaObliqueDeg - 50) / 40) * 0.5) : 0;
     const tanB = Math.max(0.28, Math.tan(Math.min(76, betaObliqueDeg) * (Math.PI / 180)));
-    const diamondSpacing_Ds = Math.max(0.65, Math.min(2.6, 1.05 / tanB + 0.35 * Math.sqrt(Math.max(0.2, Ms2 * Ms2 - 1))));
-    const thrustN = params.E_N !== undefined ? params.E_N : etanoz * (momentumThrust_N + pressureThrust_N) * MachFactor;
+    const diamondSpacing_Ds = Math.max(
+      0.65,
+      Math.min(2.6, 1.05 / tanB + 0.35 * Math.sqrt(Math.max(0.2, tti.Ms2 * tti.Ms2 - 1)))
+    );
 
     return {
       timeSec: params.timeSec,
       regime: 'overexpanded',
       P0_MPa,
       Patm_MPa,
-      Pp,
+      Pp: tti.Pp,
       Dc_mm,
       Dt_mm,
       Ds_mm,
@@ -533,12 +841,12 @@ export function computeNozzleFlowStateFromValues(
       k,
       R_tot,
       T0r_K,
-      exprat,
-      Ms1,
-      Ms2,
-      pis1,
-      pis2,
-      pich_correct,
+      exprat: tti.exprat,
+      Ms1: tti.Ms1,
+      Ms2: tti.Ms2,
+      pis1: tti.pis1,
+      pis2: tti.pis2,
+      pich_correct: tti.pich_correct,
       P_choke_MPa,
       P_exit_shock_MPa,
       P_adapt_MPa,
@@ -550,60 +858,49 @@ export function computeNozzleFlowStateFromValues(
       M2_shock: null,
       shockPressureJump: null,
       shockTempJump: null,
-      separationPosNorm: Pe_over_Pa < 0.38 ? Math.max(0.72, 1 - (0.38 - Pe_over_Pa) * 0.65) : null,
-      Me_actual: Ms2,
-      Pe_MPa,
-      Pe_over_Pa,
-      Te_K: Ts_out,
-      ve_ms,
-      mDot_kg_s: mDot_choked,
-      MachFactor,
-      momentumThrust_N,
-      pressureThrust_N,
-      TTI_Thrust_N: thrustN,
+      separationPosNorm: tti.Pe_over_Pa < 0.38 ? Math.max(0.72, 1 - (0.38 - tti.Pe_over_Pa) * 0.65) : null,
+      Me_actual: tti.Ms2,
+      Pe_MPa: tti.Pe_MPa,
+      Pe_over_Pa: tti.Pe_over_Pa,
+      Te_K: tti.Te_K,
+      ve_ms: tti.ve_ms,
+      mDot_kg_s: tti.mDot_kg_s,
+      MachFactor: tti.MachFactor,
+      momentumThrust_N: tti.momentumThrust_N,
+      pressureThrust_N: tti.pressureThrust_N,
+      TTI_Thrust_N: params.E_N !== undefined ? params.E_N : tti.TTI_Thrust_N,
       betaObliqueDeg,
       alphaDeflectDeg,
       thetaPMDeg: null,
-      MextJet: Math.max(1.05, Ms2 * (1 - 0.22 * pressureMismatch)),
+      MextJet: tti.MextJet,
       jetExpansionRatio,
       machDiskRatio,
       diamondSpacing_Ds,
-      waveIntensity: Math.min(1, 0.28 + 0.72 * Math.min(1, (1 - Pe_over_Pa) * 1.65)),
+      waveIntensity: Math.min(1, 0.28 + 0.72 * Math.min(1, (1 - tti.Pe_over_Pa) * 1.65)),
     };
   }
 
-  // 6. UNDEREXPANDED (Prandtl-Meyer)
-  const MextOut = Math.sqrt(
-    Math.max(Ms2 * Ms2, ((Math.pow(Pp, (1 - k) / k) - 1) * 2) / (k - 1))
-  );
-  const Nu_Mext = nuPrandtlMeyer(MextOut, k);
-  const Nu_Ms2 = nuPrandtlMeyer(Ms2, k);
-  const thetaPMDeg = Math.max(0.5, ((Nu_Mext - Nu_Ms2) * 180) / Math.PI);
-  const Nu_max = (Math.PI / 2) * (Math.sqrt((k + 1) / (k - 1)) - 1);
-  const Teta_max_rad = Nu_max - Nu_Ms2;
-  const TetaLimited_deg = thetaPMDeg > Teta_max_rad ? Teta_max_rad : thetaPMDeg;
-  const MachFactor = Math.min(1, Math.max(0, Math.cos((TetaLimited_deg * Math.PI) / 180)));
-
+  // Underexpanded
+  const thetaPMDeg = tti.thetaPMDeg ?? 0.5;
   const jetExpansionRatio = Math.min(
     1.76,
     1 + 0.56 * Math.tan((Math.min(38, thetaPMDeg) * Math.PI) / 180)
   );
   const machDiskRatio =
-    Pe_over_Pa > 1.65 ? Math.min(0.56, ((Pe_over_Pa - 1.65) / 6.0) * 0.56) : 0;
-  const effectiveM = 0.5 * (Ms2 + Math.min(6, MextOut));
+    tti.Pe_over_Pa > 1.65 ? Math.min(0.56, ((tti.Pe_over_Pa - 1.65) / 6.0) * 0.56) : 0;
+  const effectiveM = 0.5 * (tti.Ms2 + Math.min(6, tti.MextJet));
   const diamondSpacing_Ds = Math.max(
     0.9,
     Math.min(3.4, (Math.PI / 2.4048) * jetExpansionRatio * Math.sqrt(Math.max(0.3, effectiveM * effectiveM - 1)) * 0.65)
   );
-  const waveIntensity = Math.min(1, 0.28 + 0.72 * Math.min(1, (Pe_over_Pa - 1) / 2.8));
-  const thrustN = params.E_N !== undefined ? params.E_N : etanoz * (momentumThrust_N + pressureThrust_N) * MachFactor;
+  const waveIntensity = Math.min(1, 0.28 + 0.72 * Math.min(1, (tti.Pe_over_Pa - 1) / 2.8));
 
   return {
     timeSec: params.timeSec,
     regime: 'underexpanded',
     P0_MPa,
     Patm_MPa,
-    Pp,
+    Pp: tti.Pp,
     Dc_mm,
     Dt_mm,
     Ds_mm,
@@ -612,12 +909,12 @@ export function computeNozzleFlowStateFromValues(
     k,
     R_tot,
     T0r_K,
-    exprat,
-    Ms1,
-    Ms2,
-    pis1,
-    pis2,
-    pich_correct,
+    exprat: tti.exprat,
+    Ms1: tti.Ms1,
+    Ms2: tti.Ms2,
+    pis1: tti.pis1,
+    pis2: tti.pis2,
+    pich_correct: tti.pich_correct,
     P_choke_MPa,
     P_exit_shock_MPa,
     P_adapt_MPa,
@@ -630,20 +927,20 @@ export function computeNozzleFlowStateFromValues(
     shockPressureJump: null,
     shockTempJump: null,
     separationPosNorm: null,
-    Me_actual: Ms2,
-    Pe_MPa,
-    Pe_over_Pa,
-    Te_K: Ts_out,
-    ve_ms,
-    mDot_kg_s: mDot_choked,
-    MachFactor,
-    momentumThrust_N,
-    pressureThrust_N,
-    TTI_Thrust_N: thrustN,
+    Me_actual: tti.Ms2,
+    Pe_MPa: tti.Pe_MPa,
+    Pe_over_Pa: tti.Pe_over_Pa,
+    Te_K: tti.Te_K,
+    ve_ms: tti.ve_ms,
+    mDot_kg_s: tti.mDot_kg_s,
+    MachFactor: tti.MachFactor,
+    momentumThrust_N: tti.momentumThrust_N,
+    pressureThrust_N: tti.pressureThrust_N,
+    TTI_Thrust_N: params.E_N !== undefined ? params.E_N : tti.TTI_Thrust_N,
     betaObliqueDeg: null,
     alphaDeflectDeg: null,
     thetaPMDeg,
-    MextJet: MextOut,
+    MextJet: tti.MextJet,
     jetExpansionRatio,
     machDiskRatio,
     diamondSpacing_Ds,

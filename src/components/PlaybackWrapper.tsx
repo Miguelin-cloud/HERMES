@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SimulationResults, MotorInput, NozzleInput, getPropellantVisualProfile } from '../lib/types';
+import { Language } from '../lib/i18n';
 import { Motor3DViewer } from './Motor3DViewer';
 import { GrainViewer } from './GrainViewer';
 import { NozzleFlowViewer } from './NozzleFlowViewer';
-import { evaluateBurnbackTableAtDepth, isComplexGrain } from '../lib/grains';
+import { evaluateBurnbackTableAtDepth, getGrainModule, getGrainShapeLabel, isComplexGrain } from '../lib/grains';
 import { Button } from '@/components/ui/button';
 import {
   Box,
@@ -53,6 +54,7 @@ function sampleSeriesAtTime(tArr: number[], vArr: number[], tSec: number): numbe
 export function PlaybackWrapper({
   results,
   t_parent,
+  lang,
   motor,
   nozzle,
   syncEnabled = false,
@@ -65,6 +67,7 @@ export function PlaybackWrapper({
 }: {
   results: SimulationResults;
   t_parent?: any;
+  lang?: Language;
   motor?: MotorInput;
   nozzle?: NozzleInput;
   syncEnabled?: boolean;
@@ -215,8 +218,8 @@ export function PlaybackWrapper({
   };
 
   const profile = useMemo(() => {
-    return getPropellantVisualProfile(results?.propellantType || 1);
-  }, [results?.propellantType]);
+    return getPropellantVisualProfile(results?.propellantType || 1, lang || 'en', results?.customPropellants);
+  }, [results?.propellantType, results?.customPropellants, lang]);
 
   if (!results || !results.t) return null;
 
@@ -384,7 +387,7 @@ export function PlaybackWrapper({
             ) : (
               <div className="flex-1 min-h-0 flex flex-col gap-2.5 p-3 bg-slate-950/60 overflow-y-auto">
                 <div className="flex-1 min-h-[290px] rounded-lg border border-slate-800 overflow-hidden">
-                  <GrainViewer results={results} timeIndex={effectiveTimeIndex} t={t} />
+                  <GrainViewer results={results} timeIndex={effectiveTimeIndex} t={t} lang={lang} />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 shrink-0">
@@ -395,12 +398,11 @@ export function PlaybackWrapper({
                     const isComplexExhausted = isComplex && burnbackTable ? xBurn >= burnbackTable.xMaxMm : false;
                     const curL = isComplexExhausted ? 0 : Math.max(0, g.L0 - g.ei * xBurn * 2);
                     const curDOut = isComplexExhausted ? 0 : Math.max(0, g.D0 - g.osi * xBurn * 2);
+                    const hasBore = g.shape !== 3 && g.shape !== 6 && g.shape !== 7;
                     const curDIn =
-                      g.shape === 1
-                        ? Math.min(curDOut, g.d0 + g.ci * xBurn * 2)
-                        : isComplex
-                          ? Math.min(curDOut, g.d0mayor + g.ci * xBurn * 2)
-                          : 0;
+                      !hasBore
+                        ? 0
+                        : Math.min(curDOut, (g.d0 || 0) + g.ci * xBurn * 2);
                     let burnPct = 0;
                     if (isComplex && burnbackTable) {
                       const eval0 = evaluateBurnbackTableAtDepth(burnbackTable, 0, g, motor?.Dc || g.D0);
@@ -409,16 +411,27 @@ export function PlaybackWrapper({
                         ? Math.min(100, Math.max(0, (1 - evalNow.Vg / eval0.Vg) * 100))
                         : 100;
                     } else {
-                      burnPct = Math.min(
-                        100,
-                        Math.max(
-                          0,
-                          (1 -
-                            (curL * Math.max(0.001, curDOut - curDIn)) /
-                              Math.max(0.001, g.L0 * Math.max(0.001, g.D0 - (g.shape === 3 ? 0 : g.d0)))) *
-                            100
-                        )
-                      );
+                      const initVol = Math.max(1e-6, getGrainModule(g.shape).getInitialGeometry(g).totalVolumeMm3);
+                      let curSliceArea = 0;
+                      if (curL > 0) {
+                        if (g.shape === 1) {
+                          const rOut = curDOut * 0.5;
+                          const rIn = curDIn * 0.5;
+                          curSliceArea = rOut > rIn ? Math.PI * (rOut * rOut - rIn * rIn) : 0;
+                        } else if (g.shape === 3) {
+                          const rOut = curDOut * 0.5;
+                          curSliceArea = Math.PI * rOut * rOut;
+                        } else if (g.shape === 8) {
+                          const rOut = curDOut * 0.5;
+                          const rIn = curDIn * 0.5;
+                          const rRod = Math.max(0, ((Number(g.rodDiameter) || g.d0 * 0.45) * 0.5) - g.ci * xBurn);
+                          const tubeA = rOut > rIn ? Math.PI * (rOut * rOut - rIn * rIn) : 0;
+                          const rodA = rRod > 0 ? Math.PI * rRod * rRod : 0;
+                          curSliceArea = tubeA + rodA;
+                        }
+                      }
+                      const curVol = Math.max(0, curSliceArea * curL * Math.max(1, g.N));
+                      burnPct = Math.min(100, Math.max(0, (1 - curVol / initVol) * 100));
                     }
 
                     return (
@@ -428,7 +441,7 @@ export function PlaybackWrapper({
                       >
                         <div className="flex items-center justify-between border-b border-slate-800 pb-1">
                           <span className="font-bold text-cyan-300 uppercase">
-                            {t?.grains || 'Grano'} #{gi + 1} ×{g.N}
+                            {t?.grains || 'Grano'} #{gi + 1} · {getGrainShapeLabel(g.shape, t)} ×{g.N}
                           </span>
                           <span className="text-amber-300 font-bold">{burnPct.toFixed(0)}%</span>
                         </div>
@@ -438,8 +451,16 @@ export function PlaybackWrapper({
                             <strong>{curDOut.toFixed(1)}</strong> mm
                           </div>
                           <div>
-                            <span className="text-slate-500 block text-[9px]">d₀</span>
-                            <strong>{g.shape === 3 ? '—' : `${curDIn.toFixed(1)} mm`}</strong>
+                            <span className="text-slate-500 block text-[9px]">
+                              {g.shape === 6 || g.shape === 7 ? 'Cut' : 'd₀'}
+                            </span>
+                            <strong>
+                              {g.shape === 3
+                                ? '—'
+                                : g.shape === 6 || g.shape === 7
+                                  ? `${isComplexExhausted ? 0 : Math.min(curDOut, (Number(g.slotDepth) || 0) + g.ci * xBurn).toFixed(1)} mm`
+                                  : `${curDIn.toFixed(1)} mm`}
+                            </strong>
                           </div>
                           <div>
                             <span className="text-slate-500 block text-[9px]">L</span>

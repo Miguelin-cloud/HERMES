@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { ApogeeResult, getExitMach } from '../lib/apogee';
-import { MotorInput, NozzleInput, CustomPropellant, getPropellantVisualProfile } from '../lib/types';
+import { ApogeeResult, computeStandardAtmosphere, getExitMach } from '../lib/apogee';
+import { MotorInput, NozzleInput, CustomPropellant, getPropellantVisualProfile, getPropellantData } from '../lib/types';
+import { Language } from '../lib/i18n';
 import {
   detectSoftwareWebGL,
   createSoftParticleTexture,
@@ -36,7 +37,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type CameraMode = 'chase' | 'onboard' | 'pad' | 'arc';
-type FlightPhase = 'pad' | 'powered' | 'coast' | 'descent' | 'landed';
+type FlightPhase = 'pad' | 'powered' | 'coast' | 'drogue' | 'main' | 'descent' | 'landed';
 type ActiveFlightMode = 'sim' | 'exp' | 'both';
 
 interface TimelinePoint {
@@ -51,12 +52,13 @@ interface TimelinePoint {
   pitchRad: number;
   gammaDeg: number;
   thrusting: boolean;
-  chuteOpen: number;
+  drogueOpen: number;
+  mainOpen: number;
   phase: FlightPhase;
 }
 
 export interface MissionMilestone {
-  id: 'maxq' | 'mach1' | 'burnout' | 'apogee';
+  id: 'maxq' | 'mach1' | 'burnout' | 'apogee' | 'drogue' | 'main';
   labelKey: string;
   fallbackLabel: string;
   t: number;
@@ -112,6 +114,44 @@ function findTimelineIndexAtTime(points: TimelinePoint[], targetT: number): numb
 }
 
 /**
+ * Allocation-free linear interpolation between adjacent timeline samples so
+ * WebGL renders at full 60 FPS even across sparse long-duration descent segments.
+ */
+function sampleInterpolatedPoint(points: TimelinePoint[], targetT: number, out: TimelinePoint): number {
+  const n = points.length;
+  if (n === 0) return 0;
+  if (n === 1 || targetT <= points[0].t) {
+    Object.assign(out, points[0]);
+    return 0;
+  }
+  if (targetT >= points[n - 1].t) {
+    Object.assign(out, points[n - 1]);
+    return n - 1;
+  }
+  const idx = findTimelineIndexAtTime(points, targetT);
+  const p0 = points[idx];
+  const p1 = points[Math.min(n - 1, idx + 1)];
+  const span = p1.t - p0.t;
+  const alpha = span > 1e-7 ? Math.max(0, Math.min(1, (targetT - p0.t) / span)) : 0;
+
+  out.t = targetT;
+  out.x = p0.x + (p1.x - p0.x) * alpha;
+  out.h = p0.h + (p1.h - p0.h) * alpha;
+  out.v = p0.v + (p1.v - p0.v) * alpha;
+  out.vx = p0.vx + (p1.vx - p0.vx) * alpha;
+  out.vy = p0.vy + (p1.vy - p0.vy) * alpha;
+  out.a = p0.a + (p1.a - p0.a) * alpha;
+  out.mach = p0.mach + (p1.mach - p0.mach) * alpha;
+  out.pitchRad = p0.pitchRad + (p1.pitchRad - p0.pitchRad) * alpha;
+  out.gammaDeg = p0.gammaDeg + (p1.gammaDeg - p0.gammaDeg) * alpha;
+  out.drogueOpen = p0.drogueOpen + (p1.drogueOpen - p0.drogueOpen) * alpha;
+  out.mainOpen = p0.mainOpen + (p1.mainOpen - p0.mainOpen) * alpha;
+  out.thrusting = alpha < 0.5 ? p0.thrusting : p1.thrusting;
+  out.phase = alpha < 0.5 ? p0.phase : p1.phase;
+  return idx;
+}
+
+/**
  * Builds a complete mission timeline combining simulated/experimental ascent up to apogee
  * with realistic canopy inflation and parachute descent back to touchdown (h = 0),
  * plus automatic detection of MAX-Q, MACH 1, BURNOUT, and APOGEE milestones.
@@ -142,13 +182,26 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
   const rocketDiameterM = Math.max(0.03, apogeeData.rocketDiameterM || 0.08);
   const launchAltitudeM = apogeeData.launchAltitudeM ?? 169;
 
-  // Downsample dense solver arrays to ~750 crisp points while preserving t=0, burnout, and apogee
-  const maxAscentSamples = 750;
-  const stride = Math.max(1, Math.floor(N / maxAscentSamples));
+  // Find raw peak altitude index so ascent keeps dense sampling even when long parachute descent is present
+  let rawPeakIdx = 0;
+  let rawPeakH = -Infinity;
+  for (let i = 0; i < N; i++) {
+    const hv = apogeeData.h[i] ?? 0;
+    if (hv >= rawPeakH) {
+      rawPeakH = hv;
+      rawPeakIdx = i;
+    }
+  }
+  const hasIntegratedDescent = apogeeData.recoveryMode !== 'none' && rawPeakIdx < N - 1;
+
+  // Downsample ascent (~450 pts) + optional integrated descent (~300 pts) preserving t=0, burnout, apogee, touchdown
+  const ascentEnd = hasIntegratedDescent ? rawPeakIdx : N - 1;
+  const ascentTarget = hasIntegratedDescent ? 450 : 750;
+  const ascentStride = Math.max(1, Math.floor((ascentEnd + 1) / ascentTarget));
   const indices: number[] = [0];
   let burnoutAdded = false;
 
-  for (let i = stride; i < N - 1; i += stride) {
+  for (let i = ascentStride; i < ascentEnd; i += ascentStride) {
     if (!burnoutAdded && apogeeData.t[i] >= burnoutTime) {
       let bIdx = i;
       while (bIdx > 0 && apogeeData.t[bIdx - 1] >= burnoutTime) bIdx--;
@@ -157,11 +210,33 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
     }
     if (indices[indices.length - 1] !== i) indices.push(i);
   }
-  if (indices[indices.length - 1] !== N - 1) indices.push(N - 1);
+  if (indices[indices.length - 1] !== ascentEnd) indices.push(ascentEnd);
+
+  if (hasIntegratedDescent) {
+    const descentCount = N - 1 - rawPeakIdx;
+    const descentStride = Math.max(1, Math.floor(descentCount / 600));
+    const mainDeployT = apogeeData.mainDeployTime;
+    let mainAdded = false;
+    for (let i = rawPeakIdx + descentStride; i < N - 1; i += descentStride) {
+      if (!mainAdded && mainDeployT !== undefined && apogeeData.t[i] >= mainDeployT) {
+        let mIdx = i;
+        while (mIdx > rawPeakIdx + 1 && apogeeData.t[mIdx - 1] >= mainDeployT) mIdx--;
+        if (indices[indices.length - 1] !== mIdx) indices.push(mIdx);
+        mainAdded = true;
+      }
+      if (indices[indices.length - 1] !== i) indices.push(i);
+    }
+    if (indices[indices.length - 1] !== N - 1) indices.push(N - 1);
+  }
 
   const points: TimelinePoint[] = [];
   let peakH = -Infinity;
   let apogeeIndex = 0;
+  let droguePointIdx = -1;
+  let mainPointIdx = -1;
+  const apogeeT = apogeeData.apogeeTime > 0 ? apogeeData.apogeeTime : apogeeData.t[rawPeakIdx] ?? 0;
+  const drogueT = apogeeData.drogueDeployTime;
+  const mainT = apogeeData.mainDeployTime;
 
   for (const idx of indices) {
     const tVal = apogeeData.t[idx] ?? 0;
@@ -174,9 +249,36 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
     const machVal = apogeeData.mach?.[idx] ?? Math.abs(vVal) / 340.29;
     const pitchRad = apogeeData.pitch?.[idx] ?? rad0;
     const gammaDeg = apogeeData.gammaDeg?.[idx] ?? (pitchRad * 180) / Math.PI;
+    const rawPhase = apogeeData.phase?.[idx];
 
-    const isBurn = tVal <= burnoutTime + 1e-4 && (idx === 0 || hVal >= 0);
-    const phase: FlightPhase = idx === 0 && vVal < 0.05 ? 'pad' : isBurn ? 'powered' : 'coast';
+    const isBurn = tVal <= burnoutTime + 1e-4 && (idx === 0 || hVal >= 0) && rawPhase !== 'drogue' && rawPhase !== 'main' && rawPhase !== 'landed';
+    let phase: FlightPhase;
+    let drogueOpen = 0;
+    let mainOpen = 0;
+
+    if (rawPhase === 'landed' || (hasIntegratedDescent && idx === N - 1 && hVal <= 0.05)) {
+      phase = 'landed';
+      drogueOpen = 0;
+      mainOpen = 1;
+    } else if (rawPhase === 'drogue') {
+      phase = 'drogue';
+      const deployStart = drogueT ?? apogeeT;
+      drogueOpen = Math.min(1, Math.max(0.05, (tVal - deployStart) / 1.1));
+      mainOpen = 0;
+      if (droguePointIdx === -1) droguePointIdx = points.length;
+    } else if (rawPhase === 'main' || (hasIntegratedDescent && idx > rawPeakIdx)) {
+      phase = 'main';
+      const deployStart = mainT ?? apogeeT;
+      mainOpen = Math.min(1, Math.max(0.05, (tVal - deployStart) / 1.35));
+      if (apogeeData.recoveryMode === 'dual' && drogueT !== undefined && deployStart > drogueT + 0.05) {
+        drogueOpen = Math.max(0, 1 - (tVal - deployStart) / 0.45);
+      } else {
+        drogueOpen = 0;
+      }
+      if (mainPointIdx === -1) mainPointIdx = points.length;
+    } else {
+      phase = idx === 0 && vVal < 0.05 ? 'pad' : isBurn ? 'powered' : 'coast';
+    }
 
     points.push({
       t: tVal,
@@ -190,7 +292,8 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
       pitchRad,
       gammaDeg,
       thrusting: isBurn,
-      chuteOpen: 0,
+      drogueOpen,
+      mainOpen,
       phase,
     });
 
@@ -200,7 +303,7 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
     }
   }
 
-  // Compute Mission Milestones along ascent before appending descent
+  // Compute Mission Milestones along ascent + recovery deployment events
   const milestones: MissionMilestone[] = [];
   let maxQPa = -1;
   let maxQIdx = -1;
@@ -211,7 +314,7 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
   for (let i = 0; i <= apogeeIndex && i < points.length; i++) {
     const pt = points[i];
     const absAlt = Math.max(0, launchAltitudeM + pt.h);
-    const rho = 1.225 * Math.pow(Math.max(0.05, 1 - 2.25577e-5 * absAlt), 4.25588);
+    const rho = computeStandardAtmosphere(absAlt).rho;
     const qPa = 0.5 * rho * pt.v * pt.v;
 
     if (qPa > maxQPa) {
@@ -296,13 +399,47 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
     });
   }
 
+  if (droguePointIdx > 0 && points[droguePointIdx]) {
+    const mp = points[droguePointIdx];
+    milestones.push({
+      id: 'drogue',
+      labelKey: 'milestone_drogue',
+      fallbackLabel: 'DROGUE',
+      t: mp.t,
+      index: droguePointIdx,
+      x: mp.x,
+      h: mp.h,
+      detail: `${mp.h.toFixed(0)} m`,
+      colorHex: 0xfbbf24,
+      badgeBg: 'bg-yellow-500/20 border-yellow-500/50',
+      badgeText: 'text-yellow-300',
+    });
+  }
+
+  if (mainPointIdx > 0 && points[mainPointIdx]) {
+    const mp = points[mainPointIdx];
+    milestones.push({
+      id: 'main',
+      labelKey: 'milestone_main',
+      fallbackLabel: 'PRINCIPAL',
+      t: mp.t,
+      index: mainPointIdx,
+      x: mp.x,
+      h: mp.h,
+      detail: `${mp.h.toFixed(0)} m`,
+      colorHex: 0x34d399,
+      badgeBg: 'bg-emerald-500/20 border-emerald-500/50',
+      badgeText: 'text-emerald-300',
+    });
+  }
+
   milestones.sort((a, b) => a.t - b.t);
 
-  // Append crisp parachute deployment at apogee (~2.2 s) and end animation cleanly at canopy opening
+  // If solver stopped at apogee (recoveryMode === 'none'), append brief 2.2s visual canopy opening epilogue
   const lastAscent = points[points.length - 1];
   const xApogee = points[apogeeIndex]?.x ?? lastAscent.x;
 
-  if (lastAscent.h > 0.5) {
+  if (!hasIntegratedDescent && lastAscent.h > 0.5) {
     const deployDur = 2.2;
     const deploySteps = 18;
     const dtStep = deployDur / deploySteps;
@@ -318,10 +455,10 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
       const elapsedDeploy = s * dtStep;
       tCur = lastAscent.t + elapsedDeploy;
 
-      const chuteOpen = Math.min(1, elapsedDeploy / 1.45);
-      vxCur *= Math.exp(-dtStep * (0.65 + 1.1 * chuteOpen));
+      const mainOpen = Math.min(1, elapsedDeploy / 1.45);
+      vxCur *= Math.exp(-dtStep * (0.65 + 1.1 * mainOpen));
 
-      const targetVy = -2.8 * chuteOpen;
+      const targetVy = -2.8 * mainOpen;
       vyCur += (targetVy - vyCur) * Math.min(1, dtStep * 2.5);
 
       xCur += vxCur * dtStep;
@@ -337,12 +474,13 @@ function buildCompleteFlightTimeline(apogeeData: ApogeeResult | null): FlightTim
         v: speedTotal,
         vx: vxCur,
         vy: vyCur,
-        a: -1.4 * chuteOpen,
+        a: -1.4 * mainOpen,
         mach: speedTotal / 340.29,
         pitchRad: pitchCur,
         gammaDeg: (pitchCur * 180) / Math.PI,
         thrusting: false,
-        chuteOpen,
+        drogueOpen: 0,
+        mainOpen,
         phase: 'descent',
       });
     }
@@ -367,6 +505,8 @@ export function FlightViewer({
   simApogee,
   expApogee,
   t,
+  lang,
+  avgChamberPressureMPa,
   propellantType = 1,
   motor,
   nozzle,
@@ -383,6 +523,8 @@ export function FlightViewer({
   simApogee: ApogeeResult | null;
   expApogee: ApogeeResult | null;
   t: any;
+  lang?: Language;
+  avgChamberPressureMPa?: number;
   propellantType?: number;
   motor?: MotorInput;
   nozzle?: NozzleInput;
@@ -429,12 +571,25 @@ export function FlightViewer({
   const effectiveIsPlaying = syncEnabled && syncedIsPlaying !== undefined ? syncedIsPlaying : isPlaying;
   const effectiveSpeed = syncEnabled && syncedSpeed !== undefined ? syncedSpeed : speed;
 
+  // High-precision continuous playback clock inside WebGL loop (eliminates post-apogee step lag & 60Hz React renders)
+  const playbackTimeSecRef = useRef<number>(0);
+  const speedRef = useRef<number>(effectiveSpeed);
+  speedRef.current = effectiveSpeed;
+  const syncEnabledRef = useRef<boolean>(syncEnabled);
+  syncEnabledRef.current = syncEnabled;
+
   // Reset local playback when timeline changes
   useEffect(() => {
     setTimeIndex(0);
     setIsPlaying(false);
-    simulatedTimeRef.current = 0;
+    playbackTimeSecRef.current = 0;
   }, [timeline]);
+
+  useEffect(() => {
+    if (syncEnabled && syncedTimeSec !== undefined) {
+      playbackTimeSecRef.current = syncedTimeSec;
+    }
+  }, [syncEnabled, syncedTimeSec]);
 
   const effectiveTimeIndex = useMemo(() => {
     if (syncEnabled && syncedTimeSec !== undefined && timeline.points.length > 0) {
@@ -443,62 +598,33 @@ export function FlightViewer({
     return Math.min(Math.max(0, timeline.points.length - 1), timeIndex);
   }, [syncEnabled, syncedTimeSec, timeline.points, timeIndex]);
 
-  // Independent internal playback timer when syncEnabled is false
-  const simulatedTimeRef = useRef<number>(0);
-  const prevFrameMsRef = useRef<number>(0);
   const timeIndexRef = useRef<number>(0);
   timeIndexRef.current = effectiveTimeIndex;
-
-  useEffect(() => {
-    if (syncEnabled || !isPlaying || timeline.points.length <= 1) return;
-
-    simulatedTimeRef.current = timeline.points[timeIndexRef.current]?.t || 0;
-    prevFrameMsRef.current = performance.now();
-    let rafId = 0;
-
-    const stepPlayback = (now: number) => {
-      const dt = Math.min(0.1, (now - prevFrameMsRef.current) / 1000);
-      prevFrameMsRef.current = now;
-      simulatedTimeRef.current += dt * speed;
-
-      setTimeIndex((prev) => {
-        const pts = timeline.points;
-        let idx = prev;
-        while (idx < pts.length - 1 && pts[idx + 1].t <= simulatedTimeRef.current) {
-          idx++;
-        }
-        if (idx >= pts.length - 1) {
-          setIsPlaying(false);
-          return pts.length - 1;
-        }
-        return idx;
-      });
-
-      rafId = requestAnimationFrame(stepPlayback);
-    };
-
-    rafId = requestAnimationFrame(stepPlayback);
-    return () => cancelAnimationFrame(rafId);
-  }, [syncEnabled, isPlaying, speed, timeline]);
 
   const handlePlayToggle = () => {
     if (syncEnabled && onSyncTogglePlay) {
       onSyncTogglePlay();
       return;
     }
-    if (!isPlaying && timeline.points.length > 0 && effectiveTimeIndex >= timeline.points.length - 1) {
-      setTimeIndex(0);
-      simulatedTimeRef.current = 0;
+    if (!isPlaying && timeline.points.length > 0) {
+      const endT = timeline.points[timeline.points.length - 1]?.t ?? 0;
+      if (effectiveTimeIndex >= timeline.points.length - 1 || playbackTimeSecRef.current >= endT - 1e-4) {
+        playbackTimeSecRef.current = 0;
+        setTimeIndex(0);
+      }
     }
     setIsPlaying((p) => !p);
   };
 
   const seekToTimeIndex = (newIdx: number) => {
     const clamped = Math.max(0, Math.min(Math.max(0, timeline.points.length - 1), newIdx));
+    const targetT = timeline.points[clamped]?.t ?? 0;
     if (syncEnabled && onSyncTimeChange && timeline.points.length > 0) {
-      onSyncTimeChange(timeline.points[clamped]?.t ?? 0);
+      playbackTimeSecRef.current = targetT;
+      onSyncTimeChange(targetT);
       return;
     }
+    playbackTimeSecRef.current = targetT;
     setTimeIndex(clamped);
     setIsPlaying(false);
   };
@@ -518,8 +644,8 @@ export function FlightViewer({
   const cameraModeRef = useRef<CameraMode>(cameraMode);
   const isPlayingRef = useRef<boolean>(effectiveIsPlaying);
   isPlayingRef.current = effectiveIsPlaying;
-  const propellantProfileRef = useRef(getPropellantVisualProfile(propellantType, 'es', customPropellants));
-  propellantProfileRef.current = getPropellantVisualProfile(propellantType, 'es', customPropellants);
+  const propellantProfileRef = useRef(getPropellantVisualProfile(propellantType, lang || 'en', customPropellants));
+  propellantProfileRef.current = getPropellantVisualProfile(propellantType, lang || 'en', customPropellants);
 
   const liveTimelineRef = useRef(timeline);
   liveTimelineRef.current = timeline;
@@ -528,13 +654,6 @@ export function FlightViewer({
 
   const currentPointRef = useRef<TimelinePoint | null>(null);
   currentPointRef.current = timeline.points[effectiveTimeIndex] || null;
-
-  const currentExpPointRef = useRef<TimelinePoint | null>(null);
-  const currentTimeSec = currentPointRef.current?.t ?? 0;
-  currentExpPointRef.current =
-    secondaryTimeline && secondaryTimeline.points.length > 0
-      ? secondaryTimeline.points[findTimelineIndexAtTime(secondaryTimeline.points, currentTimeSec)]
-      : null;
 
   const snapCameraRef = useRef<((mode: CameraMode) => void) | null>(null);
 
@@ -545,12 +664,20 @@ export function FlightViewer({
 
   const nozzleDtMm = nozzle?.Dt0 ?? Math.round((motor?.Dc ?? 60) * 0.25);
   const nozzleDsMm = nozzle?.Ds ?? Math.round((motor?.Dc ?? 60) * 0.6);
+  const kProp = getPropellantData(propellantType, customPropellants).k || 1.2;
   const exitMach = useMemo(() => {
     const eps = Math.max(1.2, Math.pow(nozzleDsMm / Math.max(2, nozzleDtMm), 2));
-    return getExitMach(eps, 1.2);
-  }, [nozzleDtMm, nozzleDsMm]);
+    return getExitMach(eps, kProp);
+  }, [nozzleDtMm, nozzleDsMm, kProp]);
   const exitMachRef = useRef(exitMach);
   exitMachRef.current = exitMach;
+  const designExitPressureMPa = useMemo(() => {
+    const p0 = avgChamberPressureMPa ?? 3.5;
+    const pe = p0 * Math.pow(1 + ((kProp - 1) / 2) * exitMach * exitMach, -kProp / (kProp - 1));
+    return Math.max(0.005, pe);
+  }, [avgChamberPressureMPa, kProp, exitMach]);
+  const designExitPressureRef = useRef(designExitPressureMPa);
+  designExitPressureRef.current = designExitPressureMPa;
 
   // Build & manage Three.js Coastal Launch Complex + Broadcast Camera Scene
   useEffect(() => {
@@ -583,7 +710,7 @@ export function FlightViewer({
 
     const handleContextLost = (e: Event) => {
       e.preventDefault();
-      setWebglError('Se perdió el contexto gráfico WebGL en la escena de vuelo.');
+      setWebglError(t?.flight_3d_unavail_title || 'WebGL context lost');
     };
     const handleContextRestored = () => {
       setWebglError(null);
@@ -1015,7 +1142,10 @@ export function FlightViewer({
 
     const snapCamera = (mode: CameraMode) => {
       const rLen = rocketParts.rocketLengthM;
-      const cur = currentPointRef.current || timeline.points[0];
+      const cur = { ...(currentPointRef.current || timeline.points[0]) };
+      if (timeline.points.length > 0) {
+        sampleInterpolatedPoint(timeline.points, playbackTimeSecRef.current, cur);
+      }
       const groundClear = padRocketOrigin.y;
       rocketWorldPos.set(padRocketOrigin.x + cur.x, groundClear + cur.h, padRocketOrigin.z);
 
@@ -1099,6 +1229,11 @@ export function FlightViewer({
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
     let prevMs = performance.now();
+    let lastHudSyncMs = 0;
+    let lastHudSyncedIdx = -1;
+
+    const pt: TimelinePoint = { ...(timeline.points[0]) };
+    const expPtScratch: TimelinePoint = { ...(secondaryTimeline?.points[0] ?? timeline.points[0]) };
 
     const afterDraw = (cb: FrameRequestCallback) => {
       if (isSoftwareGl) {
@@ -1122,10 +1257,33 @@ export function FlightViewer({
       coastalEnv.oceanTimeUniform.value = simAnimTime;
 
       const tl = liveTimelineRef.current;
-      const pt = currentPointRef.current || tl.points[0];
-      if (!pt) {
+      if (!tl.points || tl.points.length === 0) {
         afterDraw(renderLoop);
         return;
+      }
+
+      const endT = tl.points[tl.points.length - 1].t;
+      if (playingNow && !syncEnabledRef.current && tl.points.length > 1) {
+        playbackTimeSecRef.current = Math.min(endT, playbackTimeSecRef.current + dt * speedRef.current);
+      }
+
+      const ptIdx = sampleInterpolatedPoint(tl.points, playbackTimeSecRef.current, pt);
+
+      if (playingNow && !syncEnabledRef.current) {
+        if (playbackTimeSecRef.current >= endT - 1e-5) {
+          const lastIdx = tl.points.length - 1;
+          isPlayingRef.current = false;
+          lastHudSyncedIdx = lastIdx;
+          lastHudSyncMs = now;
+          timeIndexRef.current = lastIdx;
+          setTimeIndex(lastIdx);
+          setIsPlaying(false);
+        } else if (now - lastHudSyncMs >= 70 && ptIdx !== lastHudSyncedIdx) {
+          lastHudSyncMs = now;
+          lastHudSyncedIdx = ptIdx;
+          timeIndexRef.current = ptIdx;
+          setTimeIndex(ptIdx);
+        }
       }
 
       if (!playingNow && pt.t <= 0.002) {
@@ -1136,18 +1294,20 @@ export function FlightViewer({
       const prof = propellantProfileRef.current;
 
       // 1. Update Primary Rocket World Position & Orientation
+      const inChutePhase = pt.phase === 'drogue' || pt.phase === 'main' || pt.phase === 'descent';
       const groundClear =
         pt.t <= tl.burnoutTime || pt.h >= 20
           ? padRocketOrigin.y
-          : pt.phase === 'descent' || pt.phase === 'landed'
+          : inChutePhase || pt.phase === 'landed'
           ? padRocketOrigin.y * Math.min(1, pt.h / 20) + 0.04
           : padRocketOrigin.y;
 
       rocketWorldPos.set(padRocketOrigin.x + pt.x, groundClear + pt.h, padRocketOrigin.z);
       rocketParts.root.position.copy(rocketWorldPos);
 
-      const swayZ = pt.phase === 'descent' ? Math.sin(simAnimTime * 2.1) * 0.075 * pt.chuteOpen : 0;
-      const swayX = pt.phase === 'descent' ? Math.cos(simAnimTime * 1.65) * 0.055 * pt.chuteOpen : 0;
+      const chuteTotal = Math.max(pt.drogueOpen, pt.mainOpen);
+      const swayZ = inChutePhase ? Math.sin(simAnimTime * 2.1) * 0.075 * chuteTotal : 0;
+      const swayX = inChutePhase ? Math.cos(simAnimTime * 1.65) * 0.055 * chuteTotal : 0;
       rocketParts.root.rotation.set(swayX, 0, pt.pitchRad - Math.PI / 2 + swayZ);
 
       if (cameraModeRef.current === 'arc') {
@@ -1161,41 +1321,74 @@ export function FlightViewer({
         beaconRing.visible = false;
       }
 
-      if (pt.chuteOpen > 0.02) {
+      // Independent 3D Drogue & Main canopies
+      if (pt.drogueOpen > 0.02) {
+        rocketParts.drogueGroup.visible = true;
+        rocketParts.drogueGroup.scale.set(
+          0.14 + 0.86 * pt.drogueOpen,
+          0.24 + 0.76 * pt.drogueOpen,
+          0.14 + 0.86 * pt.drogueOpen
+        );
+        rocketParts.drogueGroup.rotation.y = simAnimTime * 0.65;
+      } else {
+        rocketParts.drogueGroup.visible = false;
+      }
+
+      if (pt.mainOpen > 0.02) {
         rocketParts.parachuteGroup.visible = true;
-        rocketParts.parachuteGroup.scale.set(0.12 + 0.88 * pt.chuteOpen, 0.22 + 0.78 * pt.chuteOpen, 0.12 + 0.88 * pt.chuteOpen);
-        rocketParts.parachuteGroup.rotation.y = simAnimTime * 0.45;
+        rocketParts.parachuteGroup.scale.set(
+          0.12 + 0.88 * pt.mainOpen,
+          0.22 + 0.78 * pt.mainOpen,
+          0.12 + 0.88 * pt.mainOpen
+        );
+        rocketParts.parachuteGroup.rotation.y = simAnimTime * 0.4;
       } else {
         rocketParts.parachuteGroup.visible = false;
       }
 
       // 2. Update Secondary Experimental Rocket if Sim vs Exp comparison is active
       const secTl = liveSecondaryTimelineRef.current;
-      const expPt = currentExpPointRef.current;
-      if (expRocketParts && secTl && expPt) {
+      let expPt: TimelinePoint | null = null;
+      if (expRocketParts && secTl && secTl.points.length > 0) {
+        sampleInterpolatedPoint(secTl.points, pt.t, expPtScratch);
+        expPt = expPtScratch;
+        const expInChute = expPt.phase === 'drogue' || expPt.phase === 'main' || expPt.phase === 'descent';
         const expGroundClear =
           expPt.t <= secTl.burnoutTime || expPt.h >= 20
             ? padRocketOrigin.y
-            : expPt.phase === 'descent' || expPt.phase === 'landed'
+            : expInChute || expPt.phase === 'landed'
             ? padRocketOrigin.y * Math.min(1, expPt.h / 20) + 0.04
             : padRocketOrigin.y;
         expRocketWorldPos.set(padRocketOrigin.x + expPt.x, expGroundClear + expPt.h, padRocketOrigin.z + 0.22);
         expRocketParts.root.position.copy(expRocketWorldPos);
-        const eSwayZ = expPt.phase === 'descent' ? Math.sin(simAnimTime * 2.0 + 1.1) * 0.075 * expPt.chuteOpen : 0;
-        const eSwayX = expPt.phase === 'descent' ? Math.cos(simAnimTime * 1.7) * 0.055 * expPt.chuteOpen : 0;
+        const expChuteTotal = Math.max(expPt.drogueOpen, expPt.mainOpen);
+        const eSwayZ = expInChute ? Math.sin(simAnimTime * 2.0 + 1.1) * 0.075 * expChuteTotal : 0;
+        const eSwayX = expInChute ? Math.cos(simAnimTime * 1.7) * 0.055 * expChuteTotal : 0;
         expRocketParts.root.rotation.set(eSwayX, 0, expPt.pitchRad - Math.PI / 2 + eSwayZ);
         expRocketParts.root.scale.setScalar(
           cameraModeRef.current === 'arc' ? Math.min(18, Math.max(1, maxY / 95)) : 1
         );
 
-        if (expPt.chuteOpen > 0.02) {
+        if (expPt.drogueOpen > 0.02) {
+          expRocketParts.drogueGroup.visible = true;
+          expRocketParts.drogueGroup.scale.set(
+            0.14 + 0.86 * expPt.drogueOpen,
+            0.24 + 0.76 * expPt.drogueOpen,
+            0.14 + 0.86 * expPt.drogueOpen
+          );
+          expRocketParts.drogueGroup.rotation.y = simAnimTime * 0.65;
+        } else {
+          expRocketParts.drogueGroup.visible = false;
+        }
+
+        if (expPt.mainOpen > 0.02) {
           expRocketParts.parachuteGroup.visible = true;
           expRocketParts.parachuteGroup.scale.set(
-            0.12 + 0.88 * expPt.chuteOpen,
-            0.22 + 0.78 * expPt.chuteOpen,
-            0.12 + 0.88 * expPt.chuteOpen
+            0.12 + 0.88 * expPt.mainOpen,
+            0.22 + 0.78 * expPt.mainOpen,
+            0.12 + 0.88 * expPt.mainOpen
           );
-          expRocketParts.parachuteGroup.rotation.y = simAnimTime * 0.45;
+          expRocketParts.parachuteGroup.rotation.y = simAnimTime * 0.4;
         } else {
           expRocketParts.parachuteGroup.visible = false;
         }
@@ -1295,12 +1488,12 @@ export function FlightViewer({
       cloudMat.opacity = Math.max(0, 0.72 * (1 - atmo.spaceFactor * 1.4));
 
       // 5. Trajectory Drawn Progress + Milestone Ring Rotation
-      const drawVertCount = Math.max(1, Math.min(timeline.points.length, timeIndexRef.current + 1));
+      const drawVertCount = Math.max(1, Math.min(tl.points.length, ptIdx + 2));
       flownTrajGeom.setDrawRange(0, drawVertCount);
       if (expFlownGeom && secTl && expPt) {
         const expDrawCount = Math.max(
           1,
-          Math.min(secTl.points.length, findTimelineIndexAtTime(secTl.points, pt.t) + 1)
+          Math.min(secTl.points.length, findTimelineIndexAtTime(secTl.points, pt.t) + 2)
         );
         expFlownGeom.setDrawRange(0, expDrawCount);
       }
@@ -1326,8 +1519,8 @@ export function FlightViewer({
         plumeMeshCore.scale.set(plumeRad * 0.88, plumeLen * 0.62, plumeRad * 0.88);
         plumeMeshCore.position.set(0, -plumeLen * 0.31, 0);
 
-        const pAmbAtAlt = Math.max(0.002, (motor?.Pamb ?? 0.101325) * Math.exp(-pt.h / 8400));
-        const pePa = Math.min(2.6, Math.max(0.35, 0.095 / pAmbAtAlt));
+        const pAmbAtAlt = Math.max(0.0005, computeStandardAtmosphere(tl.launchAltitudeM + pt.h).pressurePa / 1e6);
+        const pePa = Math.min(2.6, Math.max(0.35, designExitPressureRef.current / pAmbAtAlt));
         const flameHex = isApcp ? 0xf97316 : prof.flameColorThree;
         const diamondHex = isApcp ? 0x38bdf8 : 0xfef08a;
         const smokeOpacityBase = prof.isSmoky ? (isRnx ? 0.8 : 0.65) : 0.4;
@@ -1476,9 +1669,9 @@ export function FlightViewer({
       ? secondaryTimeline.points[findTimelineIndexAtTime(secondaryTimeline.points, tCurrent)]
       : null;
 
-  const activeMilestone = timeline.milestones.find(
-    (m) => Math.abs(tCurrent - m.t) <= 0.35 && tCurrent > 0.02
-  );
+  const activeMilestones = timeline.milestones
+    .filter((m) => Math.abs(tCurrent - m.t) <= 0.45 && tCurrent > 0.02)
+    .slice(0, 2);
 
   const phaseLabel =
     phase === 'pad'
@@ -1487,6 +1680,10 @@ export function FlightViewer({
       ? t?.flight_phase_powered || 'ASCENSO PROPULSADO'
       : phase === 'coast'
       ? t?.flight_phase_coast || 'VUELO INERCIAL'
+      : phase === 'drogue'
+      ? t?.flight_phase_drogue || 'DESCENSO DROGUE'
+      : phase === 'main'
+      ? t?.flight_phase_main || 'PARACAÍDAS PRINCIPAL'
       : phase === 'descent'
       ? t?.flight_phase_descent || 'APERTURA PARACAÍDAS'
       : t?.flight_phase_landed || 'ATERRIZAJE';
@@ -1496,8 +1693,10 @@ export function FlightViewer({
       ? 'bg-orange-500'
       : phase === 'coast'
       ? 'bg-emerald-400'
-      : phase === 'descent'
-      ? 'bg-purple-400'
+      : phase === 'drogue'
+      ? 'bg-amber-400'
+      : phase === 'main' || phase === 'descent'
+      ? 'bg-emerald-400'
       : phase === 'landed'
       ? 'bg-sky-400'
       : 'bg-amber-400';
@@ -1615,9 +1814,9 @@ export function FlightViewer({
               <div className="flex items-start gap-3">
                 <AlertTriangle size={20} className="text-amber-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-white">Vista 3D de Vuelo no disponible</h3>
+                  <h3 className="text-sm font-bold text-white">{t?.flight_3d_unavail_title || '3D Flight View Unavailable'}</h3>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    No se pudo inicializar WebGL en este dispositivo. El resto del simulador y el análisis de apogeo siguen operativos.
+                    {t?.flight_3d_unavail_desc || 'WebGL could not be initialized on this device. The simulator and apogee analysis remain operational.'}
                   </p>
                   <p className="text-[11px] font-mono text-slate-500 break-words">{webglError}</p>
                 </div>
@@ -1628,7 +1827,7 @@ export function FlightViewer({
                 className="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 gap-1.5 cursor-pointer"
               >
                 <RotateCcw size={13} />
-                <span>Reintentar 3D</span>
+                <span>{t?.retry_3d_btn || 'Retry 3D'}</span>
               </Button>
             </div>
           </div>
@@ -1643,16 +1842,17 @@ export function FlightViewer({
             <span className="text-amber-300">{timeline.flightPathAngleDeg.toFixed(1)}°</span>
           </div>
 
-          {activeMilestone && (
+          {activeMilestones.map((am) => (
             <div
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-slate-950/95 font-mono text-[10px] font-bold shadow-lg ${activeMilestone.badgeBg} ${activeMilestone.badgeText}`}
+              key={`callout-${am.id}`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-slate-950/95 font-mono text-[10px] font-bold shadow-lg ${am.badgeBg} ${am.badgeText}`}
             >
               <Flag size={11} />
-              <span>{t?.[activeMilestone.labelKey] || activeMilestone.fallbackLabel}</span>
+              <span>{t?.[am.labelKey] || am.fallbackLabel}</span>
               <span className="text-slate-400">·</span>
-              <span className="text-white">{activeMilestone.detail}</span>
+              <span className="text-white">{am.detail}</span>
             </div>
-          )}
+          ))}
         </div>
 
         {/* High-Contrast Telemetry Card (with live Sim vs Exp delta when both active) */}

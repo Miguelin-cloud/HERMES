@@ -63,6 +63,35 @@ export function createLaunchPadTexture(): THREE.CanvasTexture {
 }
 
 /**
+ * Generates high-visibility amber/slate striped gore texture for the 3D drogue canopy.
+ */
+export function createDrogueTexture(variant: 'sim' | 'exp' = 'sim'): THREE.CanvasTexture {
+  const w = 256;
+  const h = 128;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+
+  const gores = 8;
+  const gw = w / gores;
+  const accentA = variant === 'exp' ? '#2dd4bf' : '#f59e0b';
+  const accentB = variant === 'exp' ? '#1e293b' : '#fef08a';
+  for (let i = 0; i < gores; i++) {
+    ctx.fillStyle = i % 2 === 0 ? accentA : accentB;
+    ctx.fillRect(i * gw, 0, gw + 1, h);
+  }
+
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.32)';
+  ctx.fillRect(0, 0, w, 14);
+  ctx.fillRect(0, h - 10, w, 10);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
  * Generates crisp avionics telemetry band decal texture with COHETEROS branding.
  */
 export function createRocketBandTexture(variant: 'sim' | 'exp' = 'sim'): THREE.CanvasTexture {
@@ -752,6 +781,7 @@ export function buildCoheterosHangar(maxAnisotropy = 4): {
 export interface ParametricRocketParts {
   root: THREE.Group;
   airframe: THREE.Group;
+  drogueGroup: THREE.Group;
   parachuteGroup: THREE.Group;
   nozzleExitLocalY: number;
   rocketLengthM: number;
@@ -780,6 +810,7 @@ export function buildParametricRocket3D(
 
   const bandTex = createRocketBandTexture(variant);
   const chuteTex = createParachuteTexture(variant);
+  const drogueTex = createDrogueTexture(variant);
 
   const carbonBlackMat = new THREE.MeshStandardMaterial({
     color: isExp ? 0x3b0764 : 0x0f172a,
@@ -930,10 +961,52 @@ export function buildParametricRocket3D(
     airframe.add(fin);
   }
 
-  // 7. Deployable 3D Parachute Canopy + 8 Suspension Shroud Lines
+  // 7. Deployable 3D Drogue Chute + Main Parachute Canopy
+  const chuteAttachY = rocketLen * 0.76;
+
+  // 7A. Compact Conical Drogue Canopy (deployed at apogee in Drogue + Main mode)
+  const drogueGroup = new THREE.Group();
+  const drogueRadius = Math.max(0.26, bodyR * 4.2);
+  const drogueCanopyBaseY = chuteAttachY + drogueRadius * 1.65;
+  const droguePts: THREE.Vector2[] = [];
+  const dSteps = 10;
+  for (let i = 0; i <= dSteps; i++) {
+    const u = i / dSteps;
+    const r = drogueRadius * (0.14 + 0.86 * Math.pow(u, 0.88));
+    const y = drogueRadius * 0.82 * Math.cos(u * Math.PI * 0.44);
+    droguePts.push(new THREE.Vector2(r, y));
+  }
+  const drogueGeom = new THREE.LatheGeometry(droguePts, 20);
+  const drogueMat = new THREE.MeshStandardMaterial({
+    map: drogueTex,
+    roughness: 0.68,
+    metalness: 0.05,
+    side: THREE.DoubleSide,
+  });
+  const drogueMesh = new THREE.Mesh(drogueGeom, drogueMat);
+  drogueMesh.position.y = drogueCanopyBaseY;
+  drogueMesh.castShadow = !isExp;
+  drogueGroup.add(drogueMesh);
+
+  const drogueLinePositions: number[] = [];
+  const numDrogueLines = 6;
+  for (let i = 0; i < numDrogueLines; i++) {
+    const a = (i / numDrogueLines) * Math.PI * 2;
+    const sx = Math.cos(a) * drogueRadius * 0.96;
+    const sz = Math.sin(a) * drogueRadius * 0.96;
+    drogueLinePositions.push(0, chuteAttachY, 0, sx, drogueCanopyBaseY + 0.04, sz);
+  }
+  const drogueLinesGeom = new THREE.BufferGeometry();
+  drogueLinesGeom.setAttribute('position', new THREE.Float32BufferAttribute(drogueLinePositions, 3));
+  const drogueLinesMat = new THREE.LineBasicMaterial({ color: 0xfde68a, transparent: true, opacity: 0.92 });
+  drogueGroup.add(new THREE.LineSegments(drogueLinesGeom, drogueLinesMat));
+
+  drogueGroup.visible = false;
+  root.add(drogueGroup);
+
+  // 7B. Large Hemispherical Main Parachute Canopy + 8 Suspension Shroud Lines
   const parachuteGroup = new THREE.Group();
   const chuteRadius = Math.max(0.55, bodyR * 9.5);
-  const chuteAttachY = rocketLen * 0.76;
   const chuteCanopyBaseY = chuteAttachY + chuteRadius * 1.75;
 
   const canopyPts: THREE.Vector2[] = [];
@@ -976,11 +1049,12 @@ export function buildParametricRocket3D(
   return {
     root,
     airframe,
+    drogueGroup,
     parachuteGroup,
     nozzleExitLocalY: 0,
     rocketLengthM: rocketLen,
     bodyRadiusM: bodyR,
-    textures: [bandTex, chuteTex],
+    textures: [bandTex, chuteTex, drogueTex],
   };
 }
 

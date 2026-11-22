@@ -9,6 +9,7 @@ import {
   Path64,
   Paths64,
   Point64,
+  union,
 } from 'clipper2-ts';
 import {
   GrainBurnbackSample,
@@ -23,14 +24,17 @@ export interface ClipperBurnbackOptions {
   osi: number; // 0 o 1
   L0: number;
   /**
-   * Bucles cerrados en mm (orientación CCW positiva) que describen el/los huecos iniciales del núcleo.
-   * Permite modelar Estrella, Finocyl, Moonburner, C-Slot, D-Grain, Wagon Wheel o DXF arbitrarios.
+   * Bucles cerrados en mm que describen el/los huecos iniciales del núcleo.
+   * Por defecto se normalizan a CCW; con `preserveVoidOrientation: true` se respeta
+   * la orientación CW de islas sólidas internas (ej. varilla central en Rod & Tube).
    */
   innerVoidLoopsMm: GrainContourLoop[];
+  preserveVoidOrientation?: boolean;
   sampleCount?: number;
   includeContours?: boolean;
   circleSegments?: number;
   arcToleranceMm?: number;
+  criticalDepthsMm?: number[];
 }
 
 function chooseAdaptiveScale(outerRadiusMm: number): number {
@@ -165,6 +169,128 @@ export function buildSlotLoopMm(
 }
 
 /**
+ * Construye el hueco de ranura radial abierta al exterior para C-Slot (mm).
+ */
+export function buildCSlotVoidLoopMm(
+  outerRadiusMm: number,
+  slotWidthMm: number,
+  slotDepthMm: number
+): GrainContourLoop {
+  const rOut = Math.max(0.5, outerRadiusMm);
+  const margin = Math.max(4, rOut * 0.25);
+  const halfW = Math.max(0.05, slotWidthMm * 0.5);
+  const xStart = rOut - slotDepthMm;
+  return [
+    { x: xStart, y: -halfW },
+    { x: rOut + margin, y: -halfW },
+    { x: rOut + margin, y: halfW },
+    { x: xStart, y: halfW },
+  ];
+}
+
+/**
+ * Construye el semiplano de corte cordal para D-Grain (mm), recortando desde x = R - cutDepthMm hacia +x.
+ */
+export function buildDGrainVoidLoopMm(
+  outerRadiusMm: number,
+  cutDepthMm: number
+): GrainContourLoop {
+  const rOut = Math.max(0.5, outerRadiusMm);
+  const margin = Math.max(4, rOut * 0.25);
+  const extentY = rOut + margin;
+  const xCut = rOut - cutDepthMm;
+  return [
+    { x: xCut, y: -extentY },
+    { x: rOut + margin, y: -extentY },
+    { x: rOut + margin, y: extentY },
+    { x: xCut, y: extentY },
+  ];
+}
+
+/**
+ * Combina booleanamente bucles de vacío (`union` de addLoops, menos `subtractLoops`) en Clipper2,
+ * devolviendo un conjunto limpio sin auto-intersecciones y con orientación exacta (CCW huecos, CW islas).
+ */
+export function buildUnifiedVoidLoopsMm(
+  addLoopsMm: GrainContourLoop[],
+  subtractLoopsMm: GrainContourLoop[] = [],
+  outerRadiusRefMm: number = 50
+): GrainContourLoop[] {
+  const scale = chooseAdaptiveScale(Math.max(1, outerRadiusRefMm));
+  const addPaths: Paths64 = addLoopsMm
+    .filter((l) => l.length >= 3)
+    .map((l) => toPath64(ensureCcwLoop(l), scale));
+  if (addPaths.length === 0) return [];
+
+  const unifiedAdd = addPaths.length > 1 ? union(addPaths, [], FillRule.NonZero) : addPaths;
+  if (!subtractLoopsMm || subtractLoopsMm.length === 0) {
+    return fromPaths64(unifiedAdd, scale);
+  }
+
+  const subPaths: Paths64 = subtractLoopsMm
+    .filter((l) => l.length >= 3)
+    .map((l) => toPath64(ensureCcwLoop(l), scale));
+  if (subPaths.length === 0) {
+    return fromPaths64(unifiedAdd, scale);
+  }
+
+  const diff = difference(unifiedAdd, subPaths, FillRule.NonZero);
+  return fromPaths64(diff, scale);
+}
+
+/**
+ * Evalúa exactamente área transversal, área de paso y perímetros iniciales en x = 0 mediante Clipper2.
+ */
+export function measureInitialCrossSectionClipper(
+  outerRadiusMm: number,
+  innerVoidLoopsMm: GrainContourLoop[],
+  options?: {
+    preserveVoidOrientation?: boolean;
+    ci?: number;
+    osi?: number;
+    circleSegments?: number;
+  }
+): {
+  crossSectionAreaMm2: number;
+  portAreaMm2: number;
+  innerBurnPerimeterMm: number;
+  outerBurnPerimeterMm: number;
+} {
+  const outerR = Math.max(0.25, outerRadiusMm);
+  const circleSegments = Math.max(48, Math.round(options?.circleSegments ?? 144));
+  const scale = chooseAdaptiveScale(outerR);
+  const invSq = 1 / (scale * scale);
+
+  const outerPaths: Paths64 = [makeCirclePath64(outerR, circleSegments, scale)];
+  const voidPaths: Paths64 = innerVoidLoopsMm
+    .filter((l) => l.length >= 3)
+    .map((l) => toPath64(options?.preserveVoidOrientation ? l : ensureCcwLoop(l), scale));
+
+  const propellantPaths: Paths64 =
+    voidPaths.length > 0 ? difference(outerPaths, voidPaths, FillRule.NonZero) : outerPaths;
+
+  const crossSectionAreaMm2 = Math.max(0, areaPaths(propellantPaths) * invSq);
+  const envArea = Math.PI * outerR * outerR;
+  const portAreaMm2 = Math.max(0, envArea - crossSectionAreaMm2);
+
+  const { innerBurnPerimeterMm, outerBurnPerimeterMm } = measureClassifiedPerimeters(
+    propellantPaths,
+    scale,
+    outerR,
+    circleSegments,
+    options?.ci ?? 1,
+    options?.osi ?? 0
+  );
+
+  return {
+    crossSectionAreaMm2,
+    portAreaMm2,
+    innerBurnPerimeterMm,
+    outerBurnPerimeterMm,
+  };
+}
+
+/**
  * Recorta topológicamente un conjunto de bucles 2D al semiplano x >= 0 usando Clipper2.
  */
 export function clipLoopsToRightHalfPlaneClipper(
@@ -281,7 +407,7 @@ export function solveGrainBurnbackClipper(
   const ci = options.ci ? 1 : 0;
   const osi = options.osi ? 1 : 0;
   const sampleCount = Math.max(24, Math.round(options.sampleCount ?? 64));
-  const circleSegments = Math.max(72, Math.round(options.circleSegments ?? 144));
+  const circleSegments = Math.max(48, Math.round(options.circleSegments ?? 144));
   const scale = chooseAdaptiveScale(outerR);
   const invSq = 1 / (scale * scale);
 
@@ -290,7 +416,7 @@ export function solveGrainBurnbackClipper(
 
   const normalizedVoids = options.innerVoidLoopsMm
     .filter((loop) => loop.length >= 3)
-    .map(ensureCcwLoop);
+    .map((loop) => (options.preserveVoidOrientation ? loop : ensureCcwLoop(loop)));
   const initialVoidPaths: Paths64 = normalizedVoids.map((l) => toPath64(l, scale));
   const fixedOuterPaths: Paths64 = [makeCirclePath64(outerR, circleSegments, scale)];
 
@@ -422,9 +548,43 @@ export function solveGrainBurnbackClipper(
   const xMaxMm = Math.max(1e-4, xHi);
 
   // 2. Muestrear la curva completa de regresión desde x = 0 hasta xMaxMm
+  // con mayor densidad en el tramo final (tail-off de slivers)
+  const bulkSteps = Math.max(8, Math.round(sampleCount * 0.6));
+  const midTailSteps = Math.max(6, Math.round(sampleCount * 0.25));
+  const tipTailSteps = Math.max(4, sampleCount - bulkSteps - midTailSteps);
+  const xSplit1 = 0.78 * xMaxMm;
+  const xSplit2 = 0.95 * xMaxMm;
+
+  const sampleSet = new Set<number>();
+  for (let i = 0; i < bulkSteps; i++) {
+    sampleSet.add((i / bulkSteps) * xSplit1);
+  }
+  for (let i = 0; i < midTailSteps; i++) {
+    sampleSet.add(xSplit1 + (i / midTailSteps) * (xSplit2 - xSplit1));
+  }
+  for (let i = 0; i < tipTailSteps; i++) {
+    sampleSet.add(xSplit2 + (i / tipTailSteps) * (xMaxMm - xSplit2));
+  }
+
+  // Refinar alrededor de profundidades críticas de transición (rotura de radios o pared)
+  if (options.criticalDepthsMm && options.criticalDepthsMm.length > 0) {
+    const eps = Math.max(0.015, xMaxMm * 0.0025);
+    for (const xc of options.criticalDepthsMm) {
+      if (!Number.isFinite(xc) || xc <= 0.02 || xc >= xMaxMm - 0.02) continue;
+      for (const delta of [-4 * eps, -1.5 * eps, -0.35 * eps, 0.35 * eps, 1.5 * eps, 4 * eps]) {
+        const xv = xc + delta;
+        if (xv > 0 && xv < xMaxMm) {
+          sampleSet.add(xv);
+        }
+      }
+    }
+  }
+
+  const sampleDepths = Array.from(sampleSet).sort((a, b) => a - b);
+
   const samples: GrainBurnbackSample[] = [];
-  for (let s = 0; s < sampleCount; s++) {
-    const xMm = (s / sampleCount) * xMaxMm;
+  for (let s = 0; s < sampleDepths.length; s++) {
+    const xMm = sampleDepths[s];
     const slice = evaluateCrossSection(xMm, true);
     const rEff = Math.max(0, outerR - osi * xMm);
     const envelopeArea = Math.PI * rEff * rEff;
@@ -459,20 +619,92 @@ export function solveGrainBurnbackClipper(
 }
 
 /**
+ * Calcula únicamente la profundidad exacta de extinción radial (o axial si ci=0 && osi=0)
+ * usando búsqueda binaria ligera sobre Clipper2, ideal para previsualización en tiempo real.
+ */
+export function estimateClipperWebThicknessMm(options: {
+  outerRadiusMm: number;
+  ci: number;
+  osi: number;
+  ei?: number;
+  L0: number;
+  innerVoidLoopsMm: GrainContourLoop[];
+  preserveVoidOrientation?: boolean;
+  circleSegments?: number;
+}): number {
+  const outerR = Math.max(0.25, options.outerRadiusMm);
+  const ci = options.ci ? 1 : 0;
+  const osi = options.osi ? 1 : 0;
+  const ei = options.ei ? 1 : 0;
+  const L0 = Math.max(0, options.L0 || 0);
+  const axialMax = ei && L0 > 0 ? L0 * 0.5 : Infinity;
+
+  if (ci === 0 && osi === 0) {
+    return Number.isFinite(axialMax) ? axialMax : 0;
+  }
+
+  const circleSegments = Math.max(48, Math.round(options.circleSegments ?? 84));
+  const scale = chooseAdaptiveScale(outerR);
+  const invSq = 1 / (scale * scale);
+  const arcTolScaled = Math.max(2, Math.max(0.02, outerR * 0.001) * scale);
+
+  const normalizedVoids = options.innerVoidLoopsMm
+    .filter((loop) => loop.length >= 3)
+    .map((loop) => (options.preserveVoidOrientation ? loop : ensureCcwLoop(loop)));
+  const initialVoidPaths: Paths64 = normalizedVoids.map((l) => toPath64(l, scale));
+  const fixedOuterPaths: Paths64 = [makeCirclePath64(outerR, circleSegments, scale)];
+  const areaThresholdMm2 = Math.max(1e-4, Math.PI * outerR * outerR * 1e-4);
+
+  const areaAt = (xMm: number): number => {
+    const rEff = Math.max(0, outerR - osi * xMm);
+    if (rEff <= 1e-4) return 0;
+    const outerPaths =
+      osi === 1 && xMm > 1e-7 ? [makeCirclePath64(rEff, circleSegments, scale)] : fixedOuterPaths;
+    const voidPaths =
+      ci === 1 && xMm > 1e-7 && initialVoidPaths.length > 0
+        ? inflatePaths(initialVoidPaths, xMm * scale, JoinType.Round, EndType.Polygon, 2.0, arcTolScaled)
+        : initialVoidPaths;
+    const prop = voidPaths.length > 0 ? difference(outerPaths, voidPaths, FillRule.NonZero) : outerPaths;
+    return Math.max(0, areaPaths(prop) * invSq);
+  };
+
+  let xLo = 0;
+  let xHi = osi === 1 ? outerR : outerR * 2.02;
+  while (xHi > xLo + 1e-4 && areaAt(xHi) > areaThresholdMm2) {
+    xLo = xHi;
+    xHi *= 1.5;
+    if (xHi > outerR * 4) break;
+  }
+  for (let iter = 0; iter < 16; iter++) {
+    const mid = 0.5 * (xLo + xHi);
+    if (areaAt(mid) > areaThresholdMm2) xLo = mid;
+    else xHi = mid;
+  }
+
+  return Math.min(Math.max(0, xHi), axialMax);
+}
+
+/**
  * Evalúa exactamente los contornos vectoriales 2D en una profundidad continua `xMm` cualquiera,
  * evitando saltos discretos entre muestras durante la reproducción 2D y 3D.
  */
 export function solveClipperCrossSectionAtDepth(
   options: Pick<
     ClipperBurnbackOptions,
-    'outerRadiusMm' | 'ci' | 'osi' | 'innerVoidLoopsMm' | 'circleSegments' | 'arcToleranceMm'
+    | 'outerRadiusMm'
+    | 'ci'
+    | 'osi'
+    | 'innerVoidLoopsMm'
+    | 'preserveVoidOrientation'
+    | 'circleSegments'
+    | 'arcToleranceMm'
   >,
   xMm: number
 ): GrainContourLoop[] {
   const outerR = Math.max(1e-3, options.outerRadiusMm);
   const ci = options.ci ? 1 : 0;
   const osi = options.osi ? 1 : 0;
-  const circleSegments = Math.max(72, Math.round(options.circleSegments ?? 144));
+  const circleSegments = Math.max(48, Math.round(options.circleSegments ?? 144));
   const scale = chooseAdaptiveScale(outerR);
   const invSq = 1 / (scale * scale);
   const arcTolMm = options.arcToleranceMm ?? Math.max(0.01, Math.min(0.025, outerR * 4e-4));
@@ -485,7 +717,7 @@ export function solveClipperCrossSectionAtDepth(
   const outerPaths: Paths64 = [makeCirclePath64(rEff, circleSegments, scale)];
   const initialVoidPaths: Paths64 = options.innerVoidLoopsMm
     .filter((loop) => loop.length >= 3)
-    .map((l) => toPath64(ensureCcwLoop(l), scale));
+    .map((l) => toPath64(options.preserveVoidOrientation ? l : ensureCcwLoop(l), scale));
 
   let voidPaths: Paths64 = initialVoidPaths;
   if (ci === 1 && xClamped > 1e-7 && initialVoidPaths.length > 0) {

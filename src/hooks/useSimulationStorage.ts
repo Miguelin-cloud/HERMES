@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CustomPropellant, DEFAULT_PROPELLANTS, GrainInput, MotorInput, NozzleInput } from '../lib/types';
+import { MissionControlSnapshot } from '../lib/missionControlStorage';
 import { normalizeMotorWithStructure } from '../lib/motorStructure';
 import { loadCustomPropellantsFromStorage, saveCustomPropellantsToStorage } from '../components/CustomPropellantModal';
 import { trackEvent } from '../lib/telemetry';
@@ -22,6 +23,8 @@ export interface SavedSimulationEntry {
   motor: MotorInput;
   nozzle: NozzleInput;
   grains: GrainInput[];
+  missionControl?: MissionControlSnapshot;
+  bundledPropellants?: CustomPropellant[];
 }
 
 const DEFAULT_MOTOR_CONFIG: MotorInput = {

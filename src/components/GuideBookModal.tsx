@@ -159,25 +159,25 @@ export function GuideBookModal({
       summaryFr: 'Maîtrisez la structure de chambre (paroi, matériau, liner, inhibiteur, Padm), le col Dt0, l\'expansion et l\'érosion.',
       summaryIt: 'Padroneggia la struttura della camera (parete, materiale, liner, inibitore, Padm), gola Dt0, espansione ed erosione.',
       bulletPointsEs: [
-        'Cámara y estructura: espesor de pared, Aluminio 6082-T6 / Acero Inox. 17-4PH (1000 MPa) / personalizado y Factor de Seguridad.',
-        'Presión Máx. Admisible (Padm) de pared, liner térmico, inhibidor (2 mm por defecto) y holgura radial.',
+        'Cámara y estructura: espesor de pared, Aluminio 6082-T6 / Acero Inox. AISI 304 (215 MPa) / personalizado y Factor de Seguridad.',
+        'Presión Máx. Admisible (Padm) de pared y tornillos, liner térmico, inhibidor (2 mm por defecto) y holgura radial.',
         'Diámetro de garganta (Dt0) y relación de expansión óptima (Ds/Dt0) a 1 atm.',
         'Modelado de erosión ablativa (+) o acumulación de escoria (-) en tiempo real.'
       ],
       bulletPointsEn: [
-        'Chamber structure: wall thickness, Aluminum 6082-T6 / Stainless Steel 17-4PH (1000 MPa) / custom material, and Safety Factor.',
-        'Cylinder wall Padm, optional thermal liner, grain inhibitor (2 mm default), and radial clearance checks.',
+        'Chamber structure: wall thickness, Aluminum 6082-T6 / Stainless Steel AISI 304 (215 MPa) / custom material, and Safety Factor.',
+        'Chamber & radial bolt Padm, optional thermal liner, grain inhibitor (2 mm default), and radial clearance checks.',
         'Throat diameter (Dt0) and optimal expansion ratio (Ds/Dt0) at 1 atm sea level.',
         'Ablative throat erosion (+) and slag deposition (-) dynamic modeling.'
       ],
       bulletPointsFr: [
-        'Structure de chambre : épaisseur de paroi, Aluminium 6082-T6 / Acier Inox 17-4PH (1000 MPa) / personnalisé et facteur de sécurité.',
+        'Structure de chambre : épaisseur de paroi, Aluminium 6082-T6 / Acier Inox AISI 304 (215 MPa) / personnalisé et facteur de sécurité.',
         'Pression admissible (Padm), liner thermique, inhibiteur (2 mm par défaut) et contrôle du jeu radial.',
         'Diamètre au col (Dt0) et rapport d\'expansion optimal à 1 atm.',
         'Modélisation dynamique de l\'érosion (+) ou des scories (-).'
       ],
       bulletPointsIt: [
-        'Struttura camera: spessore parete, Alluminio 6082-T6 / Acciaio Inox 17-4PH (1000 MPa) / personalizzato e Fattore di Sicurezza.',
+        'Struttura camera: spessore parete, Alluminio 6082-T6 / Acciaio Inox AISI 304 (215 MPa) / personalizzato e Fattore di Sicurezza.',
         'Pressione ammissibile (Padm), liner termico, inibitore (2 mm predefinito) e verifica del gioco radiale.',
         'Diametro di gola (Dt0) e rapporto di espansione ottimale a 1 atm.',
         'Modellazione dinamica di erosione (+) o deposito di scorie (-).'
