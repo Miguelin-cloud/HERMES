@@ -24,11 +24,14 @@ import {
 export interface TourStep {
   id: string;
   targetSelector: string;
+  fallbackSelector?: string;
   title: string;
   category?: string;
   description: string;
   bulletPoints?: string[];
   tab?: string; // Tab to switch to if needed
+  requiresResults?: boolean;
+  analysisSubTab?: 'areas' | 'kn' | 'burn_rate' | 'mass_flow';
   smartSearchStep?: 0 | 1 | 2 | 3;
   openModal?: 'propellant';
   openModalTab?: 'catalog' | 'editor';
@@ -54,6 +57,7 @@ interface InteractiveTourOverlayProps {
   onCloseTour: () => void;
   onOpenGuideBook: () => void;
   onSwitchTab?: (tab: string) => void;
+  hasResults?: boolean;
   lang: string;
   theme: string;
 }
@@ -113,6 +117,7 @@ export function InteractiveTourOverlay({
   onCloseTour,
   onOpenGuideBook,
   onSwitchTab,
+  hasResults = false,
   lang,
   theme
 }: InteractiveTourOverlayProps) {
@@ -140,6 +145,7 @@ export function InteractiveTourOverlay({
   });
 
   const step = activeTour?.steps[currentStepIndex];
+  const needsSimulationFirst = Boolean(step?.requiresResults && !hasResults);
 
   // Reset drag position whenever the step or active tour changes so new step opens adjacent to target
   useEffect(() => {
@@ -229,30 +235,42 @@ export function InteractiveTourOverlay({
     window.addEventListener('touchend', handleTouchEnd);
   };
 
-  // Auto-switch tab if step requires it
+  // Auto-switch tab if step requires it (or redirect to Inputs if simulation results are required first)
   useEffect(() => {
-    if (step?.tab && onSwitchTab) {
+    if (!step) return;
+    if (needsSimulationFirst) {
+      onSwitchTab?.('inputs');
+      setAutofillSuccess(false);
+      return;
+    }
+    if (step.tab && onSwitchTab) {
       onSwitchTab(step.tab);
     }
-    if (step?.smartSearchStep) {
+    if (step.analysisSubTab) {
+      window.dispatchEvent(new CustomEvent('hermes-analysis-set-subtab', { detail: step.analysisSubTab }));
+    }
+    if (step.smartSearchStep !== undefined) {
       window.dispatchEvent(new CustomEvent('hermes-smart-search-set-step', { detail: step.smartSearchStep }));
     }
-    if (step?.openModal === 'propellant') {
+    if (step.openModal === 'propellant') {
       window.dispatchEvent(new CustomEvent('hermes-open-propellant-modal', {
         detail: { startEditor: step.openModalTab === 'editor' }
       }));
     }
-    if (step?.closeModal === 'propellant') {
+    if (step.closeModal === 'propellant') {
       window.dispatchEvent(new CustomEvent('hermes-close-propellant-modal'));
     }
     setAutofillSuccess(false);
-  }, [step, onSwitchTab]);
+  }, [step, onSwitchTab, needsSimulationFirst, hasResults]);
 
   // Recalculate target position & calculate non-overlapping position
   const updateTargetRect = useCallback(() => {
     if (!step) return;
 
-    const el = document.querySelector(step.targetSelector);
+    const effectiveSelector = needsSimulationFirst ? '[data-tour="simulate-btn"]' : step.targetSelector;
+    const el =
+      document.querySelector(effectiveSelector) ||
+      (step.fallbackSelector ? document.querySelector(step.fallbackSelector) : null);
     if (el) {
       let r = el.getBoundingClientRect();
 
@@ -354,7 +372,7 @@ export function InteractiveTourOverlay({
         placement: 'bottom'
       });
     }
-  }, [step, hasScrolled]);
+  }, [step, hasScrolled, needsSimulationFirst]);
 
   useEffect(() => {
     setHasScrolled(false);
@@ -420,6 +438,23 @@ export function InteractiveTourOverlay({
     done: isSpanish ? '¡Entendido!' : isFrench ? 'Terminé !' : isItalian ? 'Completato!' : 'Got it!',
     applied: isSpanish ? '¡Valores de ejemplo aplicados!' : isFrench ? 'Valeurs d\'exemple appliquées !' : isItalian ? 'Valori di prova applicati!' : 'Sample values applied!',
     autofill: isSpanish ? 'Autocompletar valores de prueba' : isFrench ? 'Remplir automatiquement' : isItalian ? 'Riempi automaticamente' : 'Autofill test values',
+    dragHint: isSpanish ? 'Arrastra desde el encabezado para mover esta tarjeta' : isFrench ? 'Faites glisser l\'en-tête pour déplacer cette carte' : isItalian ? 'Trascina l\'intestazione per spostare questa scheda' : 'Drag header to move this card',
+    move: isSpanish ? 'Mover' : isFrench ? 'Déplacer' : isItalian ? 'Sposta' : 'Move',
+    resetPos: isSpanish ? 'Restablecer posición inicial' : isFrench ? 'Réinitialiser la position' : isItalian ? 'Ripristina posizione' : 'Reset initial position',
+    prereqTitle: isSpanish
+      ? 'Simulación requerida primero'
+      : isFrench
+        ? 'Simulation requise au préalable'
+        : isItalian
+          ? 'Simulazione richiesta prima'
+          : 'Simulation required first',
+    prereqDesc: isSpanish
+      ? 'Aún no hay resultados calculados. Revisa tus datos en Inputs (o carga un motor de prueba) y pulsa el botón SIMULAR señalado arriba a la derecha para desbloquear esta pestaña.'
+      : isFrench
+        ? 'Aucun résultat calculé pour le moment. Vérifiez vos entrées puis cliquez sur SIMULER en haut à droite pour débloquer cet onglet.'
+        : isItalian
+          ? 'Nessun risultato disponibile. Controlla i parametri in Dati e premi il pulsante SIMULA in alto a destra per sbloccare questo pannello.'
+          : 'No simulation results yet. Review your parameters on Inputs (or load a sample motor) and click the highlighted SIMULATE button at the top right to unlock this tab.',
   };
 
   const backdropBg = isDark ? 'rgba(3, 7, 18, 0.72)' : 'rgba(15, 23, 42, 0.60)';
@@ -636,7 +671,7 @@ export function InteractiveTourOverlay({
             className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/60 cursor-grab active:cursor-grabbing select-none group"
             onMouseDown={handleHeaderMouseDown}
             onTouchStart={handleHeaderTouchStart}
-            title={isSpanish ? 'Arrastra desde el encabezado para mover esta tarjeta' : 'Drag header to move this card'}
+            title={tStrings.dragHint}
           >
             <div className="flex items-center gap-2">
               <span className="flex items-center justify-center w-6 h-6 rounded-md bg-primary/15 text-primary border border-primary/30 group-hover:scale-105 transition-transform">
@@ -650,7 +685,7 @@ export function InteractiveTourOverlay({
                   <div className="flex items-center gap-0.5 text-[9px] text-muted-foreground/80 font-mono px-1 py-0.2 rounded bg-muted/50 border border-border/40">
                     <GripHorizontal className="w-3 h-3 text-primary/80" />
                     <span className="text-[8px] font-bold uppercase tracking-wider hidden sm:inline">
-                      {isSpanish ? 'Mover' : 'Move'}
+                      {tStrings.move}
                     </span>
                   </div>
                 </div>
@@ -667,7 +702,7 @@ export function InteractiveTourOverlay({
                   variant="ghost"
                   size="icon"
                   onClick={() => setDragPos(null)}
-                  title={isSpanish ? 'Restablecer posición inicial' : 'Reset initial position'}
+                  title={tStrings.resetPos}
                   className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -731,6 +766,16 @@ export function InteractiveTourOverlay({
                   </li>
                 ))}
               </ul>
+            )}
+
+            {needsSimulationFirst && (
+              <div className="p-2.5 rounded-lg bg-amber-500/12 border border-amber-500/45 text-amber-800 dark:text-amber-200 space-y-1">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold">
+                  <HelpCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span>{tStrings.prereqTitle}</span>
+                </div>
+                <p className="text-[11px] leading-snug">{tStrings.prereqDesc}</p>
+              </div>
             )}
 
             {/* Practical Pro-tip Box */}

@@ -1,72 +1,91 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  BookOpen, 
-  Sparkles, 
-  Layers, 
-  Flame, 
-  LineChart, 
-  Compass, 
-  Search, 
-  X, 
-  Play, 
-  CheckCircle2, 
-  ArrowRight, 
-  Rocket, 
-  Cpu, 
-  ShieldCheck, 
+import {
+  BookOpen,
+  Sparkles,
+  Layers,
+  Flame,
+  LineChart,
+  Compass,
+  Search,
+  X,
+  Play,
+  CheckCircle2,
+  Rocket,
+  Cpu,
   HelpCircle,
   Wand2,
-  Sliders,
   Beaker,
-  Gauge,
   Activity,
   Download,
   FolderOpen,
-  RotateCcw
+  RotateCcw,
+  Wind,
+  GitCompare,
+  Globe,
+  AlertTriangle
 } from 'lucide-react';
-import { 
-  isTourCompleted, 
-  resetCompletedTours, 
+import {
+  resetCompletedTours,
   unmarkSingleTour,
-  COMPLETED_TOURS_STORAGE_KEY 
+  COMPLETED_TOURS_STORAGE_KEY
 } from './InteractiveTourOverlay';
+import { Language } from '../lib/i18n';
 
 export interface GuideDefinition {
   id: string;
   tourSequenceId: string;
+  category:
+    | 'beginner'
+    | 'geometry'
+    | 'nozzle'
+    | 'propellant'
+    | 'results'
+    | 'flight'
+    | 'optimizer'
+    | 'export'
+    | 'postprocess';
+  difficulty: 'basic' | 'intermediate' | 'advanced';
+  estimatedMinutes: number;
+  requiresResults?: boolean;
+  icon: React.ComponentType<{ className?: string }>;
   titleEs: string;
   titleEn: string;
-  titleFr?: string;
-  titleIt?: string;
-  category: 'beginner' | 'geometry' | 'nozzle' | 'propellant' | 'results' | 'optimizer' | 'flight' | 'export';
-  difficulty: 'Básico' | 'Intermedio' | 'Avanzado';
-  estimatedMinutes: number;
-  icon: any;
-  color: string;
+  titleFr: string;
+  titleIt: string;
   summaryEs: string;
   summaryEn: string;
-  summaryFr?: string;
-  summaryIt?: string;
+  summaryFr: string;
+  summaryIt: string;
   bulletPointsEs: string[];
   bulletPointsEn: string[];
-  bulletPointsFr?: string[];
-  bulletPointsIt?: string[];
+  bulletPointsFr: string[];
+  bulletPointsIt: string[];
   presetLabelEs?: string;
   presetLabelEn?: string;
+  presetLabelFr?: string;
+  presetLabelIt?: string;
   onApplyPreset?: () => void;
 }
 
 interface GuideBookModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStartTour: (tourId: string) => void;
+  onStartTour: (tourId: string, tourLang?: Language) => void;
   onApplyPresetMotor: (type: 'bates_j' | 'star_k' | 'apcp_l' | 'nozzle_opt') => void;
-  lang: string;
+  lang: Language;
+  onChangeGuideLang: (lang: Language) => void;
+  hasResults?: boolean;
   theme: string;
 }
+
+const GUIDE_LANGUAGES: Array<{ code: Language; label: string; name: string }> = [
+  { code: 'es', label: 'ESP', name: 'Español' },
+  { code: 'en', label: 'ENG', name: 'English' },
+  { code: 'fr', label: 'FRA', name: 'Français' },
+  { code: 'it', label: 'ITA', name: 'Italiano' },
+];
 
 export function GuideBookModal({
   isOpen,
@@ -74,24 +93,28 @@ export function GuideBookModal({
   onStartTour,
   onApplyPresetMotor,
   lang,
-  theme
+  onChangeGuideLang,
+  hasResults = false,
 }: GuideBookModalProps) {
-  const isSpanish = lang === 'es';
-  const isFrench = lang === 'fr';
-  const isItalian = lang === 'it';
-  const isDark = theme === 'dark';
+  const loc = <T,>(es: T, en: T, fr: T, it: T): T => {
+    if (lang === 'es') return es;
+    if (lang === 'fr') return fr;
+    if (lang === 'it') return it;
+    return en;
+  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [completedMap, setCompletedMap] = useState<Record<string, boolean>>({});
 
-  // Reload completed status whenever modal opens or event is dispatched
   const refreshCompletedStatus = () => {
     try {
       const raw = localStorage.getItem(COMPLETED_TOURS_STORAGE_KEY);
       const list: string[] = raw ? JSON.parse(raw) : [];
       const map: Record<string, boolean> = {};
-      list.forEach(id => { map[id] = true; });
+      list.forEach((id) => {
+        map[id] = true;
+      });
       setCompletedMap(map);
     } catch {
       setCompletedMap({});
@@ -107,348 +130,630 @@ export function GuideBookModal({
     return () => window.removeEventListener('hermes-tour-completed', handler);
   }, [isOpen]);
 
-  const guides: GuideDefinition[] = useMemo(() => [
-    {
-      id: 'grain_creation',
-      tourSequenceId: 'tour_grains',
-      titleEs: 'Creación y Geometría de Granos de Propelente',
-      titleEn: 'Propellant Grain Creation & Geometry',
-      titleFr: 'Création et Géométrie des Grains',
-      titleIt: 'Creazione e Geometria dei Grani',
-      category: 'geometry',
-      difficulty: 'Básico',
-      estimatedMinutes: 4,
-      icon: Layers,
-      color: 'from-primary to-secondary',
-      summaryEs: 'Aprende paso a paso cómo añadir nuevos bloques de grano (+ Nuevo Grano), seleccionar combustible, configurar formas (BATES, Estrella, Macizo), calcular web thickness e inhibir caras.',
-      summaryEn: 'Step-by-step tutorial on adding new grain segments (+ New Grain), selecting fuels, configuring shapes (BATES, Star, Solid), sizing web thickness, and setting inhibitors.',
-      summaryFr: 'Guide pas à pas pour ajouter de nouveaux grains, choisir la géométrie et inhiber les faces.',
-      summaryIt: 'Guida passo-passo per aggiungere nuovi grani, scegliere la geometria e inibire le facce.',
-      bulletPointsEs: [
-        'Añadir nuevos segmentos a la pila con el botón "+ Nuevo Grano".',
-        'Selección de combustible (estándar o personalizado de tu biblioteca).',
-        'Formas: Cilíndrico BATES (empuje neutro), Estrella (alto despegue) o Macizo.',
-        'Dimensiones críticas: D₀ (ajuste a cámara), d₀ (orificio), espesor Web y recuento N.',
-        'Inhibición térmica de caras: EXT (liner perimetral), ENDS (extremos) e INT (núcleo).'
-      ],
-      bulletPointsEn: [
-        'Appending new segments with the "+ New Grain" button.',
-        'Fuel formulation assignment (standard or custom from your library).',
-        'Geometries: BATES (neutral thrust), Star (high liftoff), or End-burner solid.',
-        'Critical dimensions: D₀ (casing fit), d₀ (port), Web thickness, and count N.',
-        'Face inhibition controls: EXT (casing liner), ENDS (face edges), and INT (core).'
-      ],
-      presetLabelEs: 'Cargar Grano BATES 4x54mm',
-      presetLabelEn: 'Load BATES 4x54mm Grain',
-      onApplyPreset: () => onApplyPresetMotor('bates_j')
-    },
-    {
-      id: 'nozzle_and_chamber',
-      tourSequenceId: 'tour_nozzle',
-      titleEs: 'Cámara de Combustión y Tobera Laval',
-      titleEn: 'Combustion Chamber & De Laval Nozzle',
-      titleFr: 'Chambre de Combustion & Tuyère Laval',
-      titleIt: 'Camera di Combustione e Ugello Laval',
-      category: 'nozzle',
-      difficulty: 'Intermedio',
-      estimatedMinutes: 4,
-      icon: Compass,
-      color: 'from-blue-500 to-cyan-600',
-      summaryEs: 'Domina el diseño estructural de la cámara (espesor, material, liner, inhibidor y presión admisible Padm), el dimensionado de garganta (Dt0), relación de expansión y erosión/escoria.',
-      summaryEn: 'Master chamber structural design (wall thickness, material, liner, inhibitor, and admissible pressure Padm), critical throat sizing (Dt0), expansion ratio, and erosion/slag.',
-      summaryFr: 'Maîtrisez la structure de chambre (paroi, matériau, liner, inhibiteur, Padm), le col Dt0, l\'expansion et l\'érosion.',
-      summaryIt: 'Padroneggia la struttura della camera (parete, materiale, liner, inibitore, Padm), gola Dt0, espansione ed erosione.',
-      bulletPointsEs: [
-        'Cámara y estructura: espesor de pared, Aluminio 6082-T6 / Acero Inox. AISI 304 (215 MPa) / personalizado y Factor de Seguridad.',
-        'Presión Máx. Admisible (Padm) de pared y tornillos, liner térmico, inhibidor (2 mm por defecto) y holgura radial.',
-        'Diámetro de garganta (Dt0) y relación de expansión óptima (Ds/Dt0) a 1 atm.',
-        'Modelado de erosión ablativa (+) o acumulación de escoria (-) en tiempo real.'
-      ],
-      bulletPointsEn: [
-        'Chamber structure: wall thickness, Aluminum 6082-T6 / Stainless Steel AISI 304 (215 MPa) / custom material, and Safety Factor.',
-        'Chamber & radial bolt Padm, optional thermal liner, grain inhibitor (2 mm default), and radial clearance checks.',
-        'Throat diameter (Dt0) and optimal expansion ratio (Ds/Dt0) at 1 atm sea level.',
-        'Ablative throat erosion (+) and slag deposition (-) dynamic modeling.'
-      ],
-      bulletPointsFr: [
-        'Structure de chambre : épaisseur de paroi, Aluminium 6082-T6 / Acier Inox AISI 304 (215 MPa) / personnalisé et facteur de sécurité.',
-        'Pression admissible (Padm), liner thermique, inhibiteur (2 mm par défaut) et contrôle du jeu radial.',
-        'Diamètre au col (Dt0) et rapport d\'expansion optimal à 1 atm.',
-        'Modélisation dynamique de l\'érosion (+) ou des scories (-).'
-      ],
-      bulletPointsIt: [
-        'Struttura camera: spessore parete, Alluminio 6082-T6 / Acciaio Inox AISI 304 (215 MPa) / personalizzato e Fattore di Sicurezza.',
-        'Pressione ammissibile (Padm), liner termico, inibitore (2 mm predefinito) e verifica del gioco radiale.',
-        'Diametro di gola (Dt0) e rapporto di espansione ottimale a 1 atm.',
-        'Modellazione dinamica di erosione (+) o deposito di scorie (-).'
-      ],
-      presetLabelEs: 'Tobera Óptima Nivel Mar',
-      presetLabelEn: 'Optimal Sea-Level Nozzle',
-      onApplyPreset: () => onApplyPresetMotor('nozzle_opt')
-    },
-    {
-      id: 'create_custom_propellant',
-      tourSequenceId: 'tour_create_propellant',
-      titleEs: 'Crear un Nuevo Propulsante Personalizado',
-      titleEn: 'Create a Custom Propellant Formula',
-      titleFr: 'Créer un Propergol Personnalisé',
-      titleIt: 'Crea un Propellente Personalizzato',
-      category: 'propellant',
-      difficulty: 'Intermedio',
-      estimatedMinutes: 4,
-      icon: Beaker,
-      color: 'from-teal-600 to-cyan-600',
-      summaryEs: 'Aprende a localizar el botón en Inputs para abrir el gestor, explorar los propulsantes existentes y sus rangos de presión, y formular un nuevo combustible con tabla r(P).',
-      summaryEn: 'Learn where to find the manager button on Inputs, inspect existing fuels and piecewise pressure ranges, and synthesize custom propellants with r(P) tables.',
-      summaryFr: 'Localisez le bouton dans les Entrées, examinez les propergols existants et créez votre propre carburant.',
-      summaryIt: 'Localizza il pulsante in Dati, esamina i propellenti esistenti e formula un nuovo combustibile.',
-      bulletPointsEs: [
-        'Localización exacta del botón en la pestaña Inputs ("Química & Propulsantes" / "Fórmula").',
-        'Exploración de propulsantes estándar existentes y sus rangos de presión calibrados.',
-        'Creación desde cero (+ Nuevo Propulsante) o duplicación de base existente.',
-        'Parámetros termoquímicos (ρ, T₀, γ, M) y tabla interactiva por tramos de presión [Pmin-Pmax].',
-        'Curva gráfica r(P) en tiempo real y guardado persistente en tu navegador.'
-      ],
-      bulletPointsEn: [
-        'Exact location of the launcher button on Inputs ("Propellant Chemistry" / "Formula").',
-        'Exploring standard pre-calibrated propellants and their empirical pressure intervals.',
-        'Creating from scratch (+ New Propellant) or duplicating an existing base fuel.',
-        'Thermochemistry (ρ, T₀, γ, M) and interactive piecewise pressure table [Pmin-Pmax].',
-        'Live r(P) regression curve inspection and persistent local storage saving.'
-      ]
-    },
-    {
-      id: 'propellants_chemistry',
-      tourSequenceId: 'tour_propellants',
-      titleEs: 'Composición Química, Saint-Robert y Saint-Venant',
-      titleEn: 'Propellant Chemistry, Saint-Robert & Saint-Venant',
-      titleFr: 'Chimie des Propergols, Saint-Robert & Saint-Venant',
-      titleIt: 'Chimica dei Propellenti, Saint-Robert e Saint-Venant',
-      category: 'propellant',
-      difficulty: 'Intermedio',
-      estimatedMinutes: 5,
-      icon: Flame,
-      color: 'from-amber-500 to-rose-600',
-      summaryEs: 'Guía centrada en la pestaña Inputs: selección de combustibles, qué significan los parámetros A y N (r = a·Pⁿ), la condición crítica de estabilidad (n < 1) y la ley de Saint-Venant.',
-      summaryEn: 'Inputs-focused guide: propellant assignment, meaning of burn parameters A and N (r = a·Pⁿ), stability condition (n < 1), and Saint-Venant choked nozzle law.',
-      summaryFr: 'Guide centré sur l\'onglet Entrées : sélection, paramètres A et N, condition n < 1 et loi de Saint-Venant.',
-      summaryIt: 'Guida per il pannello Dati: selezione, parametri A ed N, condizione n < 1 e legge di Saint-Venant.',
-      bulletPointsEs: [
-        'Selección de combustible por grano (estándar o personalizado de biblioteca).',
-        'Propiedades termoquímicas: densidad ρ, calor T₀, γ, masa molar M y velocidad c*.',
-        'Ley de Saint-Robert: coeficientes A y N, y por qué n < 1 es obligatorio para evitar explosión (CATO).',
-        'Ley de Saint-Venant: flujo sónico en garganta y presión de equilibrio de cámara P_eq.',
-        'Inspección rápida de la fórmula química y parámetros activos desde Inputs.'
-      ],
-      bulletPointsEn: [
-        'Propellant selection per grain segment (standard fuels or custom from library).',
-        'Thermochemical properties: density ρ, flame temp T₀, γ, molar mass M, and velocity c*.',
-        'Saint-Robert law: parameters A & N, and why n < 1 is strictly mandatory to prevent CATO.',
-        'Saint-Venant law: sonic choked mass discharge and chamber equilibrium pressure P_eq.',
-        'Quick inspection of chemical values and active formulation directly on Inputs.'
-      ],
-      presetLabelEs: 'Cargar Motor APCP K-Class',
-      presetLabelEn: 'Load APCP K-Class Motor',
-      onApplyPreset: () => onApplyPresetMotor('apcp_l')
-    },
-    {
-      id: 'results_interpretation',
-      tourSequenceId: 'tour_results',
-      titleEs: 'Interpretación de Resultados y Curvas Balísticas',
-      titleEn: 'Interpreting Results & Ballistic Curves',
-      titleFr: 'Interprétation des Résultats & Courbes',
-      titleIt: 'Interpretazione dei Risultati e Curve',
-      category: 'results',
-      difficulty: 'Básico',
-      estimatedMinutes: 4,
-      icon: LineChart,
-      color: 'from-emerald-500 to-teal-600',
-      summaryEs: 'Aprende a leer como un ingeniero la curva de presión P(t), el perfil de empuje F(t), el ratio de estrangulamiento Kn y la clasificación internacional de motores.',
-      summaryEn: 'Learn how to interpret chamber pressure P(t), thrust profile F(t), Klemmung ratio Kn, and official Tripoli/NFPA rocket motor impulse classification.',
-      summaryFr: 'Analysez la pression de chambre P(t), la poussée F(t) et la classe Tripoli.',
-      summaryIt: 'Analizza la pressione in camera P(t), il profilo di spinta F(t) e la classe Tripoli.',
-      bulletPointsEs: [
-        'Presión máxima (Pmax) vs límite de rotura del casing con factor de seguridad (FS > 1.5).',
-        'Tiempo de quemado (propelente activo) vs tiempo de acción (despresurización residual).',
-        'Área bajo la curva F(t): Impulso Total (It) y determinación de la Clase (H, I, J, K...).',
-        'Curva Kn = Ab / At: rango seguro de operación para evitar extinciones o explosión.'
-      ],
-      bulletPointsEn: [
-        'Peak pressure (Pmax) vs casing burst limit with engineering safety factor (FS > 1.5).',
-        'Burn time (active propellant consumption) vs action time (exhaust tail-off).',
-        'Integral of thrust F(t): Total Impulse (It) and official motor class letter (H, I, J, K...).',
-        'Kn ratio curve = Ab / At: safe operating envelope preventing chuffing or overpressure.'
-      ]
-    },
-    {
-      id: 'data_export_and_library',
-      tourSequenceId: 'tour_export',
-      titleEs: 'Exportación de Datos Numéricos (CSV y Excel)',
-      titleEn: 'Numeric Data Export (CSV & Excel)',
-      titleFr: 'Exportation de Données Numériques (CSV & Excel)',
-      titleIt: 'Esportazione Dati Numerici (CSV ed Excel)',
-      category: 'export',
-      difficulty: 'Básico',
-      estimatedMinutes: 3,
-      icon: Download,
-      color: 'from-cyan-500 to-blue-600',
-      summaryEs: 'Aprende a exportar las series temporales de empuje F(t), presión P(t), flujo másico y resúmenes balísticos a archivos CSV y Microsoft Excel (.xlsx).',
-      summaryEn: 'Learn how to export high-resolution F(t), P(t), mass flow time series and ballistic summaries into CSV and Excel (.xlsx) files.',
-      summaryFr: 'Exporter les séries temporelles de poussée et pression vers CSV et Excel.',
-      summaryIt: 'Esporta le serie temporali di spinta e pressione in formato CSV ed Excel.',
-      bulletPointsEs: [
-        'Series temporales balísticas con resolución del paso dt.',
-        'Columnas de tiempo [s], presión (MPa/bar/atm), empuje (N/kgf) y flujo másico.',
-        'Tabla de resumen de rendimiento para informes técnicos.',
-        'Compatibilidad directa con Excel, MATLAB, Python y bancos de pruebas.'
-      ],
-      bulletPointsEn: [
-        'Ballistic time series with integration step dt resolution.',
-        'Columns for time [s], pressure (MPa/bar/atm), thrust (N/kgf), and mass flow.',
-        'Built-in performance summary table for engineering reports.',
-        'Direct compatibility with Excel, MATLAB, Python, and test stands.'
-      ]
-    },
-    {
-      id: 'save_simulation_local',
-      tourSequenceId: 'tour_save',
-      titleEs: 'Guardar Simulaciones en la Biblioteca Local',
-      titleEn: 'Save Simulations to Local Library',
-      titleFr: 'Enregistrer en Bibliothèque Locale',
-      titleIt: 'Salvare le Simulazioni nella Libreria Locale',
-      category: 'export',
-      difficulty: 'Básico',
-      estimatedMinutes: 3,
-      icon: FolderOpen,
-      color: 'from-blue-600 to-indigo-600',
-      summaryEs: 'Aprende a ubicar el botón Guardar en la barra superior, asignar nombre y carpeta en la ventana modal emergente y recargar proyectos guardados desde la biblioteca.',
-      summaryEn: 'Learn where to find the Save button in the top bar, set simulation name and folder group in the modal dialog, and reload designs from the library.',
-      summaryFr: 'Localisez le bouton Enregistrer, nommez votre projet et rechargez depuis la bibliothèque.',
-      summaryIt: 'Individua il pulsante Salva, imposta nome e cartella e ricarica i progetti dalla libreria.',
-      bulletPointsEs: [
-        'Localización del botón Guardar en la cabecera superior.',
-        'Ventana modal: asignación de nombre de simulación y carpeta organizativa.',
-        'Almacenamiento persistente en localStorage del navegador.',
-        'Acceso al explorador de la Biblioteca para recargar proyectos en 1 clic.'
-      ],
-      bulletPointsEn: [
-        'Locating the Save button in the top header bar.',
-        'Modal dialog: specifying simulation name and category folder group.',
-        'Persistent storage inside browser localStorage.',
-        'Opening the Library explorer to reload archived designs in 1 click.'
-      ]
-    },
-    {
-      id: 'mission_control_flight',
-      tourSequenceId: 'tour_mission_control',
-      titleEs: 'Mission Control, Datos y Vuelo 1D',
-      titleEn: 'Mission Control, Data & 1D Flight',
-      titleFr: 'Mission Control, Données & Vol 1D',
-      titleIt: 'Mission Control, Dati e Volo 1D',
-      category: 'flight',
-      difficulty: 'Intermedio',
-      estimatedMinutes: 5,
-      icon: Rocket,
-      color: 'from-orange-500 to-amber-600',
-      summaryEs: 'Explicación detallada de todas las funcionalidades: parámetros del cohete, elevación sobre el nivel del mar, aerodinámica Mach vs Cd, importación de ensayos con unidades y análisis de apogeo.',
-      summaryEn: 'Detailed walkthrough of all features: rocket flight weights, launch site elevation, Mach vs Cd aerodynamics, test stand data import with unit selectors, and trajectory curves.',
-      summaryFr: 'Visite détaillée : masses de fusée, altitude de tir, profil Mach vs Cd, import de bancs réels et apogée.',
-      summaryIt: 'Guida dettagliata: pesi del razzo, quota di lancio, aerodinamica Mach vs Cd, importazione da banco prova e apogeo.',
-      bulletPointsEs: [
-        'Parámetros mecánicos y de atmósfera: masa en seco, diámetro exterior, altitud sobre el mar y botón Actualizar.',
-        'Aerodinámica Mach vs Cd: modelo estándar vs personalizado, descarga de plantilla CSV y editor manual.',
-        'Importación de ensayos estáticos: selección de formato de columnas y selectores de unidades (MPa/bar/psi, N/lbf).',
-        'Resultados de trayectoria: apogeo máximo, velocidad, aceleración pico en Gs, gráficas comparativas y exportación.'
-      ],
-      bulletPointsEn: [
-        'Mechanical & atmospheric inputs: dry mass, outer diameter, launch site elevation, and Update button.',
-        'Aerodynamic drag polar: standard vs custom, CSV template download, and manual paste editor.',
-        'Test stand data import: column formats (Time/Thrust, Time/Pressure, etc.) and unit selectors (MPa/bar/psi, N/lbf).',
-        'Trajectory results: peak apogee, max velocity, peak G-load, comparison plots, and Excel/CSV export.'
-      ]
-    },
-    {
-      id: 'smart_search_optimization',
-      tourSequenceId: 'tour_smart_search',
-      titleEs: 'Optimización Inversa con Smart Search (3 Fases)',
-      titleEn: 'Smart Search Inverse Optimization (3 Phases)',
-      titleFr: 'Optimisation Inverse Smart Search (3 Phases)',
-      titleIt: 'Ottimizzazione Inversa Smart Search (3 Fasi)',
-      category: 'optimizer',
-      difficulty: 'Avanzado',
-      estimatedMinutes: 5,
-      icon: Cpu,
-      color: 'from-sky-600 to-blue-700',
-      summaryEs: 'Diseño automático inverso: especifica límites de cámara y metas de empuje, y deja que el optimizador global unificado Differential Evolution encuentre la mejor geometría.',
-      summaryEn: 'Inverse automated motor design: set casing limits and flight goals, and let the unified Differential Evolution global engine find optimal geometries.',
-      summaryFr: 'Conception inverse automatique guidée en 3 phases par Differential Evolution.',
-      summaryIt: 'Progettazione inversa automatica guidata in 3 fasi con Differential Evolution.',
-      bulletPointsEs: [
-        'Fase 1: Restricciones de hardware (diámetro y longitud de cámara, garganta, Pmax segura).',
-        'Fase 2: Geometría de grano, número de segmentos y variables acotadas o libres.',
-        'Fase 3: Selección de objetivo (máximo impulso total real, velocidad rápida o impulso objetivo).',
-        'Motor unificado: Differential Evolution (DE/rand/1/bin) con muestreo LHS y presupuesto configurable.'
-      ],
-      bulletPointsEn: [
-        'Phase 1: Hardware constraints (casing diameter and length, throat, safe Pmax limit).',
-        'Phase 2: Grain geometry, segment count, and locked/free variables.',
-        'Phase 3: Mission goal selection (pure total impulse, fast liftoff, or target impulse).',
-        'Unified solver: Differential Evolution (DE/rand/1/bin) with LHS sampling and configurable budget.'
-      ]
-    },
-    {
-      id: 'full_simulator_tour',
-      tourSequenceId: 'tour_full',
-      titleEs: 'Tour General del Simulador (7 Pestañas y Guardado)',
-      titleEn: 'General Simulator Walkthrough (7 Tabs & Saving)',
-      titleFr: 'Tour Général du Simulateur (7 Onglets & Sauvegarde)',
-      titleIt: 'Tour Generale del Simulatore (7 Pannelli e Salvataggio)',
-      category: 'beginner',
-      difficulty: 'Básico',
-      estimatedMinutes: 6,
-      icon: Sparkles,
-      color: 'from-rose-500 to-pink-600',
-      summaryEs: 'Explicación clara y detallada de qué se hace y qué objetivo tiene cada una de las 7 pestañas, además de cómo guardar simulaciones en tu biblioteca local.',
-      summaryEn: 'Structured walkthrough explaining the purpose and workflows of all 7 tabs, plus how to save complete motor simulations to your library.',
-      summaryFr: 'Visite guidée complète des 7 onglets du simulateur HERMES et de l\'enregistrement en bibliothèque.',
-      summaryIt: 'Guida passo-passo che illustra lo scopo di tutti e 7 i pannelli e come salvare le simulazioni nella libreria.',
-      bulletPointsEs: [
-        'Pestaña 1 (Inputs): Todos los parámetros a introducir (cámara, tobera, granos) y su objetivo.',
-        'Pestaña 2 (Results): Básicamente visualización (métricas balísticas, curvas P(t), F(t) y exportación).',
-        'Guardado y Biblioteca: Dónde está el botón Guardar, ventana modal de proyecto y explorador de biblioteca.',
-        'Pestaña 3 (Detailed Analysis): Estudio en detalle de la combustión (Kn, velocidad de gas, flujo).',
-        'Pestaña 4 (Mission Control): Simulación de alturas, exportación e importación de datos CSV.',
-        'Pestaña 5 (Smart Search): Optimización de geometrías y búsqueda automática de soluciones óptimas.',
-        'Pestaña 6 (Agente Jesús): Aplicación de Inteligencia Artificial para entender mejor los resultados.',
-        'Pestaña 7 (Animaciones): Únicamente visualización dinámica de gases y tobera.'
-      ],
-      bulletPointsEn: [
-        'Tab 1 (Inputs): Parameters to input (chamber, nozzle, grains) and primary objective.',
-        'Tab 2 (Results): Primarily visualization (metrics, P(t) & F(t) curves, and export).',
-        'Save & Library: Location of Save button, project modal, and library explorer.',
-        'Tab 3 (Detailed Analysis): In-depth combustion study (Kn, port gas velocity, mass flux).',
-        'Tab 4 (Mission Control): Altitude simulation, trajectory control, and CSV import/export.',
-        'Tab 5 (Smart Search): Geometry optimization solver to automatically find optimal motors.',
-        'Tab 6 (Agente Jesús): Applying Artificial Intelligence to interpret results and anomalies.',
-        'Tab 7 (Animations): Dedicated purely to dynamic nozzle flow and expansion visualization.'
-      ]
-    }
-  ], [onApplyPresetMotor]);
+  const guides: GuideDefinition[] = useMemo(
+    () => [
+      {
+        id: 'full_simulator_tour',
+        tourSequenceId: 'tour_full',
+        category: 'beginner',
+        difficulty: 'basic',
+        estimatedMinutes: 7,
+        icon: Sparkles,
+        titleEs: 'Tour General de HERMES (Simulate, Post-Process, Ajustes y .hrms)',
+        titleEn: 'HERMES Complete Overview (Simulate, Post-Process, Settings & .hrms)',
+        titleFr: 'Visite Générale de HERMES (Simulate, Post-Process, Paramètres & .hrms)',
+        titleIt: 'Tour Generale di HERMES (Simulate, Post-Process, Impostazioni & .hrms)',
+        summaryEs:
+          'Recorrido completo por la arquitectura actual de la aplicación: acceso START, cambio entre Simulate y Post-Process, las 6 pestañas de simulación, Estudio, barra lateral de Ajustes, cabecera rápida (.hrms / Save) y módulos en desarrollo.',
+        summaryEn:
+          'Complete walkthrough of the current app architecture: START entry, Simulate vs Post-Process switch, all 6 simulation tabs, Study workspace, Settings sidebar, quick header (.hrms / Save), and upcoming modules.',
+        summaryFr:
+          'Visite complète de l’architecture actuelle : accès START, bascule Simulate / Post-Process, 6 onglets de simulation, Study, barre latérale Réglages, en-tête rapide (.hrms / Save) et modules à venir.',
+        summaryIt:
+          'Panoramica completa dell’architettura attuale: accesso START, cambio Simulate / Post-Process, 6 schede di simulazione, Study, barra laterale Impostazioni, intestazione rapida (.hrms / Save) e moduli futuri.',
+        bulletPointsEs: [
+          'Pantalla inicial (START) y selector superior Simulate / Post-Process para cambiar sin perder estado.',
+          'Simulate: Inputs, Results, Detailed Analysis, Mission Control, Smart Search y Animations / 3D Flight.',
+          'Post-Process: Estudio comparativo operativo y módulo Caracterización a y n (en desarrollo).',
+          'Cabecera minimalista (Save, .hrms, Guía) y barra lateral (Biblioteca, Unidades, Tema, Idioma y Agente Jesús en desarrollo).'
+        ],
+        bulletPointsEn: [
+          'Entry screen (START) and top Simulate / Post-Process switcher without losing state.',
+          'Simulate: Inputs, Results, Detailed Analysis, Mission Control, Smart Search, and Animations / 3D Flight.',
+          'Post-Process: active Study comparator and Characterization a & n module (in development).',
+          'Minimal header (Save, .hrms, Guide) and Settings sidebar (Library, Units, Theme, Language & Agent Jesús in development).'
+        ],
+        bulletPointsFr: [
+          'Écran d’accueil (START) et sélecteur Simulate / Post-Process sans perte de données.',
+          'Simulate : Inputs, Results, Detailed Analysis, Mission Control, Smart Search et Animations / Vol 3D.',
+          'Post-Process : module Study actif et Caractérisation a & n (en développement).',
+          'En-tête épuré (Save, .hrms, Guide) et barre latérale (Bibliothèque, Unités, Thème, Langue et Agent Jesús en développement).'
+        ],
+        bulletPointsIt: [
+          'Schermata iniziale (START) e selettore Simulate / Post-Process senza perdere lo stato.',
+          'Simulate: Inputs, Results, Detailed Analysis, Mission Control, Smart Search e Animations / Volo 3D.',
+          'Post-Process: modulo Study attivo e Caratterizzazione a e n (in sviluppo).',
+          'Intestazione essenziale (Save, .hrms, Guida) e barra laterale (Libreria, Unità, Tema, Lingua e Agente Jesús in sviluppo).'
+        ]
+      },
+      {
+        id: 'grain_creation',
+        tourSequenceId: 'tour_grains',
+        category: 'geometry',
+        difficulty: 'basic',
+        estimatedMinutes: 4,
+        icon: Layers,
+        titleEs: 'Granos de Propelente (9 Geometrías, rhorat y Validación)',
+        titleEn: 'Propellant Grains (9 Geometries, rhorat & Validation)',
+        titleFr: 'Grains de Propergol (9 Géométries, rhorat & Validation)',
+        titleIt: 'Grani di Propellente (9 Geometrie, rhorat e Validazione)',
+        summaryEs:
+          'Configura segmentos con "+ Nuevo Grano", domina las 9 formas disponibles (BATES, Estrella, Macizo, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube y Wagon Wheel), densidad real rhorat, inhibición EXT/ENDS/INT y alertas geométricas.',
+        summaryEn:
+          'Configure segments with "+ New Grain", master all 9 shapes (BATES, Star, Solid, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube, Wagon Wheel), density ratio rhorat, EXT/ENDS/INT inhibition, and geometry validation.',
+        summaryFr:
+          'Configurez vos blocs avec "+ Nouveau Grain", maîtrisez les 9 formes (BATES, Étoile, Plein, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube, Wagon Wheel), rhorat, l’inhibition EXT/ENDS/INT et les alertes.',
+        summaryIt:
+          'Configura i blocchi con "+ Nuovo Grano", gestisci tutte le 9 geometrie (BATES, Stella, Solido, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube, Wagon Wheel), rhorat, inibizione EXT/ENDS/INT e controlli.',
+        bulletPointsEs: [
+          '9 geometrías reales con parámetros dedicados y vistas transversales/longitudinales sincronizadas.',
+          'Factor rhorat (densidad real / teórica), dimensiones D₀, d₀, longitud L y número de bloques N.',
+          'Inhibición de caras: EXT (perímetro exterior), ENDS (caras planas) e INT (núcleo interno).',
+          'Validación en vivo: bloqueo por geometría imposible y aviso preventivo ante conflictos con cámara.'
+        ],
+        bulletPointsEn: [
+          'All 9 real geometries with dedicated dimensions and synchronized cross/longitudinal previews.',
+          'rhorat density factor (actual / theoretical), D₀, d₀, segment length L, and count N.',
+          'Face burning toggles: EXT (outer wall), ENDS (end faces), and INT (internal core).',
+          'Live validation: hard blocks for impossible geometry and warnings for casing clearance conflicts.'
+        ],
+        bulletPointsFr: [
+          'Les 9 géométries réelles avec paramètres dédiés et vues synchronisées.',
+          'Facteur rhorat (densité réelle / théorique), cotes D₀, d₀, longueur L et nombre de blocs N.',
+          'Inhibition des faces : EXT (paroi externe), ENDS (extrémités) et INT (canal interne).',
+          'Validation en direct : blocage si géométrie impossible et alerte de jeu radial avec la chambre.'
+        ],
+        bulletPointsIt: [
+          'Tutte le 9 geometrie reali con parametri dedicati e viste sincronizzate.',
+          'Fattore rhorat (densità reale / teorica), quote D₀, d₀, lunghezza L e numero blocchi N.',
+          'Inibizione facce: EXT (parete esterna), ENDS (estremità) e INT (nucleo interno).',
+          'Validazione dal vivo: blocco per geometrie impossibili e avviso di conflitto con la camera.'
+        ],
+        presetLabelEs: 'Cargar BATES 4x54mm',
+        presetLabelEn: 'Load BATES 4x54mm',
+        presetLabelFr: 'Charger BATES 4x54mm',
+        presetLabelIt: 'Carica BATES 4x54mm',
+        onApplyPreset: () => onApplyPresetMotor('bates_j')
+      },
+      {
+        id: 'nozzle_and_chamber',
+        tourSequenceId: 'tour_nozzle',
+        category: 'nozzle',
+        difficulty: 'intermediate',
+        estimatedMinutes: 5,
+        icon: Compass,
+        titleEs: 'Cámara, Estructura (Lamé + Tornillos) y Tobera Laval',
+        titleEn: 'Chamber, Structure (Lamé + Bolts) & De Laval Nozzle',
+        titleFr: 'Chambre, Structure (Lamé + Boulons) & Tuyère Laval',
+        titleIt: 'Camera, Struttura (Lamé + Bulloni) e Ugello Laval',
+        summaryEs:
+          'Dimensiona la cámara (Dc, Lc, G*, kv, ηc, dt, Pamb), calcula la presión admisible gobernante Padm (pared Lamé vs cortante/aplastamiento de tornillos radiales), liner, inhibidor, garganta Dt0, expansión Ds y 6 modelos de erosión/escoria.',
+        summaryEn:
+          'Size chamber (Dc, Lc, G*, kv, ηc, dt, Pamb), evaluate governing Padm (Lamé wall vs bolted closure shear/bearing/net-section), liner, inhibitor, throat Dt0, expansion Ds, and 6 erosion/slag models.',
+        summaryFr:
+          'Dimensionnez la chambre (Dc, Lc, G*, kv, ηc, dt, Pamb), calculez la Padm gouvernante (paroi Lamé vs boulons radiaux), liner, inhibiteur, col Dt0, divergence Ds et 6 modèles d’érosion/scories.',
+        summaryIt:
+          'Dimensiona la camera (Dc, Lc, G*, kv, ηc, dt, Pamb), valuta la Padm governante (parete Lamé vs bulloni radiali), liner, inibitore, gola Dt0, espansione Ds e 6 modelli di erosione/scorie.',
+        bulletPointsEs: [
+          'Cámara: Dc, Lc, erosividad (G*, kv), eficiencia de combustión ηc, paso dt y presión ambiente Pamb.',
+          'Estructura: espesor, Aluminio 6082-T6 / Acero AISI 304 / personalizado, Factor de Seguridad y unión atornillada.',
+          'Liner térmico, inhibidor radial de grano (2 mm), comprobación de holgura y sincronización de masa.',
+          'Tobera: Dt0, Ds, semiángulo α, rendimiento ηnoz y 6 modelos dinámicos de erosión o escoria.'
+        ],
+        bulletPointsEn: [
+          'Chamber: Dc, Lc, erosive burning (G*, kv), combustion efficiency ηc, dt step, and ambient Pamb.',
+          'Structure: wall thickness, Al 6082-T6 / AISI 304 / custom, Safety Factor, and bolted closure check.',
+          'Thermal liner, radial grain inhibitor (2 mm), fit clearance check, and motor mass sync.',
+          'Nozzle: Dt0, Ds, half-angle α, efficiency ηnoz, and 6 dynamic throat erosion or slag models.'
+        ],
+        bulletPointsFr: [
+          'Chambre : Dc, Lc, combustion érosive (G*, kv), rendement ηc, pas dt et pression ambiante Pamb.',
+          'Structure : épaisseur, Al 6082-T6 / AISI 304 / personnalisé, Facteur de Sécurité et fermeture boulonnée.',
+          'Liner thermique, inhibiteur radial (2 mm), contrôle du jeu et synchronisation de masse.',
+          'Tuyère : Dt0, Ds, demi-angle α, rendement ηnoz et 6 modèles dynamiques d’érosion ou scories.'
+        ],
+        bulletPointsIt: [
+          'Camera: Dc, Lc, combustione erosiva (G*, kv), efficienza ηc, passo dt e pressione ambiente Pamb.',
+          'Struttura: spessore, Al 6082-T6 / AISI 304 / personalizzato, Fattore di Sicurezza e chiusura a bulloni.',
+          'Liner termico, inibitore radiale (2 mm), controllo del gioco e sincronizzazione della massa.',
+          'Ugello: Dt0, Ds, semiangolo α, efficienza ηnoz e 6 modelli dinamici di erosione o scorie.'
+        ],
+        presetLabelEs: 'Tobera Óptima 1 atm',
+        presetLabelEn: 'Optimal 1 atm Nozzle',
+        presetLabelFr: 'Tuyère Optimale 1 atm',
+        presetLabelIt: 'Ugello Ottimale 1 atm',
+        onApplyPreset: () => onApplyPresetMotor('nozzle_opt')
+      },
+      {
+        id: 'propellants_chemistry',
+        tourSequenceId: 'tour_propellants',
+        category: 'propellant',
+        difficulty: 'intermediate',
+        estimatedMinutes: 4,
+        icon: Flame,
+        titleEs: 'Química, Saint-Robert (r = a·Pⁿ) y Equilibrio Saint-Venant',
+        titleEn: 'Propellant Chemistry, Saint-Robert & Saint-Venant Equilibrium',
+        titleFr: 'Chimie des Propergols, Saint-Robert & Saint-Venant',
+        titleIt: 'Chimica, Saint-Robert e Equilibrio Saint-Venant',
+        summaryEs:
+          'Asigna propulsantes distintos por segmento, comprende los parámetros termoquímicos (ρ, T₀, γ, M, c*), el papel crítico de n < 1 en Saint-Robert y cómo la garganta sónica fija la presión de cámara.',
+        summaryEn:
+          'Assign distinct propellants per segment, understand thermochemical constants (ρ, T₀, γ, M, c*), why n < 1 is mandatory in Saint-Robert, and how choked nozzle flow sets chamber pressure.',
+        summaryFr:
+          'Assignez des propergols par bloc, comprenez les constantes thermochimiques (ρ, T₀, γ, M, c*), le rôle critique de n < 1 et l’équilibre par col sonique.',
+        summaryIt:
+          'Assegna propellenti per segmento, comprendi le costanti termochimiche (ρ, T₀, γ, M, c*), perché n < 1 è vitale in Saint-Robert e l’equilibrio in gola sonica.',
+        bulletPointsEs: [
+          'Asignación independiente de propulsante por bloque (estándar o de tu biblioteca local).',
+          'Propiedades termoquímicas: densidad ρ, temperatura adiabática T₀, razón γ, masa molar M y c*.',
+          'Ley de Vieille / Saint-Robert por tramos de presión y criterio de estabilidad balística (n < 1).',
+          'Balance instantáneo entre gas generado por Ab y descarga sónica por At (Saint-Venant).'
+        ],
+        bulletPointsEn: [
+          'Per-grain propellant assignment (built-in standard or custom library formulas).',
+          'Thermochemical constants: density ρ, flame temperature T₀, gamma γ, molar mass M, and c*.',
+          'Piecewise Saint-Robert / Vieille burn law and ballistic stability rule (n < 1).',
+          'Instantaneous balance between mass generated across Ab and sonic discharge through At.'
+        ],
+        bulletPointsFr: [
+          'Affectation du propergol par bloc (standard ou personnalisé depuis votre bibliothèque).',
+          'Propriétés thermochimiques : densité ρ, température T₀, gamma γ, masse molaire M et c*.',
+          'Loi de Saint-Robert par intervalles de pression et critère de stabilité (n < 1).',
+          'Équilibre instantané entre gaz générés sur Ab et débit sonique au col At.'
+        ],
+        bulletPointsIt: [
+          'Assegnazione indipendente per grano (propellenti standard o personalizzati in libreria).',
+          'Proprietà termochimiche: densità ρ, temperatura T₀, gamma γ, massa molare M e c*.',
+          'Legge di Saint-Robert a tratti di pressione e criterio di stabilità balistica (n < 1).',
+          'Bilancio istantaneo tra gas generato su Ab e scarico sonico attraverso la gola At.'
+        ],
+        presetLabelEs: 'Cargar APCP K-Class',
+        presetLabelEn: 'Load APCP K-Class',
+        presetLabelFr: 'Charger APCP K-Class',
+        presetLabelIt: 'Carica APCP K-Class',
+        onApplyPreset: () => onApplyPresetMotor('apcp_l')
+      },
+      {
+        id: 'create_custom_propellant',
+        tourSequenceId: 'tour_create_propellant',
+        category: 'propellant',
+        difficulty: 'intermediate',
+        estimatedMinutes: 4,
+        icon: Beaker,
+        titleEs: 'Gestor de Propulsantes Personalizados (Tabla r(P) por Tramos)',
+        titleEn: 'Custom Propellant Manager (Piecewise r(P) Table)',
+        titleFr: 'Gestionnaire de Propergols Personnalisés (Table r(P))',
+        titleIt: 'Gestore Propellenti Personalizzati (Tabella r(P) a Tratti)',
+        summaryEs:
+          'Localiza el botón "Química de Propelente" en Inputs, explora o duplica fórmulas existentes, define ρ, T₀, γ, M, añade intervalos [Pmin–Pmax] con (a, n), revisa la curva r(P) en vivo y guárdalos en el navegador y en archivos .hrms.',
+        summaryEn:
+          'Locate "Propellant Chemistry" on Inputs, inspect or clone existing formulas, set ρ, T₀, γ, M, define piecewise [Pmin–Pmax] intervals with (a, n), inspect the live r(P) chart, and persist locally or inside .hrms files.',
+        summaryFr:
+          'Trouvez "Chimie Propergol" dans Inputs, clonez ou créez une formule, définissez ρ, T₀, γ, M, saisissez les intervalles [Pmin–Pmax], visualisez r(P) et sauvegardez localement ou en .hrms.',
+        summaryIt:
+          'Trova "Chimica Propellente" in Inputs, ispeziona o clona formule, imposta ρ, T₀, γ, M, definisci intervalli [Pmin–Pmax], controlla la curva r(P) e salva in locale o nei file .hrms.',
+        bulletPointsEs: [
+          'Acceso directo desde la cabecera Química de Propelente o desde cada bloque de grano.',
+          'Creación desde cero o duplicación de formulaciones KNSU, KNDX, APCP y más.',
+          'Tabla multipunto [Pmin–Pmax] con coeficientes a y exponentes n y gráfico r(P) en tiempo real.',
+          'Guardado persistente en el navegador y exportación automática dentro del paquete .hrms.'
+        ],
+        bulletPointsEn: [
+          'Direct launch from the Propellant Chemistry header button or individual grain cards.',
+          'Create from scratch or clone built-in KNSU, KNDX, APCP, and composite formulas.',
+          'Multi-interval [Pmin–Pmax] table for (a, n) paired with a real-time r(P) plot.',
+          'Persistent browser storage plus automatic bundling inside exported .hrms projects.'
+        ],
+        bulletPointsFr: [
+          'Accès direct depuis l’en-tête Chimie Propergol ou chaque carte de grain.',
+          'Création complète ou duplication des formules KNSU, KNDX, APCP.',
+          'Tableau multi-intervalles [Pmin–Pmax] (a, n) avec courbe r(P) en temps réel.',
+          'Sauvegarde persistante dans le navigateur et inclusion automatique dans les fichiers .hrms.'
+        ],
+        bulletPointsIt: [
+          'Accesso diretto dall’intestazione Chimica Propellente o dalle schede dei grani.',
+          'Creazione da zero o clonazione di formule KNSU, KNDX ed APCP.',
+          'Tabella multi-intervallo [Pmin–Pmax] (a, n) con grafico r(P) dal vivo.',
+          'Salvataggio persistente nel browser e inclusione automatica nei progetti .hrms.'
+        ]
+      },
+      {
+        id: 'results_interpretation',
+        tourSequenceId: 'tour_results',
+        category: 'results',
+        difficulty: 'basic',
+        estimatedMinutes: 4,
+        requiresResults: true,
+        icon: LineChart,
+        titleEs: 'Resultados Balísticos: Padm, P(t) y Empuje TTI vs Nakka',
+        titleEn: 'Ballistic Results: Padm, P(t) & TTI vs Nakka Thrust',
+        titleFr: 'Résultats Balistiques : Padm, P(t) & Poussée TTI vs Nakka',
+        titleIt: 'Risultati Balistici: Padm, P(t) e Spinta TTI vs Nakka',
+        summaryEs:
+          'Interpreta la alerta de seguridad frente a Padm gobernante, las 10 métricas de rendimiento (It, Isp, Pmax, Fmax, clase Tripoli/NAR) y la diferencia física entre Empuje Nakka y Teoría de Toberas Ideales (TTI). Requiere pulsar SIMULAR antes.',
+        summaryEn:
+          'Read the governing Padm safety banner, all 10 ballistic metric cards (It, Isp, Pmax, Fmax, Tripoli/NAR class), and the difference between Nakka Thrust and Ideal Nozzle Theory (TTI). Requires clicking SIMULATE first.',
+        summaryFr:
+          'Analysez la bannière de sécurité Padm, les 10 cartes de métriques (It, Isp, Pmax, Fmax, classe) et la différence entre poussée Nakka et Théorie des Tuyères Idéales (TTI). Nécessite SIMULER d’abord.',
+        summaryIt:
+          'Interpreta il banner di sicurezza Padm, le 10 schede metriche (It, Isp, Pmax, Fmax, classe) e la differenza tra spinta Nakka e Teoria Ugelli Ideali (TTI). Richiede prima SIMULA.',
+        bulletPointsEs: [
+          'Banner Padm: compara Pmax con el límite más restrictivo entre pared Lamé y tornillos radiales.',
+          '10 tarjetas resumen: Pmax, Pmedia, Fmax, Fmedia, It, Clase, Isp, tiempo de quemado/acción y masa.',
+          'Gráfica P(t) con línea de seguridad y clasificación instantánea de sobrepresión.',
+          'Gráfica F(t): alterna o superpone modelo Nakka y Teoría de Toberas Ideales (TTI).'
+        ],
+        bulletPointsEn: [
+          'Padm safety banner: compares Pmax against the stricter limit between Lamé wall and radial bolts.',
+          '10 summary cards: Pmax, Pavg, Fmax, Favg, Total Impulse, Motor Class, Isp, burn/action times & mass.',
+          'Chamber pressure P(t) plot with structural limit overlay and safety assessment.',
+          'Thrust F(t) plot comparing Nakka formulation against Ideal Nozzle Theory (TTI).'
+        ],
+        bulletPointsFr: [
+          'Bannière Padm : compare Pmax à la limite la plus stricte entre paroi Lamé et boulons radiaux.',
+          '10 cartes clés : Pmax, Pmoy, Fmax, Fmoy, Impulsion Totale, Classe, Isp, temps et masse.',
+          'Courbe de pression P(t) avec seuil structural admissible et diagnostic.',
+          'Courbe de poussée F(t) comparant Nakka et la Théorie des Tuyères Idéales (TTI).'
+        ],
+        bulletPointsIt: [
+          'Banner Padm: confronta Pmax col limite più severo tra parete Lamé e bulloni radiali.',
+          '10 schede metriche: Pmax, Pmedia, Fmax, Fmedia, Impulso Totale, Classe, Isp, tempi e massa.',
+          'Grafico pressione P(t) con soglia strutturale ammissibile e valutazione sicurezza.',
+          'Grafico spinta F(t) a confronto tra modello Nakka e Teoria degli Ugelli Ideali (TTI).'
+        ]
+      },
+      {
+        id: 'detailed_analysis_guide',
+        tourSequenceId: 'tour_analysis',
+        category: 'results',
+        difficulty: 'intermediate',
+        estimatedMinutes: 4,
+        requiresResults: true,
+        icon: Activity,
+        titleEs: 'Análisis Detallado: Áreas, Kn, Tasa r(t) y Flujos M*',
+        titleEn: 'Detailed Analysis: Burn Areas, Kn, Burn Rate & Mass Flux',
+        titleFr: 'Analyse Détaillée : Surfaces, Kn, Vitesse r(t) & Débits M*',
+        titleIt: 'Analisi Dettagliata: Aree, Kn, Velocità r(t) e Flussi M*',
+        summaryEs:
+          'Explora las 4 sub-pestañas de balística interna dentro de Detailed Analysis: evolución de áreas por grano, ratio de Klemmung Kn, tasa de quemado base vs erosiva y flujos másicos/Mach en el puerto. Requiere pulsar SIMULAR antes.',
+        summaryEn:
+          'Explore all 4 internal ballistics sub-tabs in Detailed Analysis: per-grain burn area decomposition, Kn Klemmung ratio, base vs erosive burn rate, and port mass flux/Mach numbers. Requires SIMULATE first.',
+        summaryFr:
+          'Explorez les 4 sous-onglets de balistique interne : surfaces par bloc, ratio Kn, vitesse de combustion de base vs érosive et flux massiques/Mach. Nécessite SIMULER d’abord.',
+        summaryIt:
+          'Esplora le 4 sotto-schede di balistica interna: scomposizione aree per grano, rapporto Kn, velocità di combustione base vs erosiva e flussi massici/Mach. Richiede SIMULA prima.',
+        bulletPointsEs: [
+          'Sub-pestaña Áreas de Quemado: contribución individual de cada grano y progresividad/regresividad.',
+          'Sub-pestaña Ratio Kn: relación Ab / At instantánea para evitar apagados o picos peligrosos.',
+          'Sub-pestaña Tasa de Quemado: separación entre r₀(P) Saint-Robert y aumento erosivo Lenoir-Robillard.',
+          'Sub-pestaña Flujos Másicos + Teoría: G, velocidad de gases, Mach en puerto y fórmulas matemáticas.'
+        ],
+        bulletPointsEn: [
+          'Burn Areas sub-tab: individual grain contribution and progressive/neutral/regressive behavior.',
+          'Kn Ratio sub-tab: instantaneous Ab / At profile to prevent chuffing or overpressure.',
+          'Burn Rate sub-tab: breakdown of base Saint-Robert r₀(P) vs erosive augmentation.',
+          'Mass Flow sub-tab + Theory modal: mass flux G, port Mach number, and governing equations.'
+        ],
+        bulletPointsFr: [
+          'Sous-onglet Surfaces : contribution par bloc et profil progressif/neutre/régressif.',
+          'Sous-onglet Ratio Kn : profil Ab / At instantané pour prévenir extinctions ou surpressions.',
+          'Sous-onglet Vitesse r(t) : part de Saint-Robert r₀(P) et contribution érosive.',
+          'Sous-onglet Débits + Théorie : flux massique G, Mach interne et équations du modèle.'
+        ],
+        bulletPointsIt: [
+          'Sotto-scheda Aree: contributo per grano e andamento progressivo/neutro/regressivo.',
+          'Sotto-scheda Rapporto Kn: andamento Ab / At per prevenire spegnimenti o sovrapressioni.',
+          'Sotto-scheda Velocità r(t): separazione tra Saint-Robert r₀(P) e incremento erosivo.',
+          'Sotto-scheda Flussi + Teoria: flusso massico G, Mach interno ed equazioni del modello.'
+        ]
+      },
+      {
+        id: 'mission_control_flight',
+        tourSequenceId: 'tour_mission_control',
+        category: 'flight',
+        difficulty: 'intermediate',
+        estimatedMinutes: 5,
+        icon: Rocket,
+        titleEs: 'Mission Control: Riel, Viento, Recuperación, Mach vs Cd y Banco',
+        titleEn: 'Mission Control: Rail, Wind, Recovery, Mach-Cd & Test Stand',
+        titleFr: 'Mission Control : Rampe, Vent, Récupération, Mach-Cd & Banc',
+        titleIt: 'Mission Control: Rampa, Vento, Recupero, Mach-Cd e Banco',
+        summaryEs:
+          'Simula el vuelo completo: masa, altitud, longitud de riel, viento, ángulo de lanzamiento, modo de recuperación (solo ascenso, paracaídas principal o drogue + principal), polar Mach vs Cd y comparación con ensayos estáticos.',
+        summaryEn:
+          'Simulate full trajectory: rocket mass, site elevation, rail length, wind, launch tilt, recovery modes (ascent only, main only, drogue + main), Mach vs Cd drag polar, and static test-stand data import.',
+        summaryFr:
+          'Simulez le vol complet : masse, altitude, longueur de rampe, vent, inclinaison, récupération (montée seule, parachute principal, drogue + principal), polaire Mach-Cd et import de banc statique.',
+        summaryIt:
+          'Simula il volo completo: massa, quota di lancio, lunghezza rampa, vento, inclinazione, recupero (solo salita, principale, drogue + principale), polare Mach-Cd e importazione da banco prova.',
+        bulletPointsEs: [
+          'Parámetros de cohete y riel: masa en seco, diámetro, elevación, longitud de riel, viento e inclinación (0–90°).',
+          'Recuperación: Solo Ascenso, Paracaídas Principal o Drogue + Principal con cotas y coeficientes Cd.',
+          'Aerodinámica Mach vs Cd: modelo integrado, plantilla CSV descargable o curva personalizada.',
+          'Banco de pruebas estático: importación CSV/XLSX con unidades, puesta a cero (Zero) manual y comparativa.'
+        ],
+        bulletPointsEn: [
+          'Vehicle & launch rail: dry mass, diameter, elevation, rail length, wind speed, and launch tilt (0–90°).',
+          'Recovery system: Ascent Only, Main Only, or Drogue + Main with deployment altitudes and Cd.',
+          'Aerodynamics Mach vs Cd: built-in polar, CSV template download, or custom pasted table.',
+          'Static test stand: CSV/XLSX import with unit mapping, manual zero tare, and overlay comparison.'
+        ],
+        bulletPointsFr: [
+          'Véhicule et rampe : masse à sec, diamètre, altitude, longueur de rampe, vent et angle de tir (0–90°).',
+          'Récupération : Montée seule, Principal seul ou Drogue + Principal avec altitudes et Cd.',
+          'Aérodynamique Mach vs Cd : polaire standard, modèle CSV téléchargeable ou table personnalisée.',
+          'Banc d’essai statique : import CSV/XLSX avec unités, mise à zéro manuelle et comparaison.'
+        ],
+        bulletPointsIt: [
+          'Veicolo e rampa: massa a secco, diametro, quota, lunghezza rampa, vento e angolo di lancio (0–90°).',
+          'Recupero: Solo Salita, Solo Principale o Drogue + Principale con quote di apertura e Cd.',
+          'Aerodinamica Mach vs Cd: polare integrata, modello CSV scaricabile o tabella personalizzata.',
+          'Banco prova statico: import CSV/XLSX con unità, azzeramento manuale (Zero) e confronto.'
+        ]
+      },
+      {
+        id: 'smart_search_optimization',
+        tourSequenceId: 'tour_smart_search',
+        category: 'optimizer',
+        difficulty: 'advanced',
+        estimatedMinutes: 5,
+        icon: Cpu,
+        titleEs: 'Smart Search: Optimización Inversa (LHS + DE/rand/1/bin)',
+        titleEn: 'Smart Search: Inverse Optimization (LHS + DE/rand/1/bin)',
+        titleFr: 'Smart Search : Optimisation Inverse (LHS + DE/rand/1/bin)',
+        titleIt: 'Smart Search: Ottimizzazione Inversa (LHS + DE/rand/1/bin)',
+        summaryEs:
+          'Define la meta de diseño en el Paso 0, fija límites mecánicos y presión segura (Fase 1), acota geometrías de grano (Fase 2), ajusta algoritmo LHS + Differential Evolution (Fase 3) y aplica la solución ganadora en 1 clic.',
+        summaryEn:
+          'Choose your motor goal in Step 0, enforce casing and safe pressure bounds (Phase 1), constrain grain geometries (Phase 2), tune LHS + Differential Evolution (Phase 3), and apply the winner in 1 click.',
+        summaryFr:
+          'Définissez l’objectif (Étape 0), les limites mécaniques (Phase 1), les géométries de grains (Phase 2), réglez LHS + Differential Evolution (Phase 3) et appliquez le meilleur moteur en 1 clic.',
+        summaryIt:
+          'Imposta l’obiettivo (Passo 0), i vincoli di camera e pressione (Fase 1), le geometrie dei grani (Fase 2), regola LHS + Differential Evolution (Fase 3) e applica la soluzione migliore in 1 clic.',
+        bulletPointsEs: [
+          'Paso 0 y Fase 1: objetivo (máximo It, despegue rápido o impulso objetivo) y límites de cámara/tobera/Pmax.',
+          'Fase 2: tipo de grano, rango de segmentos N y bloqueo o libertad por variable geométrica.',
+          'Fase 3: selector de estrategia (objetivo + penalización por presión/tobera) y presupuesto de evaluaciones.',
+          'Ejecución en vivo con cancelación segura, ranking multi-candidato y botón Aplicar al Simulador.'
+        ],
+        bulletPointsEn: [
+          'Step 0 & Phase 1: mission goal (max It, fast liftoff, or target impulse) and casing/nozzle/Pmax limits.',
+          'Phase 2: grain shape, segment count range N, and locked vs free geometric bounds.',
+          'Phase 3: objective formulation, Deb constraint penalties, and evaluation budget.',
+          'Live progress with cancel button, top candidate ranking, and 1-click Apply to Simulator.'
+        ],
+        bulletPointsFr: [
+          'Étape 0 & Phase 1 : objectif (It max, décollage rapide ou cible) et limites chambre/tuyère/Pmax.',
+          'Phase 2 : forme du grain, plage de blocs N et variables géométriques figées ou libres.',
+          'Phase 3 : formulation de pénalité (Deb) et budget d’évaluations LHS + DE.',
+          'Exécution en direct avec annulation, classement des candidats et application en 1 clic.'
+        ],
+        bulletPointsIt: [
+          'Passo 0 e Fase 1: obiettivo (It max, spinta iniziale o target) e limiti di camera/ugello/Pmax.',
+          'Fase 2: forma del grano, intervallo blocchi N e variabili geometriche bloccate o libere.',
+          'Fase 3: formulazione dei vincoli (Deb) e budget di valutazioni LHS + DE.',
+          'Esecuzione dal vivo con annullamento, classifica candidati e applicazione in 1 clic.'
+        ]
+      },
+      {
+        id: 'cfd_and_3d_flight',
+        tourSequenceId: 'tour_cfd',
+        category: 'results',
+        difficulty: 'intermediate',
+        estimatedMinutes: 3,
+        requiresResults: true,
+        icon: Wind,
+        titleEs: 'Animaciones: Tobera CFD 2D, Burnback y Vuelo 3D',
+        titleEn: 'Animations: 2D Nozzle CFD, Burnback & 3D Flight Viewer',
+        titleFr: 'Animations : Tuyère CFD 2D, Burnback & Vol 3D',
+        titleIt: 'Animazioni: Ugello CFD 2D, Burnback e Volo 3D',
+        summaryEs:
+          'Visualiza de forma sincronizada el flujo supersónico en la tobera (Mach, presión, temperatura, diamantes de choque), el retroceso geométrico del grano y la trayectoria 3D del cohete. Requiere pulsar SIMULAR antes.',
+        summaryEn:
+          'Synchronized visualization of supersonic nozzle flow (Mach, pressure, temperature, shock diamonds), propellant grain burnback regression, and 3D rocket flight trajectory. Requires SIMULATE first.',
+        summaryFr:
+          'Visualisation synchronisée de l’écoulement supersonique en tuyère (Mach, pression, température, ondes de choc), de la régression du grain et du vol 3D. Nécessite SIMULER d’abord.',
+        summaryIt:
+          'Visualizzazione sincronizzata del flusso supersonico nell’ugello (Mach, pressione, temperatura, diamanti d’urto), regressione del grano e traiettoria 3D. Richiede SIMULA prima.',
+        bulletPointsEs: [
+          'Reproductor unificado Play/Pause, línea de tiempo y control de velocidad para recorrer toda la combustión.',
+          'Tobera CFD 2D: mapas de campo (Mach, P, T), régimen sobreexpandido/adaptado/subexpandido y pluma.',
+          'Burnback sincrónico: desgaste progresivo de la sección transversal del grano en el mismo instante t.',
+          'Visor 3D de Vuelo: vista interactiva del lanzamiento siguiendo la trayectoria calculada en Mission Control.'
+        ],
+        bulletPointsEn: [
+          'Unified Play/Pause scrubber and speed controls across the full motor action time.',
+          '2D Nozzle CFD: field colormaps (Mach, P, T), over/adapted/under-expanded regimes, and exhaust plume.',
+          'Synchronized burnback: progressive propellant cross-section regression at matching time t.',
+          '3D Flight Viewer: interactive 3D trajectory playback driven by Mission Control flight physics.'
+        ],
+        bulletPointsFr: [
+          'Lecteur unifié Lecture/Pause, curseur temporel et vitesse de lecture sur toute la combustion.',
+          'Tuyère CFD 2D : champs (Mach, P, T), régimes sur/sous-détendus et panache de sortie.',
+          'Burnback synchronisé : régression progressive de la coupe du grain à l’instant t.',
+          'Visionneuse Vol 3D : lecture 3D interactive de la trajectoire calculée dans Mission Control.'
+        ],
+        bulletPointsIt: [
+          'Player unificato Play/Pausa, timeline e velocità lungo tutto il tempo di azione.',
+          'Ugello CFD 2D: mappe di campo (Mach, P, T), regime sovra/sotto-espanso e pennacchio.',
+          'Burnback sincronizzato: regressione progressiva della sezione del grano all’istante t.',
+          'Visore Volo 3D: riproduzione 3D interattiva della traiettoria calcolata in Mission Control.'
+        ]
+      },
+      {
+        id: 'save_library_hrms',
+        tourSequenceId: 'tour_save',
+        category: 'export',
+        difficulty: 'basic',
+        estimatedMinutes: 4,
+        icon: FolderOpen,
+        titleEs: 'Guardar, Biblioteca Organizada y Paquetes .hrms',
+        titleEn: 'Save, Organized Library & .hrms Project Packages',
+        titleFr: 'Sauvegarde, Bibliothèque & Fichiers .hrms',
+        titleIt: 'Salvataggio, Libreria Organizzata e File .hrms',
+        summaryEs:
+          'Guarda proyectos desde la cabecera con carpetas y detector de sobrescritura, importa/exporta archivos .hrms en 1 clic (incluyendo propulsantes personalizados) y gestiona tu Biblioteca desde la barra lateral.',
+        summaryEn:
+          'Save projects from the header with folders and overwrite detection, import/export .hrms packages in 1 click (including custom propellants), and organize your Library from the sidebar.',
+        summaryFr:
+          'Enregistrez depuis l’en-tête avec dossiers et détection d’écrasement, importez/exportez des paquets .hrms (propergols inclus) et gérez la Bibliothèque depuis la barre latérale.',
+        summaryIt:
+          'Salva dall’intestazione con cartelle e rilevamento sovrascritture, importa/esporta pacchetti .hrms in 1 clic (inclusi propellenti personalizzati) e gestisci la Libreria dalla barra laterale.',
+        bulletPointsEs: [
+          'Botón Save en cabecera: selector visual de carpetas existentes, vista previa de métricas y aviso de sobrescritura.',
+          'Botón .hrms en cabecera: descarga portátil completa o importación directa a Simulate o Biblioteca.',
+          'Biblioteca en barra lateral (Settings): búsqueda, filtro por carpeta, mover de carpeta y borrar.',
+          'Reutilización directa: botón "Abrir en Simulate" o "Añadir a Study" desde cualquier simulación guardada.'
+        ],
+        bulletPointsEn: [
+          'Header Save button: visual folder picker, motor summary preview, and overwrite safeguard.',
+          'Header .hrms button: portable project export or direct import into Simulate or Library.',
+          'Sidebar Library (Settings): search bar, folder filter, move between folders, and delete.',
+          'Direct reuse: open any archived project in Simulate or send it straight into Study.'
+        ],
+        bulletPointsFr: [
+          'Bouton Save : sélecteur visuel de dossiers, aperçu des métriques et protection contre l’écrasement.',
+          'Bouton .hrms : export portable complet ou import direct dans Simulate ou la Bibliothèque.',
+          'Bibliothèque en barre latérale : recherche, filtre par dossier, déplacement et suppression.',
+          'Réutilisation directe : rouvrir dans Simulate ou envoyer vers Study en 1 clic.'
+        ],
+        bulletPointsIt: [
+          'Pulsante Save: selettore visivo delle cartelle, anteprima metriche e protezione da sovrascrittura.',
+          'Pulsante .hrms: esportazione portatile completa o importazione diretta in Simulate o Libreria.',
+          'Libreria nella barra laterale: ricerca, filtro per cartella, spostamento ed eliminazione.',
+          'Riutilizzo diretto: apri qualsiasi progetto in Simulate o invialo subito in Study.'
+        ]
+      },
+      {
+        id: 'data_export_and_library',
+        tourSequenceId: 'tour_export',
+        category: 'export',
+        difficulty: 'basic',
+        estimatedMinutes: 3,
+        requiresResults: true,
+        icon: Download,
+        titleEs: 'Exportación Numérica: CSV, Excel (Filas/Columnas) y PDF Técnico',
+        titleEn: 'Data Export: CSV, Excel (Rows/Columns) & Technical PDF',
+        titleFr: 'Exportation : CSV, Excel (Lignes/Colonnes) & PDF Technique',
+        titleIt: 'Esportazione: CSV, Excel (Righe/Colonne) e PDF Tecnico',
+        summaryEs:
+          'Exporta series temporales y métricas de rendimiento en CSV, hoja Excel (.xlsx) configurable por columnas verticales u filas horizontales, o genera un Informe Técnico PDF con gráficas y vuelo opcional. Requiere pulsar SIMULAR antes.',
+        summaryEn:
+          'Export ballistic time series and performance metrics as CSV, Excel (.xlsx) in Vertical Columns or Horizontal Rows orientation, or generate a full Technical PDF Report. Requires SIMULATE first.',
+        summaryFr:
+          'Exportez séries temporelles et métriques en CSV, Excel (.xlsx) orientable en Colonnes ou Lignes, ou générez un Rapport Technique PDF complet. Nécessite SIMULER d’abord.',
+        summaryIt:
+          'Esporta serie temporali e metriche in CSV, Excel (.xlsx) in orientamento Colonne o Righe, oppure genera un Report Tecnico PDF completo. Richiede SIMULA prima.',
+        bulletPointsEs: [
+          'CSV con todas las series temporales del motor (t, P, F_Nakka, F_TTI, Kn, flujo másico).',
+          'Excel (.xlsx) con dos pestañas y selector de orientación: Vertical por Columnas u Horizontal por Filas.',
+          'Informe PDF Técnico configurable: incluye geometría, estructura, resultados y sección de vuelo.',
+          'Compatibilidad directa con MATLAB, Python, Excel y hojas de análisis en banco.'
+        ],
+        bulletPointsEn: [
+          'CSV export containing full time-series arrays (t, P, F_Nakka, F_TTI, Kn, mass flow).',
+          'Multi-sheet Excel (.xlsx) with Vertical Columns or Horizontal Rows layout selector.',
+          'Configurable Technical PDF Report covering geometry, casing safety, curves, and optional flight.',
+          'Ready for MATLAB, Python, Excel, and static test-stand post-processing.'
+        ],
+        bulletPointsFr: [
+          'Export CSV contenant toutes les séries temporelles (t, P, F_Nakka, F_TTI, Kn, débit massique).',
+          'Excel (.xlsx) multi-feuilles avec choix d’orientation Colonnes Verticales ou Lignes Horizontales.',
+          'Rapport Technique PDF configurable : géométrie, structure, courbes et section vol optionnelle.',
+          'Compatible directement avec MATLAB, Python, Excel et vos outils d’analyse.'
+        ],
+        bulletPointsIt: [
+          'Esportazione CSV con tutte le serie temporali (t, P, F_Nakka, F_TTI, Kn, flusso massico).',
+          'Excel (.xlsx) multi-foglio con scelta orientamento Colonne Verticali o Righe Orizzontali.',
+          'Report Tecnico PDF configurabile con geometria, sicurezza camera, curve e volo opzionale.',
+          'Compatibile direttamente con MATLAB, Python, Excel e fogli di post-analisi.'
+        ]
+      },
+      {
+        id: 'study_postprocess_guide',
+        tourSequenceId: 'tour_study',
+        category: 'postprocess',
+        difficulty: 'intermediate',
+        estimatedMinutes: 5,
+        icon: GitCompare,
+        titleEs: 'Post-Process → Study: Comparador Multi-Simulación y Banco',
+        titleEn: 'Post-Process → Study: Multi-Simulation & Bench Comparator',
+        titleFr: 'Post-Process → Study : Comparateur Multi-Simulations & Banc',
+        titleIt: 'Post-Process → Study: Confronto Multi-Simulazione e Banco',
+        summaryEs:
+          'Compara simultáneamente simulaciones activas, proyectos de Biblioteca, múltiples archivos .hrms y ensayos reales de banco (CSV/XLSX), con alineación Δt, t₀ automático, tara manual Y (Raw/Tare), referencia ★ y PDF comparativo.',
+        summaryEn:
+          'Compare active simulations, Library entries, multiple .hrms packages, and real static test-stand CSV/XLSX logs simultaneously, featuring Δt shift, t₀ auto-zero, manual Y tare (Raw/Tare), ★ reference, and comparative PDF.',
+        summaryFr:
+          'Comparez simulation active, Bibliothèque, plusieurs fichiers .hrms et essais au banc (CSV/XLSX) avec décalage Δt, t₀ auto, tare manuelle Y (Raw/Tare), référence ★ et PDF comparatif.',
+        summaryIt:
+          'Confronta simulazione attiva, Libreria, più file .hrms e test reali su banco (CSV/XLSX) con sfasamento Δt, t₀ automatico, tara manuale Y (Raw/Tare), riferimento ★ e PDF comparativo.',
+        bulletPointsEs: [
+          'Barra superior de Estudio: selector bar/MPa, modelo TTI/Nakka, guardar/cargar Estudio JSON y PDF comparativo.',
+          '4 fuentes de carga: Simulación Activa, Biblioteca local, subida múltiple de .hrms y ensayos de banco (CSV/XLSX).',
+          'Control por serie: estrella ★ de referencia, edición Δt, t₀ automático y botón manual Tara Y / Datos Crudos.',
+          'Gráficas superpuestas F(t), P(t) y tabla cuantitativa con diferencias porcentuales Δ% frente a la referencia.'
+        ],
+        bulletPointsEn: [
+          'Study toolbar: bar/MPa units, TTI/Nakka model toggle, Save/Load Study JSON, and comparative PDF export.',
+          '4 data sources: Active Simulation, Local Library, multi-file .hrms upload, and bench CSV/XLSX import.',
+          'Per-series alignment: ★ baseline star, editable Δt offset, t₀ auto-zero, and manual Tare Y / Raw Data toggle.',
+          'Overlaid F(t) & P(t) curves plus quantitative comparison table showing Δ% against the ★ reference.'
+        ],
+        bulletPointsFr: [
+          'Barre Study : unités bar/MPa, modèle TTI/Nakka, sauvegarde/chargement JSON et PDF comparatif.',
+          '4 sources : Simulation active, Bibliothèque locale, import multi-.hrms et essais banc CSV/XLSX.',
+          'Alignement par série : référence ★, décalage Δt éditable, t₀ auto et bascule manuelle Tare Y / Brut.',
+          'Courbes superposées F(t), P(t) et tableau quantitatif avec écarts Δ% par rapport à la référence ★.'
+        ],
+        bulletPointsIt: [
+          'Barra Study: unità bar/MPa, modello TTI/Nakka, salva/carica Studio JSON e PDF comparativo.',
+          '4 fonti dati: Simulazione attiva, Libreria locale, caricamento multi-.hrms e dati banco CSV/XLSX.',
+          'Allineamento per serie: stella ★ di riferimento, offset Δt, t₀ auto e pulsante manuale Tara Y / Dati Grezzi.',
+          'Grafici sovrapposti F(t), P(t) e tabella quantitativa con scarti Δ% rispetto al riferimento ★.'
+        ]
+      }
+    ],
+    [onApplyPresetMotor]
+  );
+
+  const getTitle = (g: GuideDefinition) => loc(g.titleEs, g.titleEn, g.titleFr, g.titleIt);
+  const getSummary = (g: GuideDefinition) => loc(g.summaryEs, g.summaryEn, g.summaryFr, g.summaryIt);
+  const getBullets = (g: GuideDefinition) => loc(g.bulletPointsEs, g.bulletPointsEn, g.bulletPointsFr, g.bulletPointsIt);
+  const getPresetLabel = (g: GuideDefinition) =>
+    loc(g.presetLabelEs, g.presetLabelEn, g.presetLabelFr, g.presetLabelIt);
+  const getDifficultyLabel = (d: GuideDefinition['difficulty']) => {
+    if (d === 'basic') return loc('Básico', 'Basic', 'Basique', 'Base');
+    if (d === 'intermediate') return loc('Intermedio', 'Intermediate', 'Intermédiaire', 'Intermedio');
+    return loc('Avanzado', 'Advanced', 'Avancé', 'Avanzato');
+  };
 
   const filteredGuides = useMemo(() => {
-    return guides.filter(guide => {
+    return guides.filter((guide) => {
       const matchesCategory = selectedCategory === 'all' || guide.category === selectedCategory;
       if (!matchesCategory) return false;
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
-      const title = (isSpanish ? guide.titleEs : guide.titleEn).toLowerCase();
-      const summary = (isSpanish ? guide.summaryEs : guide.summaryEn).toLowerCase();
-      const bullets = (isSpanish ? guide.bulletPointsEs : guide.bulletPointsEn).join(' ').toLowerCase();
+      const title = loc(guide.titleEs, guide.titleEn, guide.titleFr, guide.titleIt).toLowerCase();
+      const summary = loc(guide.summaryEs, guide.summaryEn, guide.summaryFr, guide.summaryIt).toLowerCase();
+      const bullets = loc(guide.bulletPointsEs, guide.bulletPointsEn, guide.bulletPointsFr, guide.bulletPointsIt)
+        .join(' ')
+        .toLowerCase();
 
       return title.includes(q) || summary.includes(q) || bullets.includes(q);
     });
-  }, [guides, selectedCategory, searchQuery, isSpanish]);
+  }, [guides, selectedCategory, searchQuery, lang]);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState(false);
@@ -463,60 +768,124 @@ export function GuideBookModal({
 
   const handleUnmarkSingle = (tourId: string) => {
     unmarkSingleTour(tourId);
-    setCompletedMap(prev => {
+    setCompletedMap((prev) => {
       const next = { ...prev };
       delete next[tourId];
       return next;
     });
   };
 
+  const categories = [
+    { id: 'all', label: loc('Todas', 'All', 'Toutes', 'Tutte') },
+    { id: 'beginner', label: loc('Tour Completo', 'Full Tour', 'Visite Complète', 'Tour Completo') },
+    { id: 'geometry', label: loc('Granos', 'Grains', 'Grains', 'Grani') },
+    { id: 'nozzle', label: loc('Cámara & Tobera', 'Chamber & Nozzle', 'Chambre & Tuyère', 'Camera & Ugello') },
+    { id: 'propellant', label: loc('Propelentes', 'Propellants', 'Propergols', 'Propellenti') },
+    { id: 'results', label: loc('Resultados / CFD', 'Results / CFD', 'Résultats / CFD', 'Risultati / CFD') },
+    { id: 'flight', label: 'Mission Control' },
+    { id: 'optimizer', label: 'Smart Search' },
+    { id: 'export', label: loc('Guardar & Exportar', 'Save & Export', 'Sauvegarde & Export', 'Salva & Esporta') },
+    { id: 'postprocess', label: 'Post-Process / Study' }
+  ];
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
-      <div 
-        className="w-full max-w-5xl rounded-2xl border border-border bg-card text-foreground shadow-2xl flex flex-col max-h-[92vh] overflow-hidden transition-all"
-      >
+      <div className="w-full max-w-5xl rounded-2xl border border-border bg-card text-foreground shadow-2xl flex flex-col max-h-[92vh] overflow-hidden transition-all">
         {/* Top Header */}
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-card-header text-card-header-foreground shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-xs">
+        <div className="px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-3 bg-card-header text-card-header-foreground shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-xs shrink-0">
               <BookOpen className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg font-bold tracking-tight text-foreground">
-                  {isSpanish ? 'Libro de Guías del Simulador' : isFrench ? 'Livre des Guides du Simulateur' : isItalian ? 'Libro delle Guide del Simulatore' : 'Simulator Guide Hub'}
+                  {loc(
+                    'Libro de Guías de HERMES',
+                    'HERMES Simulator Guide Hub',
+                    'Livre des Guides HERMES',
+                    'Libro delle Guide HERMES'
+                  )}
                 </h2>
                 <span className="text-[11px] font-mono font-semibold text-primary">
-                  · {isSpanish ? '10 Tours Interactivos' : '10 Interactive Tours'}
+                  · {guides.length}{' '}
+                  {loc(
+                    'Tours Interactivos',
+                    'Interactive Tours',
+                    'Tours Interactifs',
+                    'Tour Interattivi'
+                  )}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                {isSpanish 
-                  ? 'Selecciona una guía temática para activar el foco visual y las flechas paso a paso sobre la interfaz.' 
-                  : 'Select any themed guide to launch step-by-step interactive spotlights and directional arrows.'}
+                {loc(
+                  'Selecciona el idioma y elige cualquier guía temática para seguir el recorrido guiado sobre la interfaz real.',
+                  'Choose your language and pick any themed guide to launch step-by-step spotlights directly on the live UI.',
+                  'Choisissez votre langue et lancez n’importe quel guide thématique directement sur l’interface.',
+                  'Seleziona la lingua e avvia qualsiasi guida tematica direttamente sull’interfaccia reale.'
+                )}
               </p>
             </div>
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
-          >
-            <X className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Guide Book & Tour Language Switcher */}
+            <div
+              className="flex items-center gap-1 rounded-lg border border-border bg-background/80 p-1"
+              title={loc(
+                'Idioma del Libro de Guías y Tours',
+                'Guide Book & Tour Language',
+                'Langue des Guides et Tours',
+                'Lingua delle Guide e dei Tour'
+              )}
+            >
+              <Globe className="w-3.5 h-3.5 text-muted-foreground ml-1.5 mr-0.5 shrink-0" />
+              {GUIDE_LANGUAGES.map((item) => {
+                const active = lang === item.code;
+                return (
+                  <button
+                    key={item.code}
+                    type="button"
+                    onClick={() => onChangeGuideLang(item.code)}
+                    title={item.name}
+                    className={`px-2 py-1 rounded-md text-[11px] font-mono font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      active
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/70'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+              aria-label={loc('Cerrar', 'Close', 'Fermer', 'Chiudi')}
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Search & Category Filter Bar */}
         <div className="p-4 border-b border-border bg-muted/10 flex flex-col sm:flex-row items-center gap-3 shrink-0">
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-72 shrink-0">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
             <Input
               type="text"
-              placeholder={isSpanish ? 'Buscar temas (grano, tobera, Kn, Saint-Robert)...' : 'Search topics (grain, nozzle, Kn, Saint-Robert)...'}
+              placeholder={loc(
+                'Buscar (grano, Padm, Kn, TTI, Study, .hrms)...',
+                'Search (grain, Padm, Kn, TTI, Study, .hrms)...',
+                'Rechercher (grain, Padm, Kn, TTI, Study, .hrms)...',
+                'Cerca (grano, Padm, Kn, TTI, Study, .hrms)...'
+              )}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-9 text-xs bg-background/80 border-border"
@@ -524,23 +893,13 @@ export function GuideBookModal({
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto w-full no-scrollbar pb-1 sm:pb-0">
-            {[
-              { id: 'all', label: isSpanish ? 'Todas' : 'All' },
-              { id: 'beginner', label: isSpanish ? 'Tour Completo' : 'Full Tour' },
-              { id: 'geometry', label: isSpanish ? 'Granos' : 'Grains' },
-              { id: 'nozzle', label: isSpanish ? 'Tobera & Cámara' : 'Nozzle & Chamber' },
-              { id: 'propellant', label: isSpanish ? 'Propelentes' : 'Propellants' },
-              { id: 'results', label: isSpanish ? 'Resultados' : 'Results' },
-              { id: 'export', label: isSpanish ? 'Exportación' : 'Export' },
-              { id: 'flight', label: 'Mission Control' },
-              { id: 'optimizer', label: 'Smart Search' },
-            ].map(cat => (
+            {categories.map((cat) => (
               <Button
                 key={cat.id}
                 size="sm"
                 variant={selectedCategory === cat.id ? 'default' : 'outline'}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`h-7 text-[11px] px-2.5 rounded-lg whitespace-nowrap transition-all ${
+                className={`h-7 text-[11px] px-2.5 rounded-lg whitespace-nowrap shrink-0 transition-all cursor-pointer ${
                   selectedCategory === cat.id
                     ? 'bg-primary hover:opacity-90 text-primary-foreground font-bold'
                     : 'bg-background hover:bg-muted text-muted-foreground'
@@ -557,15 +916,25 @@ export function GuideBookModal({
           {/* Quick Presets Banner */}
           <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <span className="p-1.5 rounded-lg bg-primary/15 text-primary border border-primary/25">
+              <span className="p-1.5 rounded-lg bg-primary/15 text-primary border border-primary/25 shrink-0">
                 <Wand2 className="w-4 h-4" />
               </span>
               <div>
                 <h4 className="text-xs font-bold text-foreground">
-                  {isSpanish ? 'Carga Rápida de Motores de Demostración' : 'Quick Demo Rocket Motor Presets'}
+                  {loc(
+                    'Carga Rápida de Motores de Demostración',
+                    'Quick Demo Rocket Motor Presets',
+                    'Chargement Rapide de Moteurs Démo',
+                    'Caricamento Rapido Motori Demo'
+                  )}
                 </h4>
                 <p className="text-[11px] text-muted-foreground">
-                  {isSpanish ? 'Inyecta al simulador configuraciones representativas y probadas para ver los resultados al instante:' : 'Inject representative, flight-tested motor configurations into the simulator to test right away:'}
+                  {loc(
+                    'Carga una configuración probada en Simulate para probar resultados, análisis detallado o Study al instante:',
+                    'Load a verified configuration in Simulate to test results, detailed analysis, or Study right away:',
+                    'Chargez une configuration éprouvée dans Simulate pour tester résultats, analyse ou Study aussitôt :',
+                    'Carica una configurazione verificata in Simulate per provare subito risultati, analisi o Study:'
+                  )}
                 </p>
               </div>
             </div>
@@ -578,9 +947,9 @@ export function GuideBookModal({
                   onApplyPresetMotor('bates_j');
                   onClose();
                 }}
-                className="h-7 text-[10px] font-bold px-2.5 bg-background border-primary/40 text-primary hover:bg-primary/10 cursor-pointer"
+                className="h-7 text-[10px] font-bold px-2.5 bg-background border-primary/40 text-primary hover:bg-primary/10 whitespace-nowrap shrink-0 cursor-pointer"
               >
-                {isSpanish ? 'BATES J-Class (54mm)' : 'BATES J-Class (54mm)'}
+                BATES J-Class (54mm)
               </Button>
               <Button
                 size="sm"
@@ -589,9 +958,9 @@ export function GuideBookModal({
                   onApplyPresetMotor('star_k');
                   onClose();
                 }}
-                className="h-7 text-[10px] font-bold px-2.5 bg-background border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 cursor-pointer"
+                className="h-7 text-[10px] font-bold px-2.5 bg-background border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 whitespace-nowrap shrink-0 cursor-pointer"
               >
-                {isSpanish ? 'Estrella Neutra K-Class' : 'Neutral Star K-Class'}
+                {loc('Estrella K-Class', 'Star K-Class', 'Étoile K-Class', 'Stella K-Class')}
               </Button>
               <Button
                 size="sm"
@@ -600,18 +969,34 @@ export function GuideBookModal({
                   onApplyPresetMotor('apcp_l');
                   onClose();
                 }}
-                className="h-7 text-[10px] font-bold px-2.5 bg-background border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 cursor-pointer"
+                className="h-7 text-[10px] font-bold px-2.5 bg-background border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 whitespace-nowrap shrink-0 cursor-pointer"
               >
-                {isSpanish ? 'APCP L-Class Militar' : 'APCP L-Class Military'}
+                APCP K/L-Class
               </Button>
             </div>
           </div>
+
+          {/* Prerequisite notice when no simulation results exist yet */}
+          {!hasResults && (
+            <div className="px-3.5 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>
+                {loc(
+                  'Aún no has ejecutado una simulación. Si inicias una guía marcada con "Requiere SIMULAR", el tour te llevará primero al botón SIMULAR sin lanzar cálculos automáticos.',
+                  'No simulation results yet. Starting any guide marked "Requires SIMULATE" will point you to the SIMULATE button first without running calculations automatically.',
+                  'Aucune simulation lancée pour l’instant. Les guides marqués « Nécessite SIMULER » vous guideront d’abord vers le bouton SIMULER.',
+                  'Nessuna simulazione ancora eseguita. Le guide contrassegnate « Richiede SIMULA » ti mostreranno prima il pulsante SIMULA.'
+                )}
+              </span>
+            </div>
+          )}
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredGuides.map((guide) => {
               const Icon = guide.icon;
               const completed = !!completedMap[guide.tourSequenceId];
+              const presetLabel = getPresetLabel(guide);
 
               return (
                 <div
@@ -619,26 +1004,37 @@ export function GuideBookModal({
                   className="rounded-xl border border-border bg-card hover:border-primary/45 p-4 flex flex-col justify-between transition-all hover:shadow-md relative group"
                 >
                   <div>
-                    {/* Card Header & Completion Badge */}
+                    {/* Card Header & Inline Metadata */}
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2.5">
                         <div className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/25 shrink-0">
                           <Icon className="w-4 h-4" />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-bold text-foreground leading-snug">
-                              {isSpanish ? guide.titleEs : guide.titleEn}
-                            </h3>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5 font-mono text-[10px] tabular-nums">
+                          <h3 className="text-sm font-bold text-foreground leading-snug">
+                            {getTitle(guide)}
+                          </h3>
+                          <div className="flex flex-wrap items-center gap-2 mt-0.5 font-mono text-[10px] tabular-nums">
                             <span className="font-semibold text-primary">
                               {guide.estimatedMinutes} min
                             </span>
                             <span className="text-muted-foreground">·</span>
                             <span className="text-muted-foreground">
-                              {guide.difficulty}
+                              {getDifficultyLabel(guide.difficulty)}
                             </span>
+                            {guide.requiresResults && !hasResults && (
+                              <>
+                                <span className="text-muted-foreground">·</span>
+                                <span className="font-semibold text-amber-600 dark:text-amber-400">
+                                  {loc(
+                                    'Requiere SIMULAR',
+                                    'Requires SIMULATE',
+                                    'Nécessite SIMULER',
+                                    'Richiede SIMULA'
+                                  )}
+                                </span>
+                              </>
+                            )}
                             {completed && (
                               <button
                                 type="button"
@@ -646,11 +1042,18 @@ export function GuideBookModal({
                                   e.stopPropagation();
                                   handleUnmarkSingle(guide.tourSequenceId);
                                 }}
-                                className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/35 hover:bg-red-500/15 hover:text-red-500 hover:border-red-500/40 flex items-center gap-1 transition-colors cursor-pointer"
-                                title={isSpanish ? 'Haz clic para desmarcar esta guía' : 'Click to unmark this guide'}
+                                className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/35 hover:bg-red-500/15 hover:text-red-500 hover:border-red-500/40 flex items-center gap-1 transition-colors cursor-pointer"
+                                title={loc(
+                                  'Haz clic para desmarcar esta guía',
+                                  'Click to unmark this guide',
+                                  'Cliquer pour décocher ce guide',
+                                  'Clicca per deselezionare questa guida'
+                                )}
                               >
                                 <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                                <span>{isSpanish ? 'Completada' : isFrench ? 'Complétée' : isItalian ? 'Completata' : 'Completed'}</span>
+                                <span>
+                                  {loc('Completada', 'Completed', 'Complétée', 'Completata')}
+                                </span>
                               </button>
                             )}
                           </div>
@@ -660,12 +1063,12 @@ export function GuideBookModal({
 
                     {/* Summary */}
                     <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                      {isSpanish ? guide.summaryEs : guide.summaryEn}
+                      {getSummary(guide)}
                     </p>
 
                     {/* Key Topics List */}
                     <ul className="mt-3 space-y-1 bg-muted/30 p-2.5 rounded-lg border border-border/40 text-[11px]">
-                      {(isSpanish ? guide.bulletPointsEs : guide.bulletPointsEn).map((pt, idx) => (
+                      {getBullets(guide).map((pt, idx) => (
                         <li key={idx} className="flex items-start gap-1.5 text-foreground/80">
                           <CheckCircle2 className="w-3 h-3 text-primary shrink-0 mt-0.5" />
                           <span className="leading-tight">{pt}</span>
@@ -676,15 +1079,15 @@ export function GuideBookModal({
 
                   {/* Actions footer */}
                   <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-2">
-                    {guide.onApplyPreset && guide.presetLabelEs ? (
+                    {guide.onApplyPreset && presetLabel ? (
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={guide.onApplyPreset}
-                        className="h-8 text-[11px] text-primary hover:bg-primary/10 px-2 font-medium cursor-pointer"
+                        className="h-8 text-[11px] text-primary hover:bg-primary/10 px-2 font-medium whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         <Wand2 className="w-3 h-3 mr-1" />
-                        {isSpanish ? guide.presetLabelEs : guide.presetLabelEn}
+                        {presetLabel}
                       </Button>
                     ) : (
                       <span />
@@ -694,18 +1097,23 @@ export function GuideBookModal({
                       size="sm"
                       onClick={() => {
                         onClose();
-                        onStartTour(guide.tourSequenceId);
+                        onStartTour(guide.tourSequenceId, lang);
                       }}
-                      className={`h-8 text-xs font-bold px-3 gap-1.5 shadow-sm transition-all cursor-pointer ${
+                      className={`h-8 text-xs font-bold px-3 gap-1.5 shadow-sm transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                         completed
                           ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                           : 'bg-primary hover:opacity-90 text-primary-foreground'
                       }`}
                     >
                       <Play className="w-3 h-3 fill-current" />
-                      {completed 
-                        ? (isSpanish ? 'Repetir Tour' : isFrench ? 'Refaire le Tour' : isItalian ? 'Ripeti Tour' : 'Repeat Tour')
-                        : (isSpanish ? 'Iniciar Tour en Pantalla' : isFrench ? 'Démarrer le Tour' : isItalian ? 'Avvia il Tour' : 'Start Screen Tour')}
+                      {completed
+                        ? loc('Repetir Tour', 'Repeat Tour', 'Refaire le Tour', 'Ripeti Tour')
+                        : loc(
+                            'Iniciar Tour en Pantalla',
+                            'Start Screen Tour',
+                            'Démarrer le Tour',
+                            'Avvia il Tour'
+                          )}
                     </Button>
                   </div>
                 </div>
@@ -717,7 +1125,12 @@ export function GuideBookModal({
             <div className="p-8 text-center text-muted-foreground">
               <HelpCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm font-medium">
-                {isSpanish ? 'No se encontraron guías para tu búsqueda.' : 'No guides match your search query.'}
+                {loc(
+                  'No se encontraron guías para tu búsqueda.',
+                  'No guides match your search query.',
+                  'Aucun guide ne correspond à votre recherche.',
+                  'Nessuna guida trovata per la tua ricerca.'
+                )}
               </p>
             </div>
           )}
@@ -725,21 +1138,31 @@ export function GuideBookModal({
 
         {/* Footer with Reset Progress Button */}
         <div className="p-3 border-t border-border bg-muted/20 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground px-5 shrink-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <span className="text-[11px] font-mono">
-              {isSpanish ? 'HERMES V2.1 • Manual Balístico Integrado' : 'HERMES V2.1 • Ballistic Integrated Manual'}
+              {loc(
+                'HERMES · Manual Balístico Integrado',
+                'HERMES · Integrated Ballistic Manual',
+                'HERMES · Manuel Balistique Intégré',
+                'HERMES · Manuale Balistico Integrato'
+              )}
             </span>
             {showResetConfirm ? (
               <div className="flex items-center gap-2 bg-red-500/15 border border-red-500/40 px-2.5 py-0.5 rounded-lg animate-fade-in">
                 <span className="text-[11px] font-bold text-red-600 dark:text-red-400">
-                  {isSpanish ? '¿Reiniciar todas las guías?' : 'Reset all guides?'}
+                  {loc(
+                    '¿Reiniciar todas las guías?',
+                    'Reset all guides?',
+                    'Réinitialiser tous les guides ?',
+                    'Reimpostare tutte le guide?'
+                  )}
                 </span>
                 <Button
                   size="sm"
                   onClick={handleConfirmReset}
                   className="h-5 text-[10px] font-bold px-2 bg-red-600 hover:bg-red-500 text-white cursor-pointer"
                 >
-                  {isSpanish ? 'Sí, reiniciar' : 'Yes, reset'}
+                  {loc('Sí, reiniciar', 'Yes, reset', 'Oui, réinitialiser', 'Sì, azzera')}
                 </Button>
                 <Button
                   size="sm"
@@ -747,34 +1170,44 @@ export function GuideBookModal({
                   onClick={() => setShowResetConfirm(false)}
                   className="h-5 text-[10px] px-2 text-muted-foreground hover:text-foreground cursor-pointer"
                 >
-                  {isSpanish ? 'Cancelar' : 'Cancel'}
+                  {loc('Cancelar', 'Cancel', 'Annuler', 'Annulla')}
                 </Button>
               </div>
             ) : resetSuccessMessage ? (
               <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-mono animate-fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                {isSpanish ? '¡Progreso reiniciado correctamente!' : 'Progress reset successfully!'}
+                {loc(
+                  '¡Progreso reiniciado correctamente!',
+                  'Progress reset successfully!',
+                  'Progression réinitialisée !',
+                  'Avanzamento azzerato con successo!'
+                )}
               </span>
             ) : (
               <button
                 type="button"
                 onClick={() => setShowResetConfirm(true)}
                 className="text-[10px] text-muted-foreground hover:text-red-400 underline flex items-center gap-1 cursor-pointer font-mono transition-colors"
-                title={isSpanish ? 'Borrar historial de guías completadas' : 'Clear completed tours history'}
+                title={loc(
+                  'Borrar historial de guías completadas',
+                  'Clear completed tours history',
+                  'Effacer l’historique des guides complétés',
+                  'Cancella la cronologia delle guide completate'
+                )}
               >
                 <RotateCcw className="w-3 h-3" />
-                {isSpanish ? 'Reiniciar progreso de guías' : 'Reset guide progress'}
+                {loc(
+                  'Reiniciar progreso de guías',
+                  'Reset guide progress',
+                  'Réinitialiser la progression',
+                  'Reimposta avanzamento guide'
+                )}
               </button>
             )}
           </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onClose}
-            className="h-7 text-xs"
-          >
-            {isSpanish ? 'Cerrar' : 'Close'}
+          <Button size="sm" variant="outline" onClick={onClose} className="h-7 text-xs cursor-pointer">
+            {loc('Cerrar', 'Close', 'Fermer', 'Chiudi')}
           </Button>
         </div>
       </div>

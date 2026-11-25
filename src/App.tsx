@@ -11,13 +11,11 @@ import {
 import { runSimulation } from './lib/simulator';
 import { ApogeeResult, calculateApogee } from './lib/apogee';
 import {
-  Download,
-  BookOpen,
-  FolderOpen,
   AlertTriangle,
   Package,
   Settings,
   Save,
+  Flame,
 } from 'lucide-react';
 
 import { MotorInputsPanel } from './components/MotorInputsPanel';
@@ -27,7 +25,7 @@ import { HermesApplyPayload, HermesShareModals } from './components/HermesShareM
 import { MissionControl, loadSavedMissionControlParams } from './components/MissionControl';
 import { DetailedAnalysisView } from './components/DetailedAnalysisView';
 import { SmartSearchEngine } from './components/SmartSearchEngine';
-import { SplashScreen } from './components/SplashScreen';
+import { SplashScreen, WorkspaceMode } from './components/SplashScreen';
 import { VersionHistoryBook } from './components/VersionHistoryBook';
 import { GuideBookModal } from './components/GuideBookModal';
 import { InteractiveTourOverlay, TourSequence } from './components/InteractiveTourOverlay';
@@ -41,6 +39,7 @@ import { SavedSimulationEntry, useSimulationStorage } from './hooks/useSimulatio
 import { getInstalledModules } from './lib/modules';
 import { ModuleNotInstalledNotice } from './components/ModuleNotInstalledNotice';
 import { SettingsMenu } from './components/SettingsMenu';
+import { AgenteJesusDrawer } from './components/AgenteJesusDrawer';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   HERMES_MC_IMPORTED_EVENT,
@@ -49,6 +48,8 @@ import {
   parseAeroDataRaw,
 } from './lib/missionControlStorage';
 import { resolveImportedPropellants } from './lib/hermesFile';
+import { createStudySeriesFromLibraryEntry } from './lib/studyEngine';
+import { loadActiveStudyState, saveActiveStudyState } from './lib/studyStorage';
 
 import { StudyPanel } from './components/StudyPanel';
 
@@ -58,25 +59,35 @@ const PlaybackWrapper = lazy(() =>
 const FlightViewer = lazy(() =>
   import('./components/FlightViewer').then((m) => ({ default: m.FlightViewer }))
 );
-const AgenteJesusPanel = lazy(() =>
-  import('./components/RoadmapPreviewTabs').then((m) => ({ default: m.AgenteJesusPanel }))
-);
 const PropellantCharacterizationPanel = lazy(() =>
   import('./components/RoadmapPreviewTabs').then((m) => ({ default: m.PropellantCharacterizationPanel }))
 );
 
 export default function App() {
   const installedModules = useMemo(() => getInstalledModules(), []);
-  const [activeTabState, setActiveTabState] = useState('inputs');
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('simulate');
+  const [simTab, setSimTab] = useState<string>('inputs');
+  const [postTab, setPostTab] = useState<string>('study');
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
 
-  const activeTab = activeTabState;
+  const activeTab = workspaceMode === 'simulate' ? simTab : postTab;
   const setActiveTab = (tab: string) => {
-    setActiveTabState(tab);
+    if (tab === 'study' || tab === 'propellant_char') {
+      setWorkspaceMode('postprocess');
+      setPostTab(tab);
+    } else {
+      setWorkspaceMode('simulate');
+      setSimTab(tab);
+    }
     trackTabVisit(tab);
   };
 
   const [lang, setLang] = useState<Language>('en');
+  const [guideLang, setGuideLang] = useState<Language>('en');
+
+  useEffect(() => {
+    setGuideLang(lang);
+  }, [lang]);
 
   useEffect(() => {
     recordAppLaunch(lang);
@@ -111,7 +122,9 @@ export default function App() {
   } = useSimulationStorage();
 
   const [showSplash, setShowSplash] = useState(true);
-  const handleSplashComplete = useCallback(() => setShowSplash(false), []);
+  const handleSplashComplete = useCallback(() => {
+    setShowSplash(false);
+  }, []);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [showCfdInfo, setShowCfdInfo] = useState(false);
@@ -120,6 +133,7 @@ export default function App() {
   const [expApogee, setExpApogee] = useState<ApogeeResult | null>(null);
   const missionControlManagedRef = useRef(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showAgenteDrawer, setShowAgenteDrawer] = useState(false);
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFilename, setExportFilename] = useState('');
@@ -348,16 +362,28 @@ export default function App() {
   };
 
   const tourSequences = useMemo(() => {
-    return getTourSequences(lang, {
+    return getTourSequences(guideLang, {
       setGrains,
       setMotor,
       setNozzle,
       runSim: simulate,
     });
-  }, [lang, customPropellants, motor, nozzle, grains]);
+  }, [guideLang, customPropellants, motor, nozzle, grains]);
 
-  const handleStartTour = (tourId: string) => {
-    const seq = tourSequences[tourId];
+  const handleStartTour = (tourId: string, selectedLang?: Language) => {
+    const targetLang = selectedLang || guideLang;
+    if (selectedLang && selectedLang !== guideLang) {
+      setGuideLang(selectedLang);
+    }
+    const seqMap = targetLang === guideLang
+      ? tourSequences
+      : getTourSequences(targetLang, {
+          setGrains,
+          setMotor,
+          setNozzle,
+          runSim: simulate,
+        });
+    const seq = seqMap[tourId];
     if (seq) {
       setActiveTourSequence(seq);
       setTourStepIndex(0);
@@ -433,6 +459,26 @@ export default function App() {
     } catch {
       // keep loaded inputs even if parameters need editing
     }
+    setWorkspaceMode('simulate');
+  };
+
+  const handleAddLibrarySimulationToStudy = (entry: SavedSimulationEntry) => {
+    try {
+      const currentStudy = loadActiveStudyState();
+      const newSeries = createStudySeriesFromLibraryEntry(entry, customPropellants, currentStudy.series);
+      saveActiveStudyState({
+        ...currentStudy,
+        referenceId: currentStudy.referenceId || newSeries.id,
+        series: [...currentStudy.series, newSeries],
+      });
+      window.dispatchEvent(new CustomEvent('hermes-study-sync'));
+      setWorkspaceMode('postprocess');
+      setPostTab('study');
+      trackTabVisit('study');
+    } catch (err) {
+      console.error(err);
+      setSimulationError(t.sim_error_msg);
+    }
   };
 
   return (
@@ -458,29 +504,19 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <div className="hidden md:flex items-center gap-1.5">
-            <Button
-              data-tour="save-sim-btn"
-              variant="outline"
-              onClick={() => setShowSaveModal(true)}
-              className="h-8 text-xs font-medium px-2.5 gap-1.5 bg-background/70 hover:bg-muted border-border text-foreground whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Save className="w-3.5 h-3.5 text-muted-foreground" />
-              <span>{t.save_btn}</span>
-            </Button>
-
-            <Button
-              data-tour="library-btn"
-              variant="outline"
-              onClick={() => setShowLibraryModal(true)}
-              className="h-8 text-xs font-medium px-2.5 gap-1.5 bg-background/70 hover:bg-muted border-border text-foreground whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
-              <span>{t.library_btn}</span>
-            </Button>
-          </div>
+          <Button
+            data-tour="save-sim-btn"
+            variant="outline"
+            onClick={() => setShowSaveModal(true)}
+            title={t.save_btn}
+            className="h-8 text-xs font-medium px-2.5 gap-1.5 bg-background/70 hover:bg-muted border-border text-foreground whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Save className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="hidden sm:inline">{t.save_btn}</span>
+          </Button>
 
           <Button
+            data-tour="hermes-share-btn"
             variant="outline"
             size="sm"
             onClick={() => {
@@ -494,27 +530,7 @@ export default function App() {
           </Button>
 
           <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowGuideBook(true)}
-            title={t.guide_book_tooltip}
-            className="h-8 px-2.5 text-xs font-medium gap-1.5 bg-background/70 hover:bg-muted border-border text-foreground whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-primary shrink-0" />
-            <span className="hidden sm:inline">{t.guide_book_btn}</span>
-          </Button>
-
-          {showInstallBtn && (
-            <Button
-              onClick={handleInstallClick}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500/40 h-8 text-xs font-semibold px-2.5 gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>{t.install_app_btn}</span>
-            </Button>
-          )}
-
-          <Button
+            data-tour="settings-menu-btn"
             variant="outline"
             size="sm"
             onClick={() => setShowSettingsMenu(true)}
@@ -546,93 +562,122 @@ export default function App() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col w-full min-h-0">
           <div className="flex justify-between items-center mb-1.5 shrink-0 overflow-x-auto gap-3">
-            <TabsList className="flex h-9 w-max shrink-0 bg-muted/75 border border-border rounded-lg p-1 gap-1">
-              <TabsTrigger
-                value="inputs"
-                data-tour="tab-trigger-inputs"
-                className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+            <div className="flex items-center gap-2.5 shrink-0">
+              {/* Dual Workspace Switcher: Simulate | Post-Process */}
+              <div data-tour="workspace-mode-switcher" className="flex h-9 items-center bg-muted/75 border border-border rounded-lg p-1 gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceMode('simulate')}
+                  className={`px-3 h-full rounded-md text-xs font-mono font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    workspaceMode === 'simulate'
+                      ? 'bg-primary text-primary-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {t.mode_simulate || 'Simulate'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWorkspaceMode('postprocess');
+                    trackTabVisit(postTab);
+                  }}
+                  className={`px-3 h-full rounded-md text-xs font-mono font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    workspaceMode === 'postprocess'
+                      ? 'bg-primary text-primary-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {t.mode_postprocess || 'Post-Process'}
+                </button>
+              </div>
+
+              <TabsList className="flex h-9 w-max shrink-0 bg-muted/75 border border-border rounded-lg p-1 gap-1">
+                {workspaceMode === 'simulate' ? (
+                  <>
+                    <TabsTrigger
+                      value="inputs"
+                      data-tour="tab-trigger-inputs"
+                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+                    >
+                      {t.inputs}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="results"
+                      data-tour="tab-trigger-results"
+                      disabled={!results}
+                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+                    >
+                      {t.results}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="analysis"
+                      data-tour="tab-trigger-analysis"
+                      disabled={!results}
+                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+                    >
+                      {t.analysis || 'Análisis'}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="mission_control"
+                      data-tour="tab-trigger-mission-control"
+                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+                    >
+                      {t.mission_control || 'Mission Control'}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="smart_search"
+                      data-tour="smart-search-tab-trigger"
+                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+                    >
+                      Smart Search
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="cfd"
+                      data-tour="tab-trigger-cfd"
+                      disabled={!results && installedModules.animations}
+                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+                    >
+                      {t.cfd || 'CFD Animation'}
+                    </TabsTrigger>
+                  </>
+                ) : (
+                  <>
+                    <TabsTrigger
+                      value="study"
+                      data-tour="tab-trigger-study"
+                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+                    >
+                      {t.tab_study || 'Estudio'}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="propellant_char"
+                      data-tour="tab-trigger-propellant-char"
+                      className={`font-semibold text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 border ${
+                        activeTab === 'propellant_char'
+                          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/60 shadow-xs'
+                          : 'text-amber-700/80 dark:text-amber-300/80 hover:bg-amber-500/10 border-amber-500/25'
+                      }`}
+                    >
+                      <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span>{t.tab_propellant_char}</span>
+                    </TabsTrigger>
+                  </>
+                )}
+              </TabsList>
+            </div>
+
+            {workspaceMode === 'simulate' && (
+              <Button
+                data-tour="simulate-btn"
+                onClick={simulate}
+                disabled={motorValidation.hasBlockingError}
+                title={motorValidation.hasBlockingError ? t.sim_error_msg : undefined}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold whitespace-nowrap min-w-[156px] h-9 px-4 shrink-0 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {t.inputs}
-              </TabsTrigger>
-              <TabsTrigger
-                value="results"
-                data-tour="tab-trigger-results"
-                disabled={!results}
-                className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
-              >
-                {t.results}
-              </TabsTrigger>
-              <TabsTrigger
-                value="analysis"
-                data-tour="tab-trigger-analysis"
-                disabled={!results}
-                className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
-              >
-                {t.analysis || 'Análisis'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="mission_control"
-                data-tour="tab-trigger-mission-control"
-                className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
-              >
-                {t.mission_control || 'Mission Control'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="smart_search"
-                data-tour="smart-search-tab-trigger"
-                className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
-              >
-                Smart Search
-              </TabsTrigger>
-              <TabsTrigger
-                value="agente_jesus"
-                data-tour="tab-trigger-agente-jesus"
-                className={`font-semibold text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 border ${
-                  activeTab === 'agente_jesus'
-                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/60 shadow-xs'
-                    : 'text-amber-700/80 dark:text-amber-300/80 hover:bg-amber-500/10 border-amber-500/25'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                {t.tab_agente_jesus}
-              </TabsTrigger>
-              <TabsTrigger
-                value="propellant_char"
-                data-tour="tab-trigger-propellant-char"
-                className={`font-semibold text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 border ${
-                  activeTab === 'propellant_char'
-                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/60 shadow-xs'
-                    : 'text-amber-700/80 dark:text-amber-300/80 hover:bg-amber-500/10 border-amber-500/25'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                {t.tab_propellant_char}
-              </TabsTrigger>
-              <TabsTrigger
-                value="cfd"
-                data-tour="tab-trigger-cfd"
-                disabled={!results && installedModules.animations}
-                className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
-              >
-                {t.cfd || 'CFD Animation'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="study"
-                data-tour="tab-trigger-study"
-                className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
-              >
-                {t.tab_study || 'Estudio'}
-              </TabsTrigger>
-            </TabsList>
-            <Button
-              data-tour="simulate-btn"
-              onClick={simulate}
-              disabled={motorValidation.hasBlockingError}
-              title={motorValidation.hasBlockingError ? t.sim_error_msg : undefined}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold whitespace-nowrap min-w-[156px] h-9 px-4 shrink-0 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {t.run}
-            </Button>
+                {t.run}
+              </Button>
+            )}
           </div>
 
           <TabsContent value="inputs" className="flex-1 flex flex-col min-h-0 gap-2 px-1 overflow-y-auto no-scrollbar pt-2">
@@ -771,18 +816,6 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="agente_jesus" data-tour="agente-jesus-panel" className="flex-1 flex flex-col min-h-0 gap-4 p-3 md:p-6 overflow-y-auto">
-            {!installedModules.agente_jesus ? (
-              <ModuleNotInstalledNotice moduleId="agente_jesus" lang={lang} theme={theme} />
-            ) : (
-              <ErrorBoundary>
-                <Suspense fallback={<div className="p-6 text-xs font-mono text-muted-foreground">{t.mc_processing}</div>}>
-                  <AgenteJesusPanel lang={lang} theme={theme} />
-                </Suspense>
-              </ErrorBoundary>
-            )}
-          </TabsContent>
-
           <TabsContent value="propellant_char" data-tour="propellant-char-panel" className="flex-1 flex flex-col min-h-0 gap-4 p-3 md:p-6 overflow-y-auto">
             {!installedModules.propellant_char ? (
               <ModuleNotInstalledNotice moduleId="propellant_char" lang={lang} theme={theme} />
@@ -872,6 +905,7 @@ export default function App() {
           showLibraryModal={showLibraryModal}
           setShowLibraryModal={setShowLibraryModal}
           onLoadSimulation={handleLoadLibrarySimulation}
+          onAddSimulationToStudy={handleAddLibrarySimulationToStudy}
           onOpenHermesImport={() => {
             setHermesModalTab('import');
             setShowHermesModal(true);
@@ -903,7 +937,9 @@ export default function App() {
           onClose={() => setShowGuideBook(false)}
           onStartTour={handleStartTour}
           onApplyPresetMotor={handleApplyPresetMotor}
-          lang={lang}
+          lang={guideLang}
+          onChangeGuideLang={setGuideLang}
+          hasResults={Boolean(results)}
           theme={theme}
         />
 
@@ -929,7 +965,8 @@ export default function App() {
             setShowGuideBook(true);
           }}
           onSwitchTab={setActiveTab}
-          lang={lang}
+          hasResults={Boolean(results)}
+          lang={guideLang}
           theme={theme}
         />
 
@@ -973,7 +1010,24 @@ export default function App() {
           onOpenVersions={() => setShowVersionHistory(true)}
           onOpenAnalytics={() => setShowAnalyticsModal(true)}
           onOpenFeedback={() => setShowFeedbackModal(true)}
+          onOpenLibrary={() => setShowLibraryModal(true)}
+          onOpenAgenteJesus={() => {
+            setShowAgenteDrawer(true);
+            trackTabVisit('agente_jesus');
+          }}
+          onOpenGuideBook={() => setShowGuideBook(true)}
+          onReturnToStart={() => setShowSplash(true)}
+          showInstallBtn={showInstallBtn}
+          onInstallApp={handleInstallClick}
           t={t}
+        />
+
+        <AgenteJesusDrawer
+          isOpen={showAgenteDrawer}
+          onClose={() => setShowAgenteDrawer(false)}
+          isInstalled={installedModules.agente_jesus}
+          lang={lang}
+          theme={theme}
         />
     </div>
   );

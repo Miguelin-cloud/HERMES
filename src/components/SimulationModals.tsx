@@ -4,10 +4,31 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label as UiLabel } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, FileText, Folder, FolderOpen, Info, Trash2, UploadCloud } from 'lucide-react';
-import { CustomPropellant, GrainInput, MotorInput, NozzleInput, SimulationResults } from '../lib/types';
+import {
+  AlertTriangle,
+  Check,
+  Download,
+  FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Info,
+  LineChart,
+  Play,
+  Search,
+  Trash2,
+  UploadCloud,
+} from 'lucide-react';
+import {
+  CustomPropellant,
+  DEFAULT_PROPELLANTS,
+  GrainInput,
+  MotorInput,
+  NozzleInput,
+  SimulationResults,
+} from '../lib/types';
 import { MotorStructureResult, PadmGoverningLimit } from '../lib/motorStructure';
-import { SavedSimulationEntry } from '../hooks/useSimulationStorage';
+import { SavedSimulationEntry, SavedSimulationSummary } from '../hooks/useSimulationStorage';
 import { trackEvent } from '../lib/telemetry';
 import { ApogeeResult } from '../lib/apogee';
 import { Language } from '../lib/i18n';
@@ -19,7 +40,11 @@ import {
 } from '../lib/exportResults';
 import { exportSimulationPdf } from '../lib/pdfReport';
 import { getCompleteMissionControlSnapshot } from '../lib/missionControlStorage';
-import { getReferencedCustomPropellants } from '../lib/hermesFile';
+import {
+  buildHermesProjectFile,
+  downloadHermesFile,
+  getReferencedCustomPropellants,
+} from '../lib/hermesFile';
 
 interface SimulationModalsProps {
   t: any;
@@ -54,6 +79,7 @@ interface SimulationModalsProps {
   showLibraryModal: boolean;
   setShowLibraryModal: (v: boolean) => void;
   onLoadSimulation: (entry: SavedSimulationEntry) => void;
+  onAddSimulationToStudy?: (entry: SavedSimulationEntry) => void;
   onOpenHermesImport?: () => void;
 
   showPadmInfo: boolean;
@@ -94,6 +120,7 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
   showLibraryModal,
   setShowLibraryModal,
   onLoadSimulation,
+  onAddSimulationToStudy,
   onOpenHermesImport,
   showPadmInfo,
   setShowPadmInfo,
@@ -104,6 +131,9 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
   const [pdfReportTitle, setPdfReportTitle] = useState('');
   const [includeMcInPdf, setIncludeMcInPdf] = useState(true);
   const [saveIncludeMc, setSaveIncludeMc] = useState(true);
+  const [isCreatingNewFolder, setIsCreatingNewFolder] = useState(false);
+  const [libraryFolderFilter, setLibraryFolderFilter] = useState<string>('__ALL__');
+  const [librarySearch, setLibrarySearch] = useState('');
   const [csvDecimalSeparator, setCsvDecimalSeparator] = useState<CsvDecimalSeparator>(
     lang === 'en' ? 'dot' : 'comma'
   );
@@ -123,6 +153,21 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
       setPdfReportTitle('');
     }
   }, [showExportModal]);
+
+  useEffect(() => {
+    if (showSaveModal) {
+      setIsCreatingNewFolder(false);
+      if (!saveFolder.trim()) {
+        setSaveFolder('General');
+      }
+    }
+  }, [showSaveModal]);
+
+  useEffect(() => {
+    if (showLibraryModal) {
+      setLibrarySearch('');
+    }
+  }, [showLibraryModal]);
 
   const hasFlightData = Boolean(simApogee && simApogee.t && simApogee.t.length > 0);
 
@@ -398,167 +443,603 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
         </div>
       )}
 
-      {showSaveModal && (
-        <div
-          className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowSaveModal(false);
-          }}
-        >
-          <div className="bg-card w-full max-w-sm rounded-lg p-6 shadow-xl border border-border" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold mb-4">{t.save_modal_title}</h2>
-            <div className="space-y-4 mb-4">
-              <div>
-                <UiLabel>{t.sim_name_label}</UiLabel>
-                <Input
-                  value={saveName}
-                  onChange={(e) => setSaveName(e.target.value)}
-                  className="mt-1"
-                  placeholder={t.sim_name_placeholder}
-                />
-              </div>
-              <div>
-                <UiLabel>{t.folder_group_label}</UiLabel>
-                <Input
-                  value={saveFolder}
-                  onChange={(e) => setSaveFolder(e.target.value)}
-                  className="mt-1"
-                  placeholder={t.folder_group_placeholder}
-                />
-              </div>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <Checkbox
-                  checked={saveIncludeMc}
-                  onCheckedChange={(v) => setSaveIncludeMc(Boolean(v))}
-                />
-                <span>{t.hermes_save_include_mc}</span>
-              </label>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowSaveModal(false)}>
-                {t.cancel_btn}
-              </Button>
-              <Button
-                onClick={() => {
-                  if (!saveName.trim()) return;
-                  const bundled = getReferencedCustomPropellants(grains, customPropellants);
-                  const newSim: SavedSimulationEntry = {
-                    id: Date.now().toString(),
-                    name: saveName.trim(),
-                    folder: saveFolder.trim() || 'General',
-                    timestamp: Date.now(),
-                    motor,
-                    nozzle,
-                    grains,
-                    ...(bundled.length > 0 ? { bundledPropellants: bundled } : {}),
-                    ...(saveIncludeMc ? { missionControl: getCompleteMissionControlSnapshot(true) } : {}),
-                  };
-                  setSavedSimulations([...savedSimulations, newSim]);
-                  setSaveName('');
-                  setShowSaveModal(false);
-                }}
-              >
-                {t.save_btn}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showSaveModal && (() => {
+        const existingFolders = Array.from(
+          new Set([
+            'General',
+            ...savedSimulations.map((s) => (s.folder || 'General').trim() || 'General'),
+          ])
+        ).sort((a, b) => a.localeCompare(b));
 
-      {showLibraryModal && (
-        <div
-          className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowLibraryModal(false);
-          }}
-        >
-          <div className="bg-card w-full max-w-2xl rounded-lg p-0 shadow-xl border border-border overflow-hidden flex flex-col max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-border bg-muted flex justify-between items-center gap-2 shrink-0">
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                <FolderOpen size={20} />
-                {t.library_modal_title}
-              </h2>
-              <div className="flex items-center gap-2">
-                {onOpenHermesImport && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowLibraryModal(false);
-                      onOpenHermesImport();
-                    }}
-                    className="h-7 text-xs gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    <UploadCloud size={14} />
-                    <span>{t.hermes_library_import_btn}</span>
-                  </Button>
-                )}
-                <Button variant="ghost" size="sm" onClick={() => setShowLibraryModal(false)} className="h-8 w-8 p-0 cursor-pointer">
+        const activeFolder = saveFolder.trim() || 'General';
+        const simsInSelectedFolder = savedSimulations
+          .filter((s) => ((s.folder || 'General').trim() || 'General') === activeFolder)
+          .sort((a, b) => b.timestamp - a.timestamp);
+
+        const existingMatch = saveName.trim()
+          ? simsInSelectedFolder.find(
+              (s) => s.name.trim().toLowerCase() === saveName.trim().toLowerCase()
+            )
+          : undefined;
+
+        const allProps = [...DEFAULT_PROPELLANTS, ...customPropellants];
+        const primaryProp = allProps.find((p) => Number(p.id) === Number(grains[0]?.propellantType));
+        const currentSummary: SavedSimulationSummary = {
+          ...(primaryProp ? { propellantLabel: primaryProp.name } : {}),
+          ...(results
+            ? {
+                motorClass: results.summary.motorClass,
+                pMaxMPa: results.summary.Pmax_MPa,
+                totalImpulseNs: results.summary.It_total_N_s,
+                burnTimeS: results.summary.t_quemado,
+              }
+            : {}),
+        };
+
+        return (
+          <div
+            className="fixed inset-0 bg-black/55 backdrop-blur-[1px] z-[100] flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowSaveModal(false);
+            }}
+          >
+            <div
+              className="bg-card w-full max-w-lg rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[88vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-3.5 border-b border-border bg-card-header flex items-center justify-between gap-2 shrink-0">
+                <h2 className="text-base font-bold flex items-center gap-2 text-foreground">
+                  <Folder className="w-4 h-4 text-primary" />
+                  <span>{t.save_modal_title}</span>
+                </h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowSaveModal(false)}
+                  className="h-7 w-7 p-0 cursor-pointer"
+                >
                   ✕
                 </Button>
               </div>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1 bg-background">
-              {savedSimulations.length === 0 ? (
-                <div className="text-center text-muted-foreground py-8">{t.no_saved_sims}</div>
-              ) : (
-                <div className="space-y-6">
-                  {Array.from(new Set(savedSimulations.map((s) => s.folder || 'General')))
-                    .sort()
-                    .map((folder) => {
-                      const simsInFolder = savedSimulations.filter((s) => (s.folder || 'General') === folder);
+
+              <div className="p-5 overflow-y-auto space-y-4">
+                {/* 1. Destination Folder Picker */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <UiLabel className="text-xs font-semibold">{t.save_existing_folders}</UiLabel>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingNewFolder((v) => !v);
+                        if (!isCreatingNewFolder) {
+                          setSaveFolder('');
+                        } else if (!saveFolder.trim()) {
+                          setSaveFolder('General');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5" />
+                      <span>{t.save_new_folder_btn}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {existingFolders.map((folderName) => {
+                      const count = savedSimulations.filter(
+                        (s) => ((s.folder || 'General').trim() || 'General') === folderName
+                      ).length;
+                      const selected = !isCreatingNewFolder && activeFolder === folderName;
                       return (
-                        <div key={folder} className="space-y-2">
-                          <h3 className="font-bold text-sm text-foreground flex items-center gap-2 border-b border-border pb-1">
-                            <Folder size={14} className="text-muted-foreground" />
-                            {folder}
-                            <span className="text-xs font-normal text-muted-foreground ml-auto">{simsInFolder.length}</span>
-                          </h3>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {simsInFolder.map((sim) => (
-                              <div
-                                key={sim.id}
-                                className="group flex items-center justify-between p-3 rounded-md border border-border bg-card hover:border-primary/50 transition-colors"
-                              >
-                                <div
-                                  className="flex-1 cursor-pointer overflow-hidden"
-                                  onClick={() => {
-                                    onLoadSimulation(sim);
-                                    setShowLibraryModal(false);
-                                  }}
-                                >
-                                  <div className="font-semibold text-sm truncate">{sim.name}</div>
-                                  <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-2">
-                                    <span>{new Date(sim.timestamp).toLocaleString()}</span>
-                                    {sim.missionControl && (
-                                      <span className="font-mono text-primary">{t.hermes_has_mc_tag}</span>
-                                    )}
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSimToDelete(sim.id);
-                                  }}
-                                  title={t.delete_sim_tooltip}
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                        <button
+                          key={folderName}
+                          type="button"
+                          onClick={() => {
+                            setIsCreatingNewFolder(false);
+                            setSaveFolder(folderName);
+                          }}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs transition-colors cursor-pointer ${
+                            selected
+                              ? 'border-primary bg-primary/12 text-foreground font-semibold'
+                              : 'border-border bg-background/60 text-muted-foreground hover:text-foreground hover:bg-muted/70'
+                          }`}
+                        >
+                          <Folder className={`w-3.5 h-3.5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
+                          <span>{folderName}</span>
+                          <span className="font-mono text-[10px] opacity-75">({count})</span>
+                        </button>
                       );
                     })}
+                  </div>
+
+                  {isCreatingNewFolder && (
+                    <Input
+                      value={saveFolder}
+                      onChange={(e) => setSaveFolder(e.target.value)}
+                      autoFocus
+                      className="mt-1.5 h-8 text-xs bg-background"
+                      placeholder={t.folder_group_placeholder}
+                    />
+                  )}
                 </div>
-              )}
+
+                {/* 2. Preview of Files Already in Selected Folder */}
+                <div className="rounded-lg border border-border bg-muted/25 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-border/80 bg-muted/40 flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                      <FolderOpen className="w-3.5 h-3.5 text-primary" />
+                      <span>
+                        {t.save_files_in_folder}: <span className="font-mono">{activeFolder}</span>
+                      </span>
+                    </span>
+                    <span className="font-mono tabular-nums text-muted-foreground">
+                      {simsInSelectedFolder.length}
+                    </span>
+                  </div>
+
+                  {simsInSelectedFolder.length === 0 ? (
+                    <div className="px-3 py-3 text-[11px] text-muted-foreground">
+                      {t.save_folder_empty}
+                    </div>
+                  ) : (
+                    <div className="max-h-36 overflow-y-auto divide-y divide-border/60">
+                      {simsInSelectedFolder.map((item) => {
+                        const isSameName =
+                          saveName.trim().length > 0 &&
+                          item.name.trim().toLowerCase() === saveName.trim().toLowerCase();
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setSaveName(item.name)}
+                            className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 text-xs transition-colors cursor-pointer ${
+                              isSameName ? 'bg-amber-500/12' : 'hover:bg-muted/60'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="font-medium text-foreground truncate flex items-center gap-1.5">
+                                <span>{item.name}</span>
+                                {isSameName && <Check className="w-3 h-3 text-amber-500 shrink-0" />}
+                              </div>
+                              <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1.5 truncate">
+                                <span>{item.motor.Dc}×{item.motor.Lc} mm</span>
+                                {item.summary?.motorClass && (
+                                  <>
+                                    <span>·</span>
+                                    <span>{item.summary.motorClass}</span>
+                                  </>
+                                )}
+                                {item.summary?.propellantLabel && (
+                                  <>
+                                    <span>·</span>
+                                    <span>{item.summary.propellantLabel}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                              {new Date(item.timestamp).toLocaleDateString()}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Simulation Name Input */}
+                <div className="space-y-1.5">
+                  <UiLabel className="text-xs font-semibold">{t.sim_name_label}</UiLabel>
+                  <Input
+                    value={saveName}
+                    onChange={(e) => setSaveName(e.target.value)}
+                    className="h-9 text-xs bg-background"
+                    placeholder={t.sim_name_placeholder}
+                  />
+                  {existingMatch && (
+                    <div className="flex items-start gap-2 p-2 rounded-md border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-700 dark:text-amber-300">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>{t.save_overwrite_warn}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Current Motor Snapshot + Mission Control Option */}
+                <div className="text-[11px] font-mono text-muted-foreground flex flex-wrap items-center gap-2 px-2.5 py-2 rounded-md bg-background/60 border border-border/80">
+                  <span>{motor.Dc}×{motor.Lc} mm</span>
+                  <span>·</span>
+                  <span>{grains.reduce((sum, g) => sum + (Number(g.N) || 1), 0)} grains</span>
+                  {currentSummary.propellantLabel && (
+                    <>
+                      <span>·</span>
+                      <span>{currentSummary.propellantLabel}</span>
+                    </>
+                  )}
+                  {currentSummary.motorClass && (
+                    <>
+                      <span>·</span>
+                      <span className="text-primary font-semibold">
+                        {currentSummary.motorClass} ({(currentSummary.totalImpulseNs ?? 0).toFixed(0)} N·s)
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <Checkbox
+                    checked={saveIncludeMc}
+                    onCheckedChange={(v) => setSaveIncludeMc(Boolean(v))}
+                  />
+                  <span>{t.hermes_save_include_mc}</span>
+                </label>
+              </div>
+
+              <div className="px-5 py-3.5 border-t border-border bg-muted/30 flex justify-end gap-2 shrink-0">
+                <Button variant="outline" onClick={() => setShowSaveModal(false)} className="cursor-pointer">
+                  {t.cancel_btn}
+                </Button>
+                <Button
+                  disabled={!saveName.trim()}
+                  className="cursor-pointer"
+                  onClick={() => {
+                    if (!saveName.trim()) return;
+                    const bundled = getReferencedCustomPropellants(grains, customPropellants);
+                    const nextEntry: SavedSimulationEntry = {
+                      id: existingMatch ? existingMatch.id : Date.now().toString(),
+                      name: saveName.trim(),
+                      folder: activeFolder,
+                      timestamp: Date.now(),
+                      motor,
+                      nozzle,
+                      grains,
+                      summary: currentSummary,
+                      ...(bundled.length > 0 ? { bundledPropellants: bundled } : {}),
+                      ...(saveIncludeMc ? { missionControl: getCompleteMissionControlSnapshot(true) } : {}),
+                    };
+                    if (existingMatch) {
+                      setSavedSimulations(
+                        savedSimulations.map((s) => (s.id === existingMatch.id ? nextEntry : s))
+                      );
+                    } else {
+                      setSavedSimulations([...savedSimulations, nextEntry]);
+                    }
+                    setSaveName('');
+                    setShowSaveModal(false);
+                  }}
+                >
+                  {existingMatch ? t.save_update_btn : t.save_btn}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {showLibraryModal && (() => {
+        const allFolders = Array.from(
+          new Set(savedSimulations.map((s) => (s.folder || 'General').trim() || 'General'))
+        ).sort((a, b) => a.localeCompare(b));
+
+        const effectiveFolderFilter =
+          libraryFolderFilter !== '__ALL__' && allFolders.includes(libraryFolderFilter)
+            ? libraryFolderFilter
+            : '__ALL__';
+
+        const query = librarySearch.trim().toLowerCase();
+        const filteredSims = savedSimulations
+          .filter((sim) => {
+            const folder = (sim.folder || 'General').trim() || 'General';
+            if (effectiveFolderFilter !== '__ALL__' && folder !== effectiveFolderFilter) return false;
+            if (!query) return true;
+            return (
+              sim.name.toLowerCase().includes(query) ||
+              folder.toLowerCase().includes(query) ||
+              (sim.summary?.propellantLabel || '').toLowerCase().includes(query) ||
+              (sim.summary?.motorClass || '').toLowerCase().includes(query)
+            );
+          })
+          .sort((a, b) => b.timestamp - a.timestamp);
+
+        const visibleFolders = Array.from(
+          new Set(filteredSims.map((s) => (s.folder || 'General').trim() || 'General'))
+        ).sort((a, b) => a.localeCompare(b));
+
+        const allProps = [...DEFAULT_PROPELLANTS, ...customPropellants];
+
+        return (
+          <div
+            className="fixed inset-0 bg-black/55 backdrop-blur-[1px] z-[100] flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowLibraryModal(false);
+            }}
+          >
+            <div
+              className="bg-card w-full max-w-4xl rounded-xl p-0 shadow-2xl border border-border overflow-hidden flex flex-col h-[82vh] max-h-[760px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Library Header */}
+              <div className="px-5 py-3.5 border-b border-border bg-card-header flex flex-wrap justify-between items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <FolderOpen className="w-5 h-5 text-primary shrink-0" />
+                  <h2 className="text-base font-bold truncate">{t.library_modal_title}</h2>
+                  <span className="text-xs font-mono tabular-nums text-muted-foreground">
+                    · {savedSimulations.length} {t.library_total_sims}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+                  <div className="relative w-full sm:w-56">
+                    <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Input
+                      value={librarySearch}
+                      onChange={(e) => setLibrarySearch(e.target.value)}
+                      placeholder={t.library_search_placeholder}
+                      className="h-8 pl-8 text-xs bg-background"
+                    />
+                  </div>
+                  {onOpenHermesImport && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowLibraryModal(false);
+                        onOpenHermesImport();
+                      }}
+                      className="h-8 text-xs gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <UploadCloud size={14} />
+                      <span className="hidden sm:inline">{t.hermes_library_import_btn}</span>
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowLibraryModal(false)}
+                    className="h-8 w-8 p-0 cursor-pointer shrink-0"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </div>
+
+              {/* 2-Column Body: Folder Sidebar + Simulation List */}
+              <div className="flex-1 min-h-0 flex flex-col md:flex-row bg-background">
+                {/* Folder Sidebar */}
+                <aside className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-border bg-muted/20 p-3 overflow-x-auto md:overflow-y-auto">
+                  <div className="flex md:flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setLibraryFolderFilter('__ALL__')}
+                      className={`px-3 py-2 rounded-md text-xs flex items-center justify-between gap-2 whitespace-nowrap transition-colors cursor-pointer ${
+                        effectiveFolderFilter === '__ALL__'
+                          ? 'bg-primary text-primary-foreground font-semibold'
+                          : 'text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{t.library_all_folders}</span>
+                      </span>
+                      <span className="font-mono text-[10px] tabular-nums opacity-85">
+                        {savedSimulations.length}
+                      </span>
+                    </button>
+
+                    {allFolders.map((folder) => {
+                      const count = savedSimulations.filter(
+                        (s) => ((s.folder || 'General').trim() || 'General') === folder
+                      ).length;
+                      const active = effectiveFolderFilter === folder;
+                      return (
+                        <button
+                          key={folder}
+                          type="button"
+                          onClick={() => setLibraryFolderFilter(folder)}
+                          className={`px-3 py-2 rounded-md text-xs flex items-center justify-between gap-2 whitespace-nowrap transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-primary text-primary-foreground font-semibold'
+                              : 'text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <Folder className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">{folder}</span>
+                          </span>
+                          <span className="font-mono text-[10px] tabular-nums opacity-85">
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </aside>
+
+                {/* Main List */}
+                <div className="flex-1 p-4 md:p-5 overflow-y-auto">
+                  {filteredSims.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-12 text-sm">
+                      {t.no_saved_sims}
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {visibleFolders.map((folder) => {
+                        const simsInFolder = filteredSims.filter(
+                          (s) => ((s.folder || 'General').trim() || 'General') === folder
+                        );
+                        return (
+                          <div key={folder} className="space-y-2.5">
+                            <h3 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-2 border-b border-border pb-1.5">
+                              <Folder size={13} className="text-primary" />
+                              <span className="text-foreground">{folder}</span>
+                              <span className="font-mono tabular-nums text-[11px] ml-auto">
+                                {simsInFolder.length}
+                              </span>
+                            </h3>
+                            <div className="grid grid-cols-1 gap-2.5">
+                              {simsInFolder.map((sim) => {
+                                const grainSegments = sim.grains.reduce(
+                                  (sum, g) => sum + (Number(g.N) || 1),
+                                  0
+                                );
+                                const fallbackProp =
+                                  sim.summary?.propellantLabel ||
+                                  sim.bundledPropellants?.find(
+                                    (p) => Number(p.id) === Number(sim.grains[0]?.propellantType)
+                                  )?.name ||
+                                  allProps.find(
+                                    (p) => Number(p.id) === Number(sim.grains[0]?.propellantType)
+                                  )?.name;
+
+                                return (
+                                  <div
+                                    key={sim.id}
+                                    className="p-3.5 rounded-lg border border-border bg-card hover:border-primary/45 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                  >
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                      <div className="font-semibold text-sm text-foreground truncate">
+                                        {sim.name}
+                                      </div>
+                                      <div className="text-[11px] text-muted-foreground font-mono flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                        <span>
+                                          {sim.motor.Dc}×{sim.motor.Lc} mm
+                                        </span>
+                                        <span aria-hidden="true">·</span>
+                                        <span>{grainSegments} grains</span>
+                                        {fallbackProp && (
+                                          <>
+                                            <span aria-hidden="true">·</span>
+                                            <span>{fallbackProp}</span>
+                                          </>
+                                        )}
+                                        {sim.summary?.motorClass && (
+                                          <>
+                                            <span aria-hidden="true">·</span>
+                                            <span className="text-primary font-semibold">
+                                              {sim.summary.motorClass}
+                                              {sim.summary.totalImpulseNs
+                                                ? ` (${sim.summary.totalImpulseNs.toFixed(0)} N·s)`
+                                                : ''}
+                                            </span>
+                                          </>
+                                        )}
+                                        {sim.missionControl && (
+                                          <>
+                                            <span aria-hidden="true">·</span>
+                                            <span className="text-foreground/80">
+                                              {t.hermes_has_mc_tag}
+                                            </span>
+                                          </>
+                                        )}
+                                        <span aria-hidden="true">·</span>
+                                        <span>{new Date(sim.timestamp).toLocaleDateString()}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Quick Action Bar */}
+                                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                      <Button
+                                        size="sm"
+                                        onClick={() => {
+                                          onLoadSimulation(sim);
+                                          setShowLibraryModal(false);
+                                        }}
+                                        className="h-7 px-2.5 text-[11px] font-semibold gap-1 cursor-pointer"
+                                      >
+                                        <Play className="w-3 h-3" />
+                                        <span>{t.library_open_sim_btn}</span>
+                                      </Button>
+
+                                      {onAddSimulationToStudy && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            onAddSimulationToStudy(sim);
+                                            setShowLibraryModal(false);
+                                          }}
+                                          className="h-7 px-2.5 text-[11px] font-semibold gap-1 cursor-pointer"
+                                        >
+                                          <LineChart className="w-3 h-3 text-primary" />
+                                          <span>{t.library_send_study_btn}</span>
+                                        </Button>
+                                      )}
+
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        title={t.library_export_hrms_btn}
+                                        onClick={() => {
+                                          const pkg = buildHermesProjectFile({
+                                            projectName: sim.name,
+                                            scope: sim.missionControl ? 'both' : 'inputs',
+                                            motor: sim.motor,
+                                            nozzle: sim.nozzle,
+                                            grains: sim.grains,
+                                            customPropellants: [
+                                              ...customPropellants,
+                                              ...(sim.bundledPropellants || []),
+                                            ],
+                                            missionControl: sim.missionControl,
+                                            motorClassHint: sim.summary?.motorClass,
+                                          });
+                                          downloadHermesFile(pkg, sim.name);
+                                        }}
+                                        className="h-7 px-2 text-[11px] gap-1 cursor-pointer"
+                                      >
+                                        <Download className="w-3 h-3" />
+                                        <span className="hidden lg:inline">.hrms</span>
+                                      </Button>
+
+                                      {allFolders.length > 1 && (
+                                        <select
+                                          aria-label={t.library_move_folder_label}
+                                          title={t.library_move_folder_label}
+                                          value={(sim.folder || 'General').trim() || 'General'}
+                                          onChange={(e) => {
+                                            const nextFolder = e.target.value;
+                                            setSavedSimulations((prev) =>
+                                              prev.map((item) =>
+                                                item.id === sim.id
+                                                  ? { ...item, folder: nextFolder }
+                                                  : item
+                                              )
+                                            );
+                                          }}
+                                          className="h-7 px-1.5 rounded-md border border-border bg-background text-[11px] text-foreground cursor-pointer max-w-[100px]"
+                                        >
+                                          {allFolders.map((f) => (
+                                            <option key={f} value={f}>
+                                              {f}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      )}
+
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 cursor-pointer"
+                                        onClick={() => setSimToDelete(sim.id)}
+                                        title={t.delete_sim_tooltip}
+                                      >
+                                        <Trash2 size={13} />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showPadmInfo && (() => {
         const ri = Math.max(0, (motor.Dc || 0) / 2);

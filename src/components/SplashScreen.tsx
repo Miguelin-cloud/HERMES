@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import coheterosLogo from '../assets/coheteros_logo.png';
 import { Language, translations } from '../lib/i18n';
 
@@ -28,8 +29,8 @@ const QUOTES = [
     author: 'Arthur C. Clarke',
   },
   {
-    text: 'Esto es como si Chicote le tiene miedo a sus macarrones',
-    author: 'Nico Pérez',
+    text: 'Esto es como si Arguiñano le tiene miedo a sus macarrones',
+    author: 'Nicolás Pérez Rodríguez',
   },
 ];
 
@@ -153,9 +154,21 @@ function buildConstellationScene(width: number, height: number): SceneData {
   return { width, height, stars, edges, equations };
 }
 
-export function SplashScreen({ lang, onComplete }: { lang: Language; onComplete: () => void }) {
+export type WorkspaceMode = 'simulate' | 'postprocess';
+
+export function SplashScreen({
+  lang,
+  onComplete,
+}: {
+  lang: Language;
+  onComplete: (mode?: WorkspaceMode) => void;
+}) {
   const [isFadingOut, setIsFadingOut] = useState(false);
-  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+  const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * QUOTES.length));
+  const [quotePhase, setQuotePhase] = useState<'idle' | 'exiting' | 'entering'>('idle');
+  const [quoteDir, setQuoteDir] = useState<'prev' | 'next'>('next');
+  const quoteTimerRef = useRef<number | null>(null);
+  const quoteRafRef = useRef<number | null>(null);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
   const completedRef = useRef(false);
@@ -168,26 +181,85 @@ export function SplashScreen({ lang, onComplete }: { lang: Language; onComplete:
   const requestDrawRef = useRef<(() => void) | null>(null);
 
   const t = translations[lang] || translations.en;
+  const quote = QUOTES[quoteIndex];
+
+  const stepQuote = useCallback((delta: -1 | 1) => {
+    if (quoteTimerRef.current !== null) {
+      window.clearTimeout(quoteTimerRef.current);
+      quoteTimerRef.current = null;
+    }
+    if (quoteRafRef.current !== null) {
+      cancelAnimationFrame(quoteRafRef.current);
+      quoteRafRef.current = null;
+    }
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion) {
+      setQuoteIndex((prev) => (prev + delta + QUOTES.length) % QUOTES.length);
+      setQuotePhase('idle');
+      return;
+    }
+
+    setQuoteDir(delta > 0 ? 'next' : 'prev');
+    setQuotePhase('exiting');
+
+    quoteTimerRef.current = window.setTimeout(() => {
+      quoteTimerRef.current = null;
+      setQuoteIndex((prev) => (prev + delta + QUOTES.length) % QUOTES.length);
+      setQuotePhase('entering');
+      quoteRafRef.current = requestAnimationFrame(() => {
+        quoteRafRef.current = requestAnimationFrame(() => {
+          quoteRafRef.current = null;
+          setQuotePhase('idle');
+        });
+      });
+    }, 130);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (quoteTimerRef.current !== null) window.clearTimeout(quoteTimerRef.current);
+      if (quoteRafRef.current !== null) cancelAnimationFrame(quoteRafRef.current);
+    };
+  }, []);
 
   const handleEnterApp = useCallback(() => {
     if (completedRef.current) return;
     completedRef.current = true;
     setIsFadingOut(true);
     setTimeout(() => {
-      onCompleteRef.current();
+      onCompleteRef.current('simulate');
     }, 220);
   }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        stepQuote(-1);
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        stepQuote(1);
+        return;
+      }
       if (e.key === 'Enter' || e.key === ' ') {
+        const targetEl = e.target as HTMLElement | null;
+        if (targetEl?.closest('[data-quote-nav]')) {
+          return;
+        }
         e.preventDefault();
         handleEnterApp();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleEnterApp]);
+  }, [handleEnterApp, stepQuote]);
 
   // Lightweight event-driven 2D canvas: illuminates constellations & physics equations near cursor, then sleeps when idle
   useEffect(() => {
@@ -428,24 +500,59 @@ export function SplashScreen({ lang, onComplete }: { lang: Language; onComplete:
           High Efficiency Rocket Motor Emulation System
         </p>
 
-        {/* Classic Quote */}
-        <div className="mt-10 mb-9 max-w-lg px-2 min-h-[68px] flex flex-col items-center justify-center">
-          <p className="text-slate-300/90 italic text-xs sm:text-sm leading-relaxed font-serif">
-            &ldquo;{quote.text}&rdquo;
-          </p>
-          <p className="text-slate-500 font-mono text-[10px] tracking-[0.18em] uppercase mt-2">
-            — {quote.author}
-          </p>
+        {/* Classic Quote with dynamic left/right cycling */}
+        <div className="mt-10 mb-9 w-full max-w-xl flex items-center justify-between gap-3 sm:gap-5 px-1">
+          <button
+            type="button"
+            data-quote-nav="true"
+            onClick={() => stepQuote(-1)}
+            aria-label={lang === 'es' ? 'Frase anterior' : 'Previous quote'}
+            className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border border-slate-800/90 bg-slate-900/45 text-slate-400 hover:text-slate-100 hover:border-slate-600 hover:bg-slate-800/75 hover:-translate-x-0.5 active:scale-95 transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <div className="flex-1 min-h-[76px] flex flex-col items-center justify-center overflow-hidden px-1">
+            <div
+              className={`flex flex-col items-center justify-center motion-reduce:transition-none motion-reduce:transform-none ${
+                quotePhase === 'entering'
+                  ? `transition-none opacity-0 ${quoteDir === 'next' ? 'translate-x-5' : '-translate-x-5'}`
+                  : quotePhase === 'exiting'
+                    ? `transition-all duration-150 ease-in opacity-0 ${quoteDir === 'next' ? '-translate-x-5' : 'translate-x-5'}`
+                    : 'transition-all duration-200 ease-out opacity-100 translate-x-0'
+              }`}
+            >
+              <p className="text-slate-300/90 italic text-xs sm:text-sm leading-relaxed font-serif">
+                &ldquo;{quote.text}&rdquo;
+              </p>
+              <p className="text-slate-500 font-mono text-[10px] tracking-[0.18em] uppercase mt-2">
+                — {quote.author}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            data-quote-nav="true"
+            onClick={() => stepQuote(1)}
+            aria-label={lang === 'es' ? 'Siguiente frase' : 'Next quote'}
+            className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-md border border-slate-800/90 bg-slate-900/45 text-slate-400 hover:text-slate-100 hover:border-slate-600 hover:bg-slate-800/75 hover:translate-x-0.5 active:scale-95 transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Minimalist Central Simulate Button with subtle hover reaction */}
-        <button
-          type="button"
-          onClick={handleEnterApp}
-          className="inline-flex items-center justify-center px-10 py-3 rounded-md bg-slate-100 text-slate-950 border border-slate-200/80 hover:bg-white hover:scale-[1.045] hover:shadow-xl hover:shadow-black/40 active:scale-[0.985] transition-all duration-200 ease-out font-mono text-xs sm:text-[13px] font-bold tracking-[0.24em] uppercase shadow-lg shadow-black/30 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-        >
-          Simulate
-        </button>
+        {/* Single Minimalist Entry Action: START */}
+        <div className="flex items-center justify-center w-full">
+          <button
+            type="button"
+            data-splash-action="start"
+            onClick={handleEnterApp}
+            className="w-full sm:w-auto min-w-[210px] inline-flex items-center justify-center px-10 py-3.5 rounded-md bg-slate-100 text-slate-950 border border-slate-200/80 hover:bg-white hover:scale-[1.04] hover:shadow-xl hover:shadow-black/40 active:scale-[0.985] transition-all duration-200 ease-out font-mono text-xs sm:text-[13px] font-bold tracking-[0.24em] uppercase shadow-lg shadow-black/30 cursor-pointer whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+          >
+            START
+          </button>
+        </div>
       </div>
 
       {/* Bottom Institutional Mark */}

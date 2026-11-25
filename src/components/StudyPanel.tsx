@@ -153,6 +153,14 @@ export const StudyPanel: React.FC<StudyPanelProps> = ({
   }, [studyState]);
 
   useEffect(() => {
+    const onStudySync = () => {
+      setStudyState(loadActiveStudyState());
+    };
+    window.addEventListener('hermes-study-sync', onStudySync);
+    return () => window.removeEventListener('hermes-study-sync', onStudySync);
+  }, []);
+
+  useEffect(() => {
     saveSavedStudies(savedStudies);
   }, [savedStudies]);
 
@@ -396,7 +404,7 @@ export const StudyPanel: React.FC<StudyPanelProps> = ({
   return (
     <div className="space-y-4 pb-8">
       {/* Top Study Control Bar */}
-      <Card className="bg-card border-border">
+      <Card data-tour="study-toolbar" className="bg-card border-border">
         <CardContent className="p-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[240px]">
             <div className="w-60 sm:w-72">
@@ -539,7 +547,7 @@ export const StudyPanel: React.FC<StudyPanelProps> = ({
         {/* LEFT COLUMN: Add Sources + Curve List */}
         <div className="lg:col-span-4 space-y-3">
           {/* Add Curves Card */}
-          <Card className="bg-card border-border">
+          <Card data-tour="study-add-sources" className="bg-card border-border">
             <CardHeader className="py-2.5 px-4 bg-card-header border-b border-border">
               <CardTitle className="text-xs uppercase tracking-wider font-bold flex items-center gap-2">
                 <Plus className="w-3.5 h-3.5 text-primary" />
@@ -583,11 +591,16 @@ export const StudyPanel: React.FC<StudyPanelProps> = ({
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-card border-border text-foreground max-h-60">
-                    {savedSimulations.map((sim) => (
-                      <SelectItem key={sim.id} value={sim.id} className="text-xs cursor-pointer">
-                        {sim.name} ({sim.motor.Dc}x{sim.motor.Lc})
-                      </SelectItem>
-                    ))}
+                    {[...savedSimulations]
+                      .sort((a, b) => {
+                        const fa = (a.folder || 'General').localeCompare(b.folder || 'General');
+                        return fa !== 0 ? fa : a.name.localeCompare(b.name);
+                      })
+                      .map((sim) => (
+                        <SelectItem key={sim.id} value={sim.id} className="text-xs cursor-pointer">
+                          [{sim.folder || 'General'}] {sim.name} ({sim.motor.Dc}×{sim.motor.Lc})
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 <Button
@@ -658,7 +671,7 @@ export const StudyPanel: React.FC<StudyPanelProps> = ({
           </Card>
 
           {/* Series List Card */}
-          <Card className="bg-card border-border">
+          <Card data-tour="study-series-list" className="bg-card border-border">
             <CardHeader className="py-2.5 px-4 bg-card-header border-b border-border flex flex-row items-center justify-between">
               <CardTitle className="text-xs uppercase tracking-wider font-bold flex items-center gap-2">
                 <Layers className="w-3.5 h-3.5 text-primary" />
@@ -810,7 +823,7 @@ export const StudyPanel: React.FC<StudyPanelProps> = ({
         </div>
 
         {/* RIGHT COLUMN: Impulse Summary, Overlaid Charts, Comparison Table */}
-        <div className="lg:col-span-8 space-y-4">
+        <div data-tour="study-charts-area" className="lg:col-span-8 space-y-4">
           {studyState.series.length === 0 ? (
             <Card className="bg-card border-border">
               <CardContent className="p-10 text-center space-y-3">
@@ -1029,7 +1042,7 @@ export const StudyPanel: React.FC<StudyPanelProps> = ({
               </div>
 
               {/* Comparative Metrics Table */}
-              <Card className="bg-card border-border overflow-hidden">
+              <Card data-tour="study-table-card" className="bg-card border-border overflow-hidden">
                 <CardHeader className="py-2.5 px-4 bg-card-header border-b border-border">
                   <CardTitle className="text-xs uppercase tracking-wider font-bold">
                     {t.study_table_title}

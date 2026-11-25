@@ -15,6 +15,14 @@ import {
   ThemePresetId,
 } from '../lib/theme';
 
+export interface SavedSimulationSummary {
+  motorClass?: string;
+  pMaxMPa?: number;
+  totalImpulseNs?: number;
+  burnTimeS?: number;
+  propellantLabel?: string;
+}
+
 export interface SavedSimulationEntry {
   id: string;
   name: string;
@@ -25,6 +33,7 @@ export interface SavedSimulationEntry {
   grains: GrainInput[];
   missionControl?: MissionControlSnapshot;
   bundledPropellants?: CustomPropellant[];
+  summary?: SavedSimulationSummary;
 }
 
 const DEFAULT_MOTOR_CONFIG: MotorInput = {

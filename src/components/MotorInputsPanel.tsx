@@ -1070,6 +1070,7 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
+              data-tour="global-propellant-manager-btn"
               onClick={() => onOpenPropellantModal(null)}
               size="sm"
               variant="outline"

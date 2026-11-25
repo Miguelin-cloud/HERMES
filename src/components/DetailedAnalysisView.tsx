@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   SimulationResults, 
   MotorInput, 
@@ -62,6 +62,17 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('areas');
   const [selectedGrainIdx, setSelectedGrainIdx] = useState<number | 'all'>('all');
   const [showTheoryInfo, setShowTheoryInfo] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const next = (e as CustomEvent)?.detail;
+      if (next === 'areas' || next === 'kn' || next === 'burn_rate' || next === 'mass_flow') {
+        setActiveSubTab(next);
+      }
+    };
+    window.addEventListener('hermes-analysis-set-subtab', handler);
+    return () => window.removeEventListener('hermes-analysis-set-subtab', handler);
+  }, []);
 
   const t = translations[lang] || translations.en;
   const chartPrimaryColor = themeColors?.primary || 'var(--primary)';
@@ -248,10 +259,11 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
   return (
     <div id="detailed-analysis-container" className="flex flex-col h-full w-full gap-3 pb-8">
       {/* ── Sub-navigation Switcher Header ── */}
-      <div id="detailed-subtabs-nav" className="flex flex-wrap items-center justify-between gap-2 p-1.5 rounded-lg bg-card border border-border shrink-0">
+      <div id="detailed-subtabs-nav" data-tour="analysis-subtabs-nav" className="flex flex-wrap items-center justify-between gap-2 p-1.5 rounded-lg bg-card border border-border shrink-0">
         <div className="flex flex-wrap items-center gap-1">
           <button
             id="subtab-btn-areas"
+            data-tour="subtab-btn-areas"
             onClick={() => setActiveSubTab('areas')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
               activeSubTab === 'areas'
@@ -265,6 +277,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
 
           <button
             id="subtab-btn-kn"
+            data-tour="subtab-btn-kn"
             onClick={() => setActiveSubTab('kn')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
               activeSubTab === 'kn'
@@ -278,6 +291,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
 
           <button
             id="subtab-btn-burnrate"
+            data-tour="subtab-btn-burnrate"
             onClick={() => setActiveSubTab('burn_rate')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
               activeSubTab === 'burn_rate'
@@ -291,6 +305,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
 
           <button
             id="subtab-btn-massflow"
+            data-tour="subtab-btn-massflow"
             onClick={() => setActiveSubTab('mass_flow')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
               activeSubTab === 'mass_flow'
@@ -305,6 +320,7 @@ export const DetailedAnalysisView: React.FC<DetailedAnalysisViewProps> = ({
 
         <button
           id="theory-info-toggle-btn"
+          data-tour="analysis-theory-btn"
           onClick={() => setShowTheoryInfo(!showTheoryInfo)}
           className={`flex items-center gap-1.5 px-3 py-1 text-[11px] font-mono rounded-md border transition-colors cursor-pointer ${
             showTheoryInfo

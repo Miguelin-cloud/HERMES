@@ -1211,7 +1211,7 @@ export function MissionControl({
               />
             </div>
             {/* Recovery / Parachute Configuration */}
-            <div className="col-span-2 pt-2 border-t border-border/50 mt-1 space-y-1.5">
+            <div data-tour="mission-recovery-section" className="col-span-2 pt-2 border-t border-border/50 mt-1 space-y-1.5">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-[10px] sm:text-[11px] font-semibold text-foreground/90 flex items-center gap-1.5">
                   <Umbrella className="w-3.5 h-3.5 text-primary shrink-0" />
