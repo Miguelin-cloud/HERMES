@@ -13,7 +13,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "electron:dev": "electron .",
-    "electron:build": "npm run build && electron-builder build --publish never"
+    "electron:build": "node electron/prepareInstallerAssets.cjs && npm run build && electron-builder build --publish never"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
@@ -71,6 +71,7 @@
       "!dist/hermes_icon.jpg",
       "electron/**/*",
       "!electron/beforeBuild.cjs",
+      "!electron/prepareInstallerAssets.cjs",
       "package.json"
     ],
     "win": {
