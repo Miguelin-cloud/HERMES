@@ -2,6 +2,7 @@ import React from 'react';
 import { SimulationResults, getPropellantVisualProfile } from '../lib/types';
 import { Language } from '../lib/i18n';
 import {
+  computeMeridianLongitudinalCut,
   contoursToSvgPath,
   getGrainModule,
   getGrainShapeLabel,
@@ -59,9 +60,10 @@ export function GrainViewer({ results, timeIndex, t, lang }: { results: Simulati
                      const burnbackTable = results.grains_burnback?.[i];
                      const usesContours = hasCrossSectionContours(g.shape);
                      const mod = getGrainModule(g.shape);
-                     const contourLoops = usesContours && burnbackTable == null
-                       ? mod.getCrossSectionContoursMm?.(g, x)
-                       : null;
+                     const contourLoops =
+                       usesContours && (burnbackTable == null || g.shape === 10)
+                         ? mod.getCrossSectionContoursMm?.(g, x, burnbackTable)
+                         : null;
                      const isComplexExhausted = usesContours
                        ? burnbackTable
                          ? x >= burnbackTable.xMaxMm
@@ -165,6 +167,113 @@ export function GrainViewer({ results, timeIndex, t, lang }: { results: Simulati
                                  )}
                                  {rodH > 0 && (
                                    <rect x={segmentX} y={rodTop} width={segmentW} height={rodH} fill={grainFill} stroke="#475569" strokeWidth="0.45" rx="0.5" />
+                                 )}
+                               </g>
+                             );
+                           }
+
+                           // 10: Custom Drawn Cross-Section (live meridian slice along x=0)
+                           if (g.shape === 10) {
+                             const rOutSafe = Math.max(0.25, rOut);
+                             const edgeTolMm = Math.max(0.05, rOutSafe * 0.025);
+                             const meridian =
+                               contourLoops && contourLoops.length > 0
+                                 ? computeMeridianLongitudinalCut(contourLoops, rOutSafe)
+                                 : null;
+                             if (!meridian || meridian.solidIntervalsMm.length === 0) {
+                               return (
+                                 <g key={`seg-${j}`}>
+                                   <rect
+                                     x={segmentX}
+                                     y={gTop}
+                                     width={segmentW}
+                                     height={gHeight}
+                                     fill="#0f172a"
+                                     opacity={0.45}
+                                     stroke="#475569"
+                                     strokeDasharray="2 2"
+                                     strokeWidth="0.45"
+                                   />
+                                 </g>
+                               );
+                             }
+
+                             const showProj =
+                               meridian.voidIntervalsMm.length === 0 &&
+                               meridian.projectedVoidRangeMm !== null;
+
+                             return (
+                               <g key={`seg-${j}`}>
+                                 {(meridian.topEdgeExposed || meridian.bottomEdgeExposed) && (
+                                   <rect
+                                     x={segmentX}
+                                     y={gTop}
+                                     width={segmentW}
+                                     height={gHeight}
+                                     fill="none"
+                                     stroke="#475569"
+                                     strokeDasharray="2 2"
+                                     strokeWidth="0.45"
+                                     opacity={0.65}
+                                   />
+                                 )}
+                                 {meridian.solidIntervalsMm.map((band, bi) => {
+                                   const bTop = yCenter + band.yMin * scaleY;
+                                   const bBot = yCenter + band.yMax * scaleY;
+                                   const bH = Math.max(0, bBot - bTop);
+                                   const topInternal = band.yMin > -rOutSafe + edgeTolMm;
+                                   const botInternal = band.yMax < rOutSafe - edgeTolMm;
+                                   return (
+                                     <g key={bi}>
+                                       <rect
+                                         x={segmentX}
+                                         y={bTop}
+                                         width={segmentW}
+                                         height={bH}
+                                         fill={grainFill}
+                                         stroke="#475569"
+                                         strokeWidth="0.5"
+                                         rx="0.6"
+                                       />
+                                       {topInternal && (
+                                         <line
+                                           x1={segmentX}
+                                           y1={bTop}
+                                           x2={segmentX + segmentW}
+                                           y2={bTop}
+                                           stroke={g.ci === 1 ? '#ef4444' : '#10b981'}
+                                           strokeWidth="0.6"
+                                           opacity={0.85}
+                                         />
+                                       )}
+                                       {botInternal && (
+                                         <line
+                                           x1={segmentX}
+                                           y1={bBot}
+                                           x2={segmentX + segmentW}
+                                           y2={bBot}
+                                           stroke={g.ci === 1 ? '#ef4444' : '#10b981'}
+                                           strokeWidth="0.6"
+                                           opacity={0.85}
+                                         />
+                                       )}
+                                     </g>
+                                   );
+                                 })}
+                                 {showProj && meridian.projectedVoidRangeMm && (
+                                   <rect
+                                     x={segmentX}
+                                     y={yCenter + meridian.projectedVoidRangeMm.yMin * scaleY}
+                                     width={segmentW}
+                                     height={Math.max(
+                                       0,
+                                       (meridian.projectedVoidRangeMm.yMax - meridian.projectedVoidRangeMm.yMin) *
+                                         scaleY
+                                     )}
+                                     fill="#0f172a"
+                                     opacity={0.42}
+                                     rx="0.5"
+                                   />
                                  )}
                                </g>
                              );

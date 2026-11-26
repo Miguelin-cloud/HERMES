@@ -23,7 +23,30 @@ export interface CustomPropellant {
   description?: string;
 }
 
-export type GrainShapeId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type CustomGrainLoopKind = 'void' | 'solid';
+
+export interface CustomGrainPointNorm {
+  x: number; // Normalized to outer radius R0 = 1.0
+  y: number;
+}
+
+export interface CustomGrainLoopNorm {
+  points: CustomGrainPointNorm[];
+  kind: CustomGrainLoopKind;
+}
+
+export interface CustomGrainShape {
+  id: string;
+  name: string;
+  description?: string;
+  loops: CustomGrainLoopNorm[];
+  symmetryCount?: number;
+  mirrorSector?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type GrainShapeId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 export interface GrainInput {
   id: string;
@@ -46,6 +69,9 @@ export interface GrainInput {
   slotWidth?: number; // mm (C-Slot radial slot width)
   slotDepth?: number; // mm (C-Slot radial cut depth or D-Grain chord cut depth from outer wall)
   rodDiameter?: number; // mm (Rod & Tube central propellant rod outer diameter)
+  // Custom drawn geometry (shape === 10)
+  customGrainId?: string;
+  customGrainSnapshot?: CustomGrainShape;
 }
 
 export type MotorMaterialId = 'al6082' | 'ss304' | 'custom';
@@ -118,6 +144,7 @@ export interface SimulationInputs {
   grains: GrainInput[];
   nozzle: NozzleInput;
   customPropellants?: CustomPropellant[];
+  customGrainShapes?: CustomGrainShape[];
   geometryQuality?: 'fast' | 'high';
 }
 
@@ -139,6 +166,7 @@ export interface SimulationResults {
   grains_burnback?: (import('./grains/types').GrainBurnbackTable | null)[];
   propellantType: number; // Dominant propellant type for visual rendering
   customPropellants?: CustomPropellant[];
+  customGrainShapes?: CustomGrainShape[];
   
   // Advanced Telemetry & Detailed Analysis Arrays
   Kn?: number[];

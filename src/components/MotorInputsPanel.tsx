@@ -5,12 +5,13 @@ import { Label as UiLabel } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AlertTriangle, Beaker, Info, Layers, Scale, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Beaker, Info, Layers, PenTool, Scale, Shapes, ShieldAlert } from 'lucide-react';
 import {
   BOLT_GRADES,
   BOLT_METRICS,
   BoltGradeId,
   BoltMetricId,
+  CustomGrainShape,
   CustomPropellant,
   DEFAULT_PROPELLANTS,
   GrainInput,
@@ -152,7 +153,7 @@ function NumberInput({
   );
 }
 
-const ALL_SHAPE_IDS: GrainShapeId[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const ALL_SHAPE_IDS: GrainShapeId[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 export const GrainShapeIcon: React.FC<{ shape: number; grainId: string }> = ({ shape, grainId }) => {
   const patternId = `stripe-${shape}-${grainId}`;
@@ -233,6 +234,15 @@ export const GrainShapeIcon: React.FC<{ shape: number; grainId: string }> = ({ s
           <circle cx="16" cy="16" r="4.0" fill="var(--card)" stroke="currentColor" className="text-muted-foreground" strokeWidth="1.0" />
         </g>
       )}
+      {shape === 10 && (
+        <path
+          d="M 16,8.5 C 18.8,8.5 19.2,12.2 22.5,12.2 C 24.5,12.2 23.2,16.5 21.0,18.2 C 19.2,19.6 20.5,22.8 16.4,22.8 C 12.8,22.8 12.2,19.5 10.2,17.8 C 8.4,16.2 9.4,12.2 12.0,12.2 C 14.4,12.2 13.8,8.5 16,8.5 Z"
+          fill="var(--card)"
+          stroke="currentColor"
+          className="text-primary"
+          strokeWidth="1.25"
+        />
+      )}
     </svg>
   );
 };
@@ -252,6 +262,7 @@ interface MotorInputsPanelProps {
   setSlagMagnitudeStr: React.Dispatch<React.SetStateAction<string>>;
   isEditingSlagRef: React.MutableRefObject<boolean>;
   customPropellants: CustomPropellant[];
+  customGrainShapes: CustomGrainShape[];
   motorStruct: MotorStructureResult;
   motorValidation: MotorInputsValidation;
   totalPropellantMassKg: number;
@@ -261,6 +272,7 @@ interface MotorInputsPanelProps {
   t: any;
   onOpenPadmInfo: () => void;
   onOpenPropellantModal: (grainId: string | null) => void;
+  onOpenCustomGrainModal: (grainId: string | null, startNew?: boolean) => void;
 }
 
 export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
@@ -278,6 +290,7 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
   setSlagMagnitudeStr,
   isEditingSlagRef,
   customPropellants,
+  customGrainShapes,
   motorStruct,
   motorValidation,
   totalPropellantMassKg,
@@ -287,6 +300,7 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
   t,
   onOpenPadmInfo,
   onOpenPropellantModal,
+  onOpenCustomGrainModal,
 }) => {
   const { totalGrainsLengthMm: totalGrainsLength, maxGrainD0Mm: maxGrainD0, hasRadialClearanceError } = motorValidation;
   const totalPropellantMass = totalPropellantMassKg.toFixed(3);
@@ -1070,6 +1084,17 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
+              data-tour="global-custom-grain-btn"
+              onClick={() => onOpenCustomGrainModal(null)}
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px] px-2.5 sm:px-3 gap-1.5 border-border bg-background/70 hover:bg-muted text-foreground font-medium rounded-md cursor-pointer whitespace-nowrap"
+            >
+              <Shapes className="w-3.5 h-3.5 text-primary" />
+              <span className="hidden sm:inline">{t.custom_grains_btn}</span>
+              <span className="sm:hidden">{t.custom_grains_short_btn}</span>
+            </Button>
+            <Button
               data-tour="global-propellant-manager-btn"
               onClick={() => onOpenPropellantModal(null)}
               size="sm"
@@ -1251,6 +1276,20 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                             grains.map((x) => {
                               if (x.id !== g.id) return x;
                               const defaults = getDefaultGrainParamsForShape(newShape, x.D0 || 40);
+                              if (newShape === 10) {
+                                const existingShape =
+                                  (x.customGrainId && customGrainShapes.find((c) => c.id === x.customGrainId)) ||
+                                  x.customGrainSnapshot ||
+                                  customGrainShapes[0];
+                                return {
+                                  ...x,
+                                  ...defaults,
+                                  shape: newShape,
+                                  ...(existingShape
+                                    ? { customGrainId: existingShape.id, customGrainSnapshot: existingShape }
+                                    : {}),
+                                };
+                              }
                               return {
                                 ...x,
                                 ...defaults,
@@ -1494,6 +1533,95 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                       </>
                     )}
 
+                    {/* Shape 10: Custom Drawn Cross-Section */}
+                    {g.shape === 10 && (() => {
+                      const activeCustomShape =
+                        (g.customGrainId && customGrainShapes.find((c) => c.id === g.customGrainId)) ||
+                        g.customGrainSnapshot ||
+                        null;
+                      const selectedValue = activeCustomShape?.id || '';
+
+                      return (
+                        <div
+                          data-tour={index === 0 ? 'grain-custom-shape-0' : undefined}
+                          className="space-y-1.5 pt-0.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <UiLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                              {t.custom_shape_label}
+                            </UiLabel>
+                            <button
+                              type="button"
+                              onClick={() => onOpenCustomGrainModal(g.id, false)}
+                              className="text-[10px] text-primary hover:underline flex items-center gap-1 cursor-pointer font-semibold whitespace-nowrap shrink-0"
+                            >
+                              <PenTool className="w-3 h-3" />
+                              <span>{t.custom_shape_draw_btn}</span>
+                            </button>
+                          </div>
+
+                          <Select
+                            value={selectedValue}
+                            onValueChange={(val) => {
+                              if (val === '__draw_new__') {
+                                onOpenCustomGrainModal(g.id, true);
+                                return;
+                              }
+                              const found = customGrainShapes.find((c) => c.id === val);
+                              if (!found) return;
+                              setGrains(
+                                grains.map((x) =>
+                                  x.id === g.id
+                                    ? { ...x, customGrainId: found.id, customGrainSnapshot: found }
+                                    : x
+                                )
+                              );
+                            }}
+                          >
+                            <SelectTrigger className="bg-background border-border h-8 text-[11px] px-2 py-0 min-h-0 text-foreground cursor-pointer">
+                              <SelectValue placeholder={t.custom_shape_select_placeholder} />
+                            </SelectTrigger>
+                            <SelectContent className="bg-card text-foreground border-border max-h-60">
+                              {customGrainShapes.map((cs) => (
+                                <SelectItem key={cs.id} value={cs.id} className="text-[11px] font-medium cursor-pointer">
+                                  {cs.name}
+                                </SelectItem>
+                              ))}
+                              {activeCustomShape &&
+                                !customGrainShapes.some((c) => c.id === activeCustomShape.id) && (
+                                  <SelectItem value={activeCustomShape.id} className="text-[11px] font-medium cursor-pointer">
+                                    {activeCustomShape.name}
+                                  </SelectItem>
+                                )}
+                              <SelectItem
+                                value="__draw_new__"
+                                className="text-[10.5px] font-bold text-primary cursor-pointer border-t border-border mt-1"
+                              >
+                                {t.custom_shape_new_btn}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+
+                          {!activeCustomShape ? (
+                            <p className="text-[10px] text-muted-foreground leading-tight">
+                              {t.custom_shape_none_hint}
+                            </p>
+                          ) : (
+                            <p
+                              className="text-[10px] font-mono text-muted-foreground truncate"
+                              title={activeCustomShape.description || undefined}
+                            >
+                              {activeCustomShape.loops.length} loops
+                              {activeCustomShape.symmetryCount && activeCustomShape.symmetryCount > 1
+                                ? ` · ${activeCustomShape.symmetryCount}×`
+                                : ''}
+                              {activeCustomShape.description ? ` · ${activeCustomShape.description}` : ''}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {/* Unified Geometry Alert Banner for shapes 4..9 */}
                     {gc?.hasShapeGeometryError && shapeGeomErrorMsg && (
                       <div className="bg-destructive/10 border border-destructive/30 p-1.5 rounded-sm flex flex-col gap-0.5 mt-1">
@@ -1566,24 +1694,37 @@ export const MotorInputsPanel: React.FC<MotorInputsPanelProps> = ({
                   data-tour={index === 0 ? 'grain-previews-0' : undefined}
                   className="w-[360px] xl:w-[390px] shrink-0 bg-muted/25 border-l border-border flex flex-row overflow-hidden relative"
                 >
-                  <div className="w-1/2 h-full border-r border-border relative z-10">
-                    <GrainPreview
-                      grain={g}
-                      t={t}
-                      mode="transversal"
-                      availableGrainDiameterMm={motorStruct.availableGrainDiameterMm}
-                      validation={gc}
-                    />
-                  </div>
-                  <div className="w-1/2 h-full relative z-10">
-                    <GrainPreview
-                      grain={g}
-                      t={t}
-                      mode="longitudinal"
-                      availableGrainDiameterMm={motorStruct.availableGrainDiameterMm}
-                      validation={gc}
-                    />
-                  </div>
+                  {(() => {
+                    const previewGrain =
+                      g.shape === 10 && !g.customGrainSnapshot && g.customGrainId
+                        ? {
+                            ...g,
+                            customGrainSnapshot: customGrainShapes.find((c) => c.id === g.customGrainId),
+                          }
+                        : g;
+                    return (
+                      <>
+                        <div className="w-1/2 h-full border-r border-border relative z-10">
+                          <GrainPreview
+                            grain={previewGrain}
+                            t={t}
+                            mode="transversal"
+                            availableGrainDiameterMm={motorStruct.availableGrainDiameterMm}
+                            validation={gc}
+                          />
+                        </div>
+                        <div className="w-1/2 h-full relative z-10">
+                          <GrainPreview
+                            grain={previewGrain}
+                            t={t}
+                            mode="longitudinal"
+                            availableGrainDiameterMm={motorStruct.availableGrainDiameterMm}
+                            validation={gc}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             );

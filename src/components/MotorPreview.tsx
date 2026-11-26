@@ -2,6 +2,7 @@ import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { GrainInput, MotorInput, NozzleInput } from '../lib/types';
 import { calculateMotorStructure, getMaxGrainOuterDiameter } from '../lib/motorStructure';
+import { computeMeridianLongitudinalCut, getGrainModule, MeridianSliceInfo } from '../lib/grains';
 
 export function MotorPreview({
   motor,
@@ -216,6 +217,18 @@ export function MotorPreview({
             const grainOverlap = g.D0 > struct.availableGrainDiameterMm + 1e-6;
             const gapPx = g.N > 1 ? Math.min(2, g.L0 * scale * 0.05) : 0;
 
+            let customMeridian: MeridianSliceInfo | null = null;
+            if (g.shape === 10) {
+              try {
+                const loops = getGrainModule(10).getCrossSectionContoursMm?.(g, 0) ?? null;
+                if (loops && loops.length > 0) {
+                  customMeridian = computeMeridianLongitudinalCut(loops, Math.max(0.25, g.D0 / 2));
+                }
+              } catch {
+                customMeridian = null;
+              }
+            }
+
             return (
               <g key={g.id}>
                 {Array.from({ length: g.N }).map((_, j) => {
@@ -294,92 +307,188 @@ export function MotorPreview({
                       )}
 
                       {/* Propellant Block */}
-                      <rect
-                        x={segX}
-                        y={propTop}
-                        width={segW}
-                        height={propH}
-                        fill={fillColor}
-                        stroke={grainOverlap ? '#ef4444' : '#475569'}
-                        strokeWidth={grainOverlap ? 1.5 : 0.8}
-                        opacity={grainOverlap ? 0.8 : 1}
-                      />
-
-                      {/* Shape-specific Inner Port / Cutaway */}
-                      {(g.shape === 1 || g.shape === 5) && coreHeight > 0 && (
-                        <rect
-                          x={segX}
-                          y={Math.max(propTop + 0.5, coreTop)}
-                          width={segW}
-                          height={Math.min(propH - 1, coreHeight)}
-                          fill="#0b1120"
-                          stroke="#64748b"
-                          strokeWidth="0.5"
-                          strokeDasharray="2 1"
-                        />
-                      )}
-
-                      {(g.shape === 2 || g.shape === 4 || g.shape === 9) && coreHeight > 0 && (
+                      {g.shape === 10 && customMeridian ? (
                         <>
-                          <rect
-                            x={segX}
-                            y={Math.max(propTop + 0.5, coreTop)}
-                            width={segW}
-                            height={Math.min(propH - 1, coreHeight)}
-                            fill="#1e293b"
-                            fillOpacity="0.65"
-                            stroke="#64748b"
-                            strokeWidth="0.45"
-                            strokeDasharray="2 1"
-                          />
-                          {innerCoreOnlyH > 0 && (
-                            <rect
-                              x={segX}
-                              y={Math.max(propTop + 0.5, innerCoreOnlyTop)}
-                              width={segW}
-                              height={Math.min(propH - 1, innerCoreOnlyH)}
-                              fill="#0b1120"
-                            />
+                          {customMeridian.topEdgeExposed || customMeridian.bottomEdgeExposed ? (
+                            <>
+                              <rect
+                                x={segX}
+                                y={propTop}
+                                width={segW}
+                                height={propH}
+                                fill="none"
+                                stroke={grainOverlap ? '#ef4444' : '#475569'}
+                                strokeDasharray="2 2"
+                                strokeWidth={grainOverlap ? 1.2 : 0.6}
+                                opacity={0.75}
+                              />
+                              {customMeridian.solidIntervalsMm.map((band, bi) => {
+                                const bTop = centerY + band.yMin * scale;
+                                const bH = Math.max(0.5, (band.yMax - band.yMin) * scale);
+                                return (
+                                  <rect
+                                    key={bi}
+                                    x={segX}
+                                    y={bTop}
+                                    width={segW}
+                                    height={bH}
+                                    fill={fillColor}
+                                    stroke={grainOverlap ? '#ef4444' : '#475569'}
+                                    strokeWidth={grainOverlap ? 1.2 : 0.7}
+                                    opacity={grainOverlap ? 0.8 : 1}
+                                  />
+                                );
+                              })}
+                            </>
+                          ) : (
+                            <>
+                              <rect
+                                x={segX}
+                                y={propTop}
+                                width={segW}
+                                height={propH}
+                                fill={fillColor}
+                                stroke={grainOverlap ? '#ef4444' : '#475569'}
+                                strokeWidth={grainOverlap ? 1.5 : 0.8}
+                                opacity={grainOverlap ? 0.8 : 1}
+                              />
+                              {customMeridian.voidIntervalsMm.map((vBand, vi) => {
+                                const vTop = Math.max(propTop + 0.5, centerY + vBand.yMin * scale);
+                                const vBot = Math.min(propTop + propH - 0.5, centerY + vBand.yMax * scale);
+                                const vH = Math.max(0, vBot - vTop);
+                                if (vH <= 0.4) return null;
+                                return (
+                                  <rect
+                                    key={vi}
+                                    x={segX}
+                                    y={vTop}
+                                    width={segW}
+                                    height={vH}
+                                    fill="#0b1120"
+                                    stroke="#64748b"
+                                    strokeWidth="0.5"
+                                    strokeDasharray="2 1"
+                                  />
+                                );
+                              })}
+                              {customMeridian.voidIntervalsMm.length === 0 &&
+                                customMeridian.projectedVoidRangeMm && (
+                                  <rect
+                                    x={segX}
+                                    y={Math.max(
+                                      propTop + 0.5,
+                                      centerY + customMeridian.projectedVoidRangeMm.yMin * scale
+                                    )}
+                                    width={segW}
+                                    height={Math.min(
+                                      propH - 1,
+                                      Math.max(
+                                        0,
+                                        (customMeridian.projectedVoidRangeMm.yMax -
+                                          customMeridian.projectedVoidRangeMm.yMin) *
+                                          scale
+                                      )
+                                    )}
+                                    fill="#1e293b"
+                                    fillOpacity="0.6"
+                                    stroke="#64748b"
+                                    strokeWidth="0.45"
+                                    strokeDasharray="2 1"
+                                  />
+                                )}
+                            </>
                           )}
                         </>
-                      )}
-
-                      {(g.shape === 6 || g.shape === 7) && slotCutH > 0 && (
-                        <rect
-                          x={segX}
-                          y={propTop}
-                          width={segW}
-                          height={slotCutH}
-                          fill="#0b1120"
-                          fillOpacity={g.shape === 7 ? 0.92 : 0.72}
-                          stroke="#64748b"
-                          strokeWidth="0.5"
-                          strokeDasharray="2 1"
-                        />
-                      )}
-
-                      {g.shape === 8 && coreHeight > 0 && (
+                      ) : (
                         <>
                           <rect
                             x={segX}
-                            y={Math.max(propTop + 0.5, centerY - coreHeight / 2)}
+                            y={propTop}
                             width={segW}
-                            height={Math.min(propH - 1, coreHeight)}
-                            fill="#0b1120"
-                            stroke="#64748b"
-                            strokeWidth="0.5"
-                            strokeDasharray="2 1"
+                            height={propH}
+                            fill={fillColor}
+                            stroke={grainOverlap ? '#ef4444' : '#475569'}
+                            strokeWidth={grainOverlap ? 1.5 : 0.8}
+                            opacity={grainOverlap ? 0.8 : 1}
                           />
-                          {rodH > 0 && (
+
+                          {/* Shape-specific Inner Port / Cutaway */}
+                          {(g.shape === 1 || g.shape === 5) && coreHeight > 0 && (
                             <rect
                               x={segX}
-                              y={centerY - rodH / 2}
+                              y={Math.max(propTop + 0.5, coreTop)}
                               width={segW}
-                              height={rodH}
-                              fill={fillColor}
-                              stroke="#475569"
-                              strokeWidth="0.6"
+                              height={Math.min(propH - 1, coreHeight)}
+                              fill="#0b1120"
+                              stroke="#64748b"
+                              strokeWidth="0.5"
+                              strokeDasharray="2 1"
                             />
+                          )}
+
+                          {(g.shape === 2 || g.shape === 4 || g.shape === 9) && coreHeight > 0 && (
+                            <>
+                              <rect
+                                x={segX}
+                                y={Math.max(propTop + 0.5, coreTop)}
+                                width={segW}
+                                height={Math.min(propH - 1, coreHeight)}
+                                fill="#1e293b"
+                                fillOpacity="0.65"
+                                stroke="#64748b"
+                                strokeWidth="0.45"
+                                strokeDasharray="2 1"
+                              />
+                              {innerCoreOnlyH > 0 && (
+                                <rect
+                                  x={segX}
+                                  y={Math.max(propTop + 0.5, innerCoreOnlyTop)}
+                                  width={segW}
+                                  height={Math.min(propH - 1, innerCoreOnlyH)}
+                                  fill="#0b1120"
+                                />
+                              )}
+                            </>
+                          )}
+
+                          {(g.shape === 6 || g.shape === 7) && slotCutH > 0 && (
+                            <rect
+                              x={segX}
+                              y={propTop}
+                              width={segW}
+                              height={slotCutH}
+                              fill="#0b1120"
+                              fillOpacity={g.shape === 7 ? 0.92 : 0.72}
+                              stroke="#64748b"
+                              strokeWidth="0.5"
+                              strokeDasharray="2 1"
+                            />
+                          )}
+
+                          {g.shape === 8 && coreHeight > 0 && (
+                            <>
+                              <rect
+                                x={segX}
+                                y={Math.max(propTop + 0.5, centerY - coreHeight / 2)}
+                                width={segW}
+                                height={Math.min(propH - 1, coreHeight)}
+                                fill="#0b1120"
+                                stroke="#64748b"
+                                strokeWidth="0.5"
+                                strokeDasharray="2 1"
+                              />
+                              {rodH > 0 && (
+                                <rect
+                                  x={segX}
+                                  y={centerY - rodH / 2}
+                                  width={segW}
+                                  height={rodH}
+                                  fill={fillColor}
+                                  stroke="#475569"
+                                  strokeWidth="0.6"
+                                />
+                              )}
+                            </>
                           )}
                         </>
                       )}
@@ -390,7 +499,15 @@ export function MotorPreview({
                           x={segX + segW / 2}
                           y={centerY}
                           fontSize="8.5"
-                          fill={g.shape !== 3 && g.shape !== 8 && coreHeight > 10 ? '#e2e8f0' : '#0f172a'}
+                          fill={
+                            g.shape === 10
+                              ? customMeridian?.voidIntervalsMm.some((v) => v.yMin <= -0.5 && v.yMax >= 0.5)
+                                ? '#e2e8f0'
+                                : '#0f172a'
+                              : g.shape !== 3 && g.shape !== 8 && coreHeight > 10
+                                ? '#e2e8f0'
+                                : '#0f172a'
+                          }
                           textAnchor="middle"
                           dominantBaseline="middle"
                           fontWeight="bold"

@@ -1,9 +1,10 @@
 import * as XLSX from 'xlsx';
 import { runSimulation } from './simulator';
 import { normalizeMotorWithStructure } from './motorStructure';
-import { parseAndValidateHermesFile, resolveImportedPropellants } from './hermesFile';
+import { parseAndValidateHermesFile, resolveImportedCustomGrains, resolveImportedPropellants } from './hermesFile';
 import { SavedSimulationEntry } from '../hooks/useSimulationStorage';
 import {
+  CustomGrainShape,
   CustomPropellant,
   GrainInput,
   MotorInput,
@@ -11,6 +12,7 @@ import {
   SimulationResults,
   getPropellantData,
 } from './types';
+import { loadCustomGrainsFromStorage } from '../lib/grains';
 import {
   StudySeries,
   StudySeriesSource,
@@ -180,20 +182,28 @@ export function runBackgroundSimulationForStudy(opts: {
   nozzle: NozzleInput;
   grains: GrainInput[];
   bundledPropellants?: CustomPropellant[];
+  bundledCustomGrains?: CustomGrainShape[];
   localCustomPropellants: CustomPropellant[];
+  localCustomGrains?: CustomGrainShape[];
   existingSeries: StudySeries[];
 }): StudySeries {
-  const resolved = resolveImportedPropellants(
+  const resolvedProps = resolveImportedPropellants(
     opts.bundledPropellants || [],
     opts.grains,
     opts.localCustomPropellants
+  );
+  const resolvedGrains = resolveImportedCustomGrains(
+    opts.bundledCustomGrains || [],
+    resolvedProps.remappedGrains,
+    opts.localCustomGrains || loadCustomGrainsFromStorage()
   );
   const normMotor = normalizeMotorWithStructure(opts.motor);
   const res = runSimulation({
     motor: normMotor,
     nozzle: opts.nozzle,
-    grains: resolved.remappedGrains,
-    customPropellants: resolved.nextCustomPropellants,
+    grains: resolvedGrains.remappedGrains,
+    customPropellants: resolvedProps.nextCustomPropellants,
+    customGrainShapes: resolvedGrains.nextCustomGrains,
   });
 
   return createStudySeriesFromSimulation({
@@ -203,8 +213,8 @@ export function runBackgroundSimulationForStudy(opts: {
     results: res,
     motor: normMotor,
     nozzle: opts.nozzle,
-    grains: resolved.remappedGrains,
-    customPropellants: resolved.nextCustomPropellants,
+    grains: resolvedGrains.remappedGrains,
+    customPropellants: resolvedProps.nextCustomPropellants,
     existingSeries: opts.existingSeries,
   });
 }
@@ -222,6 +232,7 @@ export function createStudySeriesFromLibraryEntry(
     nozzle: entry.nozzle,
     grains: entry.grains,
     bundledPropellants: entry.bundledPropellants,
+    bundledCustomGrains: entry.bundledCustomGrains,
     localCustomPropellants,
     existingSeries,
   });
@@ -263,6 +274,7 @@ export async function importHermesFilesIntoStudy(
           nozzle: pkg.inputs.nozzle,
           grains: pkg.inputs.grains,
           bundledPropellants: pkg.inputs.bundledPropellants,
+          bundledCustomGrains: pkg.inputs.bundledCustomGrains,
           localCustomPropellants,
           existingSeries: workingList,
         });

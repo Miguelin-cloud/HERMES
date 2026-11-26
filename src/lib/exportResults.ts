@@ -10,8 +10,9 @@ import {
 import { MotorStructureResult } from './motorStructure';
 import { ApogeeResult } from './apogee';
 import { MissionControlSnapshot } from './missionControlStorage';
+import { getGrainModule, resolveCustomGrainShape } from './grains';
 import { getGrainShapeLabel } from './grains/labels';
-import { Language } from './i18n';
+import { Language, translations } from './i18n';
 
 export type CsvDecimalSeparator = 'dot' | 'comma';
 export type ExcelOrientation = 'columns' | 'rows';
@@ -705,14 +706,33 @@ function buildInputsSheetRows(
     mkRow(L.grpNozzle, L.eroModelLabel, nozzle.ero_model ?? 1, 'ID'),
   ];
 
+  const tDict = translations[lang] || translations.en;
   grains.forEach((g, idx) => {
     const prop = getPropellantData(g.propellantType, customPropellants);
     const grp = `${L.grpGrainPrefix}${idx + 1}`;
+    const customShape = g.shape === 10 ? resolveCustomGrainShape(g) : null;
+    let dEqVal = g.d0;
+    if (g.shape === 10) {
+      try {
+        const initGeom = getGrainModule(10).getInitialGeometry(g);
+        dEqVal =
+          initGeom.portAreaMm2 > 0
+            ? roundNum(Math.min(g.D0, 2 * Math.sqrt(initGeom.portAreaMm2 / Math.PI)), 2)
+            : 0;
+      } catch {
+        dEqVal = 0;
+      }
+    }
     rows.push(
-      mkRow(grp, L.grainShape, getGrainShapeLabel(g.shape, lang), `ID ${g.shape}`),
+      mkRow(
+        grp,
+        L.grainShape,
+        customShape?.name ? `${getGrainShapeLabel(g.shape, tDict)} (${customShape.name})` : getGrainShapeLabel(g.shape, tDict),
+        `ID ${g.shape}`
+      ),
       mkRow(grp, L.grainPropellant, prop.name, `ID ${g.propellantType}`),
       mkRow(grp, L.grainD0, g.D0, 'mm'),
-      mkRow(grp, L.graind0, g.d0, 'mm'),
+      mkRow(grp, g.shape === 10 ? 'Deq (Port Eq.)' : L.graind0, dEqVal, 'mm'),
       mkRow(grp, L.graind0mayor, g.d0mayor, 'mm'),
       mkRow(grp, L.grainL0, g.L0, 'mm'),
       mkRow(grp, L.grainN, g.N, '-'),

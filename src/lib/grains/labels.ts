@@ -20,6 +20,8 @@ export function getGrainShapeLabel(shape: number, t?: any): string {
       return t?.shape_rodtube || 'Rod & Tube';
     case 9:
       return t?.shape_wagonwheel || 'Wagon Wheel';
+    case 10:
+      return t?.shape_custom || 'Personalizado';
     default:
       return t?.shape_cylindrical || 'BATES';
   }
@@ -45,6 +47,8 @@ export function getGrainShapeDesc(shape: number, t?: any): string {
       return t?.shape_rodtube_desc || 'Concentric inner rod + outer tube';
     case 9:
       return t?.shape_wagonwheel_desc || 'Central core + radial propellant spokes';
+    case 10:
+      return t?.shape_custom_desc || 'Custom drawn cross-section';
     default:
       return '';
   }
@@ -100,6 +104,12 @@ export function getGeometryErrorMessage(
       return t?.geom_err_wagon_spoke_gt0 || 'Spoke thickness must be > 0';
     case 'wagon_spoke_overlap':
       return `${t?.geom_err_wagon_spoke_overlap || 'Spoke thickness overlaps at core (max'} ${limStr})`;
+    case 'custom_grain_empty':
+      return t?.geom_err_custom_empty || 'Draw or select a custom grain shape';
+    case 'custom_grain_no_propellant':
+      return t?.geom_err_custom_no_propellant || 'Custom drawing leaves no propellant area';
+    case 'custom_grain_no_burn_surface':
+      return t?.geom_err_custom_no_burn || 'Custom grain has no active burning perimeter';
     default:
       return code;
   }

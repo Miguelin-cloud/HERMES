@@ -17,4 +17,6 @@ export { cSlotGrainModule, getMaxCSlotDepthMm } from './cSlotGrain';
 export { dGrainModule } from './dGrain';
 export { rodAndTubeGrainModule } from './rodAndTubeGrain';
 export { wagonWheelGrainModule, getMaxWagonWheelSpokeWidthMm } from './wagonWheelGrain';
+export { customSketchGrainModule, buildCustomVoidLoopsMm } from './customSketchGrain';
+export * from './customGrainStorage';
 export * from './labels';

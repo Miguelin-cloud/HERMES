@@ -1,5 +1,6 @@
 import React, { useId, useMemo } from 'react';
 import {
+  computeMeridianLongitudinalCut,
   contoursToSvgPath,
   GrainContourLoop,
   getGrainModule,
@@ -146,6 +147,11 @@ export function GrainPreview({
       return null;
     }
   }, [isComplex, mod, grain]);
+
+  const customMeridian = useMemo(() => {
+    if (grain.shape !== 10 || !complexLoops || complexLoops.length === 0) return null;
+    return computeMeridianLongitudinalCut(complexLoops, Math.max(0.25, (grain.D0 || 40) / 2));
+  }, [grain.shape, grain.D0, complexLoops]);
 
   const complexPaths = useMemo(() => {
     if (!complexLoops || complexLoops.length === 0) {
@@ -526,6 +532,114 @@ export function GrainPreview({
                       );
                     }
 
+                    // 10: Custom Drawn Cross-Section (exact meridian slice along x=0)
+                    if (grain.shape === 10) {
+                      const rOutMm = Math.max(0.25, safeD0 / 2);
+                      const edgeTolMm = Math.max(0.05, rOutMm * 0.025);
+                      if (!customMeridian || customMeridian.solidIntervalsMm.length === 0) {
+                        return (
+                          <g>
+                            <rect
+                              x={0}
+                              y={topY}
+                              width={scaledL}
+                              height={scaledD}
+                              fill={`url(#${slotShadeId})`}
+                              stroke="var(--border)"
+                              strokeDasharray="2 2"
+                              strokeWidth="0.7"
+                            />
+                          </g>
+                        );
+                      }
+
+                      const showProjectedOffAxis =
+                        customMeridian.voidIntervalsMm.length === 0 &&
+                        customMeridian.projectedVoidRangeMm !== null;
+
+                      return (
+                        <g>
+                          {/* Subtle dashed envelope outline where outer wall is carved open */}
+                          {(customMeridian.topEdgeExposed || customMeridian.bottomEdgeExposed) && (
+                            <rect
+                              x={0}
+                              y={topY}
+                              width={scaledL}
+                              height={scaledD}
+                              fill="none"
+                              stroke="var(--border)"
+                              strokeDasharray="2 2"
+                              strokeWidth="0.6"
+                            />
+                          )}
+                          {/* Solid propellant bands intersected by meridian plane x=0 */}
+                          {customMeridian.solidIntervalsMm.map((band, bi) => {
+                            const bTop = yCenter + band.yMin * pxPerMmY;
+                            const bBot = yCenter + band.yMax * pxPerMmY;
+                            const bH = Math.max(0, bBot - bTop);
+                            const topIsInternal = band.yMin > -rOutMm + edgeTolMm;
+                            const botIsInternal = band.yMax < rOutMm - edgeTolMm;
+                            return (
+                              <g key={bi}>
+                                <rect x={0} y={bTop} width={scaledL} height={bH} fill={`url(#${hatchId})`} />
+                                {topIsInternal && (
+                                  <line
+                                    x1={0}
+                                    y1={bTop}
+                                    x2={scaledL}
+                                    y2={bTop}
+                                    stroke={intStroke}
+                                    strokeWidth={grain.ci === 1 ? '1.6' : '2.1'}
+                                  />
+                                )}
+                                {botIsInternal && (
+                                  <line
+                                    x1={0}
+                                    y1={bBot}
+                                    x2={scaledL}
+                                    y2={bBot}
+                                    stroke={intStroke}
+                                    strokeWidth={grain.ci === 1 ? '1.6' : '2.1'}
+                                  />
+                                )}
+                              </g>
+                            );
+                          })}
+                          {/* Off-axis void pocket hint when ports miss the x=0 center plane */}
+                          {showProjectedOffAxis && customMeridian.projectedVoidRangeMm && (() => {
+                            const pTop = yCenter + customMeridian.projectedVoidRangeMm.yMin * pxPerMmY;
+                            const pBot = yCenter + customMeridian.projectedVoidRangeMm.yMax * pxPerMmY;
+                            const pH = Math.max(0, pBot - pTop);
+                            return (
+                              <g>
+                                <rect x={0} y={pTop} width={scaledL} height={pH} fill={`url(#${slotShadeId})`} />
+                                <line
+                                  x1={0}
+                                  y1={pTop}
+                                  x2={scaledL}
+                                  y2={pTop}
+                                  stroke={intStroke}
+                                  strokeWidth="1.0"
+                                  strokeDasharray="3 1.5"
+                                  opacity="0.85"
+                                />
+                                <line
+                                  x1={0}
+                                  y1={pBot}
+                                  x2={scaledL}
+                                  y2={pBot}
+                                  stroke={intStroke}
+                                  strokeWidth="1.0"
+                                  strokeDasharray="3 1.5"
+                                  opacity="0.85"
+                                />
+                              </g>
+                            );
+                          })()}
+                        </g>
+                      );
+                    }
+
                     // 1 (BATES), 2 (Star), 4 (Finocyl), 9 (Wagon Wheel)
                     const hasFeatureBand = (grain.shape === 2 || grain.shape === 4 || grain.shape === 9) && d0MayorPx > d0Px;
                     const coreTop = yCenter - d0Px / 2;
@@ -584,8 +698,8 @@ export function GrainPreview({
                     );
                   })()}
 
-                  {/* Outer wall lines (EXT / osi) - for D-Grain top edge is cut away */}
-                  {grain.shape !== 7 && (
+                  {/* Outer wall lines (EXT / osi) - omit edge where cut open */}
+                  {grain.shape !== 7 && !(grain.shape === 10 && customMeridian?.topEdgeExposed) && (
                     <line
                       x1={0}
                       y1={topY}
@@ -595,17 +709,49 @@ export function GrainPreview({
                       strokeWidth={grain.osi === 1 ? '1.8' : '2.5'}
                     />
                   )}
-                  <line
-                    x1={0}
-                    y1={botY}
-                    x2={scaledL}
-                    y2={botY}
-                    stroke={extStroke}
-                    strokeWidth={grain.osi === 1 ? '1.8' : '2.5'}
-                  />
+                  {!(grain.shape === 10 && customMeridian?.bottomEdgeExposed) && (
+                    <line
+                      x1={0}
+                      y1={botY}
+                      x2={scaledL}
+                      y2={botY}
+                      stroke={extStroke}
+                      strokeWidth={grain.osi === 1 ? '1.8' : '2.5'}
+                    />
+                  )}
 
                   {/* Left & Right end faces (ENDS / ei) */}
                   {(() => {
+                    if (grain.shape === 10 && customMeridian) {
+                      return (
+                        <>
+                          {customMeridian.solidIntervalsMm.map((band, bi) => {
+                            const bTop = yCenter + band.yMin * pxPerMmY;
+                            const bBot = yCenter + band.yMax * pxPerMmY;
+                            return (
+                              <g key={bi}>
+                                <line
+                                  x1={0}
+                                  y1={bTop}
+                                  x2={0}
+                                  y2={bBot}
+                                  stroke={endStroke}
+                                  strokeWidth={grain.ei === 1 ? '1.8' : '2.6'}
+                                />
+                                <line
+                                  x1={scaledL}
+                                  y1={bTop}
+                                  x2={scaledL}
+                                  y2={bBot}
+                                  stroke={endStroke}
+                                  strokeWidth={grain.ei === 1 ? '1.8' : '2.6'}
+                                />
+                              </g>
+                            );
+                          })}
+                        </>
+                      );
+                    }
                     const endTopY =
                       grain.shape === 7
                         ? topY + Math.min(scaledD - 2, Math.max(2, (Number(grain.slotDepth) || safeD0 * 0.45) * pxPerMmY))

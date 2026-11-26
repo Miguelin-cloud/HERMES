@@ -23,7 +23,7 @@ export function getTourSequences(
   };
 
   return {
-    // 1. TOUR: Creación y Geometría de Granos (9 formas reales + inhibición real)
+    // 1. TOUR: Creación y Geometría de Granos (10 formas: 9 paramétricas + Personalizada dibujada)
     tour_grains: {
       id: 'tour_grains',
       title: loc(
@@ -33,10 +33,10 @@ export function getTourSequences(
         'Guida: Creazione e Geometria dei Grani'
       ),
       description: loc(
-        'Domina las 9 geometrías disponibles, dimensiones físicas, ratio de densidad rhorat, inhibición de caras (EXT/ENDS/INT) y validaciones.',
-        'Master all 9 grain geometries, physical dimensions, casting ratio rhorat, face inhibition (EXT/ENDS/INT), and live validation.',
-        'Maîtrisez les 9 géométries de grains, dimensions, densité rhorat, inhibition des faces et validations.',
-        'Padroneggia tutte e 9 le geometrie dei grani, dimensioni, densità rhorat, inibizione delle facce e validazioni.'
+        'Domina las 10 geometrías disponibles (9 paramétricas + Forma Personalizada dibujada), dimensiones, rhorat, inhibición de caras y validaciones.',
+        'Master all 10 grain geometries (9 parametric + Custom Drawn Shape), dimensions, rhorat, face inhibition, and live validation.',
+        'Maîtrisez les 10 géométries de grains (9 paramétriques + Forme Personnalisée dessinée), dimensions, rhorat, inhibition et validations.',
+        'Padroneggia tutte le 10 geometrie dei grani (9 parametriche + Forma Personalizzata disegnata), dimensioni, rhorat, inibizione e validazioni.'
       ),
       steps: [
         {
@@ -101,18 +101,18 @@ export function getTourSequences(
           id: 'grain_shape',
           targetSelector: '[data-tour="grain-shape-select-0"]',
           title: loc(
-            '3. Las 9 Geometrías de Grano Soportadas',
-            '3. All 9 Supported Grain Geometries',
-            '3. Les 9 Géométries de Grain Disponibles',
-            '3. Tutte e 9 le Geometrie di Grano Supportate'
+            '3. Las 10 Geometrías de Grano Soportadas',
+            '3. All 10 Supported Grain Geometries',
+            '3. Les 10 Géométries de Grain Disponibles',
+            '3. Tutte le 10 Geometrie di Grano Supportate'
           ),
           category: loc('Geometría', 'Geometry', 'Géométrie', 'Geometria'),
           tab: 'inputs',
           description: loc(
-            'La forma del canal controla cómo cambia el área de combustión Ab(t) al retroceder la llama. HERMES integra 9 geometrías:',
-            'The perforation geometry dictates how burning area Ab(t) evolves as the flame regresses. HERMES models 9 geometries:',
-            'La géométrie du canal contrôle l’évolution de l’aire Ab(t). HERMES intègre 9 géométries :',
-            'La geometria del canale governa l’evoluzione dell’area Ab(t). HERMES supporta 9 geometrie:'
+            'La forma del canal controla cómo cambia el área de combustión Ab(t) al retroceder la llama. HERMES integra 9 geometrías paramétricas más la forma 10 Personalizada (Dibujada):',
+            'The perforation geometry dictates how burning area Ab(t) evolves as the flame regresses. HERMES models 9 parametric geometries plus shape 10 Custom (Drawn):',
+            'La géométrie du canal contrôle l’évolution de l’aire Ab(t). HERMES intègre 9 géométries paramétriques plus la forme 10 Personnalisée (Dessinée) :',
+            'La geometria del canale governa l’evoluzione dell’area Ab(t). HERMES supporta 9 geometrie parametriche più la forma 10 Personalizzata (Disegnata):'
           ),
           bulletPoints: [
             loc(
@@ -122,16 +122,16 @@ export function getTourSequences(
               '1. Cilindrico (BATES) · Canale neutro.  2. Stella · Np punte per spinta iniziale elevata.  3. Massiccio · Senza foro, combustione lunga.'
             ),
             loc(
-              '4. Finocyl · Canal circular con aletas radiales (N_aletas, D_punta, ancho).  5. Moonburner · Canal circular excéntrico (offset).  6. C-Slot · Ranura lateral abierta al perímetro exterior.',
-              '4. Finocyl · Circular core with radial fins (count, tip Ø, width).  5. Moonburner · Eccentric circular port (offset).  6. C-Slot · Lateral radial slot open to outer wall.',
+              '4. Finocyl · Canal circular con aletas radiales.  5. Moonburner · Canal circular excéntrico (offset).  6. C-Slot · Ranura lateral abierta al perímetro exterior.',
+              '4. Finocyl · Circular core with radial fins.  5. Moonburner · Eccentric circular port (offset).  6. C-Slot · Lateral radial slot open to outer wall.',
               '4. Finocyl · Canal avec ailettes radiales.  5. Moonburner · Canal excentré.  6. C-Slot · Fente latérale ouverte en périphérie.',
               '4. Finocyl · Canale con alette radiali.  5. Moonburner · Canale eccentrico.  6. C-Slot · Fessura laterale aperta sul perimetro.'
             ),
             loc(
-              '7. D-Grain · Corte plano cordal lateral.  8. Rod & Tube · Varilla sólida concéntrica + tubo exterior.  9. Wagon Wheel · Canal central + radios de propelente (Np, D_ext, espesor).',
-              '7. D-Grain · Flat chordal lateral cut.  8. Rod & Tube · Concentric inner solid rod + outer tube.  9. Wagon Wheel · Central port with radial propellant spokes.',
-              '7. D-Grain · Coupe plane latérale.  8. Rod & Tube · Tige centrale + tube concentrique.  9. Wagon Wheel · Canal central + rayons.',
-              '7. D-Grain · Taglio cordale piatto.  8. Rod & Tube · Barra interna concentrica + tubo esterno.  9. Wagon Wheel · Canale centrale + razze.'
+              '7. D-Grain · Corte plano cordal.  8. Rod & Tube · Varilla sólida concéntrica + tubo.  9. Wagon Wheel · Canal central + radios.  10. Personalizada · Sección libre dibujada en el Estudio de Formas.',
+              '7. D-Grain · Flat chordal cut.  8. Rod & Tube · Concentric inner rod + tube.  9. Wagon Wheel · Central port + spokes.  10. Custom (Drawn) · Freehand/symmetric cross-section built in the Shape Studio.',
+              '7. D-Grain · Coupe plane.  8. Rod & Tube · Tige + tube.  9. Wagon Wheel · Canal + rayons.  10. Personnalisée · Section dessinée librement ou par symétrie.',
+              '7. D-Grain · Taglio piatto.  8. Rod & Tube · Barra + tubo.  9. Wagon Wheel · Canale + razze.  10. Personalizzata · Sezione disegnata a mano libera o con simmetria.'
             ),
           ],
           autofillLabel: loc(
@@ -163,13 +163,52 @@ export function getTourSequences(
           },
         },
         {
+          id: 'grain_custom_studio',
+          targetSelector: '[data-tour="global-custom-grain-btn"]',
+          fallbackSelector: '[data-tour="grain-custom-shape-0"]',
+          title: loc(
+            '4. Estudio de Formas Personalizadas (Dibujo Libre y Simetría)',
+            '4. Custom Grain Studio (Freehand & Radial Symmetry)',
+            '4. Studio de Formes Personnalisées (Dessin & Symétrie)',
+            '4. Studio Forme Personalizzate (Disegno e Simmetria)'
+          ),
+          category: loc('Personalizado', 'Custom Shape', 'Forme Perso', 'Forma Pers.'),
+          tab: 'inputs',
+          description: loc(
+            'Abre "Formas Personalizadas" en la cabecera de Granos (o elige "Personalizada (Dibujada)" en el desplegable de Forma para ver tu selector por nombre y el botón "Dibujar / Editar").',
+            'Open "Custom Shapes" in the Grains header (or pick "Custom (Drawn)" in the Shape menu to reveal your named shapes dropdown and "Draw / Edit" link).',
+            'Ouvrez "Formes Personnalisées" en haut des Grains (ou choisissez "Personnalisée (Dessinée)" pour afficher votre liste nommée).',
+            'Apri "Forme Personalizzate" in alto nei Grani (o scegli "Personalizzata (Disegnata)" per aprire il selettore per nome).'
+          ),
+          bulletPoints: [
+            loc(
+              'Herramientas asistidas: Mano alzada suavizada, Polilínea, Círculo, rejilla polar/imán y simetría radial (1×–12×) con espejo.',
+              'Assisted tools: Smoothed freehand, Polyline, Circle, polar grid/snap, and radial symmetry (1×–12×) with sector mirror.',
+              'Outils assistés : Main levée lissée, Polyligne, Cercle, grille polaire/aimant et symétrie radiale (1×–12×) avec miroir.',
+              'Strumenti assistiti: Mano libera smussata, Polilinea, Cerchio, griglia polare/aggancio e simmetria radiale (1×–12×) con specchio.'
+            ),
+            loc(
+              'Cortes secuenciales: Alterna "Recortar Hueco" y "Añadir Isla" en orden; incluso puedes volver a perforar un hueco dentro de una isla creada antes.',
+              'Sequential CSG: Alternate "Cut Void" and "Add Island" in chronological order—you can cut holes back inside previously added islands.',
+              'Découpe séquentielle : Alternez "Creuser Vide" et "Ajouter Îlot" dans l’ordre ; vous pouvez percer à nouveau un îlot existant.',
+              'Tagli sequenziali: Alterna "Scava Vuoto" e "Aggiungi Isola" in ordine; puoi anche forare di nuovo un’isola aggiunta prima.'
+            ),
+            loc(
+              'Biblioteca local y privada: Pon nombre y notas a cada forma, duplícalas o bórralas para limpiar. Cada usuario conserva sus propias formas localmente en su navegador y solo se comparten si se incluyen en un paquete .hrms.',
+              'Private local library: Name and annotate each shape, duplicate, or delete to clean up. Shapes stay private in each user’s local browser storage unless explicitly shared in a .hrms file.',
+              'Bibliothèque locale et privée : Nommez, annotez, dupliquez ou supprimez vos formes. Elles restent privées dans votre navigateur local sauf partage explicite en .hrms.',
+              'Libreria locale e privata: Dai nome e note a ogni forma, duplica o elimina per fare pulizia. Ogni utente vede solo le proprie forme locali salvo condivisione via .hrms.'
+            ),
+          ],
+        },
+        {
           id: 'grain_dimensions',
           targetSelector: '[data-tour="grain-dimensions-0"]',
           title: loc(
-            '4. Dimensiones, Densidad Real (rhorat) y Validación',
-            '4. Dimensions, Density Ratio (rhorat) & Validation',
-            '4. Cotes, Ratio de Densité (rhorat) & Validation',
-            '4. Quote, Rapporto Densità (rhorat) e Validazione'
+            '5. Dimensiones, Densidad Real (rhorat) y Validación',
+            '5. Dimensions, Density Ratio (rhorat) & Validation',
+            '5. Cotes, Ratio de Densité (rhorat) & Validation',
+            '5. Quote, Rapporto Densità (rhorat) e Validazione'
           ),
           category: loc('Dimensiones', 'Dimensions', 'Dimensions', 'Dimensioni'),
           tab: 'inputs',
@@ -187,10 +226,10 @@ export function getTourSequences(
               'rhorat (0.85–1.00): Fattore che scala la densità teorica alla densità reale di colata (es. 0.95 = 95%).'
             ),
             loc(
-              'Validación en vivo: Si el grano no cabe radialmente (con liner/inhibidor), excede Lc, o las aletas/radios se solapan, HERMES muestra el error exacto y bloquea SIMULAR hasta corregirlo.',
-              'Live validation: If the grain clashes radially with liner/inhibitor, exceeds Lc, or fins/spokes overlap, HERMES flags the exact limit and blocks SIMULATE.',
-              'Validation en direct : Si le grain dépasse Lc, touche la paroi ou si les ailettes se chevauchent, HERMES signale la limite exacte et bloque la simulation.',
-              'Validazione live: Se il grano interferisce con liner/inibitore, supera Lc o le alette si sovrappongono, HERMES segnala il limite e blocca SIMULA.'
+              'Validación en vivo: Si el grano no cabe radialmente (con liner/inhibidor), excede Lc, o las aletas/radios/formas se solapan o quedan sin propelente, HERMES muestra el error exacto y bloquea SIMULAR hasta corregirlo.',
+              'Live validation: If the grain clashes radially with liner/inhibitor, exceeds Lc, leaves no propellant, or fins/spokes overlap, HERMES flags the exact limit and blocks SIMULATE.',
+              'Validation en direct : Si le grain dépasse Lc, touche la paroi, manque de propergol ou si les ailettes se chevauchent, HERMES signale la limite exacte et bloque la simulation.',
+              'Validazione live: Se il grano interferisce con liner/inibitore, supera Lc, resta senza propellente o le alette si sovrappongono, HERMES segnala il limite e blocca SIMULA.'
             ),
           ],
         },
@@ -198,10 +237,10 @@ export function getTourSequences(
           id: 'grain_faces',
           targetSelector: '[data-tour="grain-faces-0"]',
           title: loc(
-            '5. Caras Activas de Combustión (EXT, ENDS, INT)',
-            '5. Active Burning Faces (EXT, ENDS, INT)',
-            '5. Faces Actives de Combustion (EXT, ENDS, INT)',
-            '5. Facce Attive di Combustione (EXT, ENDS, INT)'
+            '6. Caras Activas de Combustión (EXT, ENDS, INT)',
+            '6. Active Burning Faces (EXT, ENDS, INT)',
+            '6. Faces Actives de Combustion (EXT, ENDS, INT)',
+            '6. Facce Attive di Combustione (EXT, ENDS, INT)'
           ),
           category: loc('Inhibición', 'Inhibition', 'Inhibition', 'Inibizione'),
           tab: 'inputs',
@@ -236,10 +275,10 @@ export function getTourSequences(
           id: 'grain_previews',
           targetSelector: '[data-tour="grain-previews-0"]',
           title: loc(
-            '6. Cortes Transversal y Longitudinal en Vivo',
-            '6. Live Cross-Section & Longitudinal Previews',
-            '6. Coupes Transversale et Longitudinale en Direct',
-            '6. Anteprime Sezione Trasversale e Longitudinale'
+            '7. Cortes Transversal y Longitudinal en Vivo',
+            '7. Live Cross-Section & Longitudinal Previews',
+            '7. Coupes Transversale et Longitudinale en Direct',
+            '7. Anteprime Sezione Trasversale e Longitudinale'
           ),
           category: loc('Verificación', 'Inspection', 'Contrôle', 'Verifica'),
           tab: 'inputs',
@@ -1076,10 +1115,10 @@ export function getTourSequences(
           category: loc('Cabecera · .hrms', 'Header · .hrms', 'En-tête · .hrms', 'Intestazione · .hrms'),
           tab: 'inputs',
           description: loc(
-            'El botón ".hrms" de la cabecera exporta o importa paquetes portables con todo el proyecto: cámara, tobera, granos, propulsantes personalizados incrustados, configuración de Mission Control y datos experimentales opcionales.',
-            'The header ".hrms" button exports or imports portable project bundles containing casing, nozzle, grains, embedded custom propellants, Mission Control parameters, and optional test stand logs.',
-            'Le bouton ".hrms" exporte ou importe des paquets complets incluant carter, tuyère, grains, propergols personnalisés et données de vol/essai.',
-            'Il pulsante ".hrms" esporta o importa pacchetti completi con carcassa, ugello, grani, propellenti personalizzati, parametri di volo e dati sperimentali.'
+            'El botón ".hrms" de la cabecera exporta o importa paquetes portables con todo el proyecto: cámara, tobera, granos (incluyendo formas dibujadas personalizadas), propulsantes personalizados incrustados, configuración de Mission Control y datos experimentales opcionales.',
+            'The header ".hrms" button exports or imports portable project bundles containing casing, nozzle, grains (including custom drawn shapes), embedded custom propellants, Mission Control parameters, and optional test stand logs.',
+            'Le bouton ".hrms" exporte ou importe des paquets complets incluant carter, tuyère, grains (y compris formes dessinées personnalisées), propergols personnalisés et données de vol/essai.',
+            'Il pulsante ".hrms" esporta o importa pacchetti completi con carcassa, ugello, grani (incluse forme disegnate personalizzate), propellenti personalizzati, parametri di volo e dati sperimentali.'
           ),
         },
         {
@@ -1550,10 +1589,10 @@ export function getTourSequences(
           category: loc('Simulate · 1', 'Simulate · 1', 'Simulate · 1', 'Simulate · 1'),
           tab: 'inputs',
           description: loc(
-            'Configura cámara, estructura/material/tornillos (Padm), tobera Laval con escoria/erosión y una pila de granos con hasta 9 geometrías y química personalizada. Cuando no haya errores bloqueantes, pulsa SIMULAR arriba a la derecha.',
-            'Configure chamber, structure/alloy/bolts (Padm), De Laval nozzle with slag/erosion, and a multi-grain stack across 9 shapes and custom fuels. With no blocking errors, hit SIMULATE at top right.',
-            'Configurez chambre, structure/vis (Padm), tuyère avec érosion/scories et empilement de grains (9 formes). Sans erreur bloquante, cliquez sur SIMULER.',
-            'Configura camera, struttura/viti (Padm), ugello con erosione/scorie e grani (9 forme). Senza errori bloccanti, premi SIMULA.'
+            'Configura cámara, estructura/material/tornillos (Padm), tobera Laval con escoria/erosión y una pila de granos con 10 geometrías (9 paramétricas + Personalizada dibujada) y química propia. Cuando no haya errores bloqueantes, pulsa SIMULAR arriba a la derecha.',
+            'Configure chamber, structure/alloy/bolts (Padm), De Laval nozzle with slag/erosion, and a multi-grain stack across 10 shapes (9 parametric + Custom Drawn) and custom fuels. With no blocking errors, hit SIMULATE at top right.',
+            'Configurez chambre, structure/vis (Padm), tuyère avec érosion/scories et empilement de grains (10 formes dont Personnalisée dessinée). Sans erreur bloquante, cliquez sur SIMULER.',
+            'Configura camera, struttura/viti (Padm), ugello con erosione/scorie e grani (10 forme inclusa Personalizzata disegnata). Senza errori bloccanti, premi SIMULA.'
           ),
           autofillLabel: loc('Simular Motor Actual', 'Simulate Active Motor', 'Simuler Moteur Actuel', 'Simula Motore Attuale'),
           onAutofill: () => {

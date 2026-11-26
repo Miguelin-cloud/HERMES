@@ -18,6 +18,7 @@ import {
   getGrainModule,
   hasCrossSectionContours,
   isComplexGrain,
+  isPointInsideContourLoops,
   signedLoopArea2D,
 } from '../lib/grains';
 import {
@@ -1400,6 +1401,8 @@ export function Motor3DViewer({
 
       const isComplex = hasCrossSectionContours(grain.shape);
       let complexShapes: THREE.Shape[] | null = null;
+      let customCenterVoid = false;
+      let customEqRadiusCm = 0;
       let isConsumed =
         currentL <= 0.05 ||
         (grain.shape !== 3 && grain.shape !== 8 && currentRInner >= currentROuter) ||
@@ -1418,12 +1421,20 @@ export function Motor3DViewer({
           if (!complexLoops || complexLoops.length === 0 || (table && xBurn >= table.xMaxMm)) {
             isConsumed = true;
           } else {
-            // Rotate asymmetric shapes (5: Moonburner, 6: C-Slot, 7: D-Grain) +90 deg so the feature sits on top (+y),
-            // matching longitudinal views and ensuring cutaway (x >= 0) never loses remaining bottom propellant late in burn
+            if (grain.shape === 10) {
+              customCenterVoid = !isPointInsideContourLoops(0, 0, complexLoops);
+              if (table) {
+                const evalNow = evaluateBurnbackTableAtDepth(table, xBurn, grain, effectiveMotor.Dc || grain.D0);
+                customEqRadiusCm = Math.max(0, evalNow.d * 0.05);
+              }
+            }
+            // Orient asymmetric shapes so top in 2D sketch (+y up in Three.js) aligns consistently with cutaway (z <= 0)
             const orientedLoops =
               grain.shape === 5 || grain.shape === 6 || grain.shape === 7
                 ? complexLoops.map((loop) => loop.map((pt) => ({ x: -pt.y, y: pt.x })))
-                : complexLoops;
+                : grain.shape === 10
+                  ? complexLoops.map((loop) => loop.map((pt) => ({ x: pt.x, y: -pt.y })).reverse())
+                  : complexLoops;
             const classified = isCutaway
               ? clipContoursToRightHalfPlane(orientedLoops)
               : classifyContoursToOutersAndHoles(orientedLoops);
@@ -1570,16 +1581,23 @@ export function Motor3DViewer({
           const isFlameEnclosed =
             grain.shape === 5
               ? currentRInner + moonOffsetCm < currentROuter * 0.96
-              : currentRInner < currentROuter;
+              : grain.shape === 10
+                ? customCenterVoid && customEqRadiusCm > 0.05 && customEqRadiusCm < currentROuter * 0.88
+                : currentRInner < currentROuter;
           const showComplexCoreFlame =
             !isComplex ||
             (complexShapes !== null &&
               complexShapes.length === 1 &&
-              (grain.shape === 5 ? isFlameEnclosed : currentRInner < currentROuter * 0.85));
+              (grain.shape === 5
+                ? isFlameEnclosed
+                : grain.shape === 10
+                  ? isFlameEnclosed
+                  : currentRInner < currentROuter * 0.85));
 
           if (normThrust > 0.05 && hasCenterFlamePort && isFlameEnclosed && showComplexCoreFlame) {
+            const effFlameRefCm = grain.shape === 10 ? customEqRadiusCm : currentRInner;
             const flameRadius = isComplex
-              ? Math.max(0.05, Math.min(currentRInner * 0.82, currentROuter * 0.72))
+              ? Math.max(0.05, Math.min(effFlameRefCm * 0.82, currentROuter * 0.72))
               : Math.max(0.05, currentRInner * 0.88);
             const phiStart = isCutaway ? Math.PI * 0.5 : 0;
             const phiLength = isCutaway ? Math.PI : Math.PI * 2;

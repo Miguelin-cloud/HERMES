@@ -1,4 +1,5 @@
 import {
+  area,
   areaPaths,
   difference,
   EndType,
@@ -35,6 +36,7 @@ export interface ClipperBurnbackOptions {
   circleSegments?: number;
   arcToleranceMm?: number;
   criticalDepthsMm?: number[];
+  adaptiveRefine?: boolean;
 }
 
 function chooseAdaptiveScale(outerRadiusMm: number): number {
@@ -44,7 +46,7 @@ function chooseAdaptiveScale(outerRadiusMm: number): number {
   return Math.max(1000, Math.min(50_000, Math.floor(1_000_000 / safeMaxRadius)));
 }
 
-function signedAreaMm2(pts: GrainPoint2D[]): number {
+export function signedAreaMm2(pts: GrainPoint2D[]): number {
   const m = pts.length;
   if (m < 3) return 0;
   let sum = 0;
@@ -238,6 +240,49 @@ export function buildUnifiedVoidLoopsMm(
   return fromPaths64(diff, scale);
 }
 
+export interface VoidSolidOperation {
+  loop: GrainContourLoop;
+  kind: 'void' | 'solid';
+}
+
+/**
+ * Evalúa secuencialmente en orden cronológico una lista de recortes (`void`) e islas sólidas (`solid`)
+ * mediante Clipper2, permitiendo recortar huecos dentro de islas previas con profundidad de anidamiento arbitraria.
+ * Los contornos resultantes se ordenan por área absoluta descendente para preservar la jerarquía de inclusión
+ * (hueco exterior CCW -> isla CW -> hueco interior CCW -> ...) al guardar y volver a editar.
+ */
+export function buildSequentialVoidLoopsMm(
+  operations: VoidSolidOperation[],
+  outerRadiusRefMm: number = 50
+): GrainContourLoop[] {
+  const scale = chooseAdaptiveScale(Math.max(1, outerRadiusRefMm));
+  let currentVoidPaths: Paths64 = [];
+
+  for (let i = 0; i < operations.length; i++) {
+    const op = operations[i];
+    if (!op.loop || op.loop.length < 3) continue;
+    const ccw = ensureCcwLoop(op.loop);
+    if (Math.abs(signedAreaMm2(ccw)) < 1e-10) continue;
+    const opPath = toPath64(ccw, scale);
+
+    if (op.kind === 'solid') {
+      if (currentVoidPaths.length > 0) {
+        currentVoidPaths = difference(currentVoidPaths, [opPath], FillRule.NonZero);
+      }
+    } else {
+      currentVoidPaths =
+        currentVoidPaths.length > 0
+          ? union(currentVoidPaths, [opPath], FillRule.NonZero)
+          : [opPath];
+    }
+  }
+
+  if (currentVoidPaths.length === 0) return [];
+  const loops = fromPaths64(currentVoidPaths, scale);
+  loops.sort((a, b) => Math.abs(signedAreaMm2(b)) - Math.abs(signedAreaMm2(a)));
+  return loops;
+}
+
 /**
  * Evalúa exactamente área transversal, área de paso y perímetros iniciales en x = 0 mediante Clipper2.
  */
@@ -287,6 +332,69 @@ export function measureInitialCrossSectionClipper(
     portAreaMm2,
     innerBurnPerimeterMm,
     outerBurnPerimeterMm,
+  };
+}
+
+/**
+ * Evalúa una sección transversal personalizada con Clipper2 incluyendo conteo de piezas
+ * sólidas desconectadas (para advertir sobre cortes que parten el grano o islas sueltas).
+ */
+export function analyzeCustomCrossSectionClipper(
+  outerRadiusMm: number,
+  innerVoidLoopsMm: GrainContourLoop[],
+  options?: {
+    preserveVoidOrientation?: boolean;
+    ci?: number;
+    osi?: number;
+    circleSegments?: number;
+  }
+): {
+  crossSectionAreaMm2: number;
+  portAreaMm2: number;
+  innerBurnPerimeterMm: number;
+  outerBurnPerimeterMm: number;
+  propellantPieceCount: number;
+} {
+  const outerR = Math.max(0.25, outerRadiusMm);
+  const circleSegments = Math.max(48, Math.round(options?.circleSegments ?? 144));
+  const scale = chooseAdaptiveScale(outerR);
+  const invSq = 1 / (scale * scale);
+
+  const outerPaths: Paths64 = [makeCirclePath64(outerR, circleSegments, scale)];
+  const voidPaths: Paths64 = innerVoidLoopsMm
+    .filter((l) => l.length >= 3)
+    .map((l) => toPath64(options?.preserveVoidOrientation ? l : ensureCcwLoop(l), scale));
+
+  const propellantPaths: Paths64 =
+    voidPaths.length > 0 ? difference(outerPaths, voidPaths, FillRule.NonZero) : outerPaths;
+
+  const crossSectionAreaMm2 = Math.max(0, areaPaths(propellantPaths) * invSq);
+  const envArea = Math.PI * outerR * outerR;
+  const portAreaMm2 = Math.max(0, envArea - crossSectionAreaMm2);
+
+  let propellantPieceCount = 0;
+  for (let i = 0; i < propellantPaths.length; i++) {
+    const shellAreaMm2 = area(propellantPaths[i]) * invSq;
+    if (shellAreaMm2 > 1e-3) {
+      propellantPieceCount += 1;
+    }
+  }
+
+  const { innerBurnPerimeterMm, outerBurnPerimeterMm } = measureClassifiedPerimeters(
+    propellantPaths,
+    scale,
+    outerR,
+    circleSegments,
+    options?.ci ?? 1,
+    options?.osi ?? 0
+  );
+
+  return {
+    crossSectionAreaMm2,
+    portAreaMm2,
+    innerBurnPerimeterMm,
+    outerBurnPerimeterMm,
+    propellantPieceCount,
   };
 }
 
@@ -597,6 +705,49 @@ export function solveGrainBurnbackClipper(
       outerBurnPerimeterMm: slice.outerBurnPerimeterMm,
       contoursMm: slice.contoursMm,
     });
+  }
+
+  // Refinamiento adaptativo en transiciones geométricas bruscas (rotura de lóbulos/slivers)
+  if (options.adaptiveRefine && samples.length >= 3) {
+    const perimJumpThresh = Math.max(1.0, 0.08 * 2 * Math.PI * outerR);
+    const minDxMm = Math.max(0.03, xMaxMm * 0.004);
+    const extraDepths: number[] = [];
+
+    for (let i = 0; i < samples.length - 1; i++) {
+      const prev = samples[i];
+      const curr = samples[i + 1];
+      const dx = curr.xMm - prev.xMm;
+      if (dx <= minDxMm) continue;
+
+      const dInner = Math.abs(curr.innerBurnPerimeterMm - prev.innerBurnPerimeterMm);
+      const dOuter = Math.abs(curr.outerBurnPerimeterMm - prev.outerBurnPerimeterMm);
+      if (dInner > perimJumpThresh || dOuter > perimJumpThresh) {
+        extraDepths.push(
+          prev.xMm + dx * 0.25,
+          prev.xMm + dx * 0.5,
+          prev.xMm + dx * 0.75
+        );
+        if (extraDepths.length >= 28) break;
+      }
+    }
+
+    if (extraDepths.length > 0) {
+      for (let i = 0; i < extraDepths.length; i++) {
+        const xMm = extraDepths[i];
+        const slice = evaluateCrossSection(xMm, true);
+        const rEff = Math.max(0, outerR - osi * xMm);
+        const envelopeArea = Math.PI * rEff * rEff;
+        samples.push({
+          xMm,
+          crossSectionAreaMm2: slice.areaMm2,
+          portAreaMm2: Math.max(0, envelopeArea - slice.areaMm2),
+          innerBurnPerimeterMm: slice.innerBurnPerimeterMm,
+          outerBurnPerimeterMm: slice.outerBurnPerimeterMm,
+          contoursMm: slice.contoursMm,
+        });
+      }
+      samples.sort((a, b) => a.xMm - b.xMm);
+    }
   }
 
   // Punto final exacto de extinción

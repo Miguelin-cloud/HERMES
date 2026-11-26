@@ -287,6 +287,8 @@ export function calculateGrainVolumeMm3(
     | 'slotWidth'
     | 'slotDepth'
     | 'rodDiameter'
+    | 'customGrainId'
+    | 'customGrainSnapshot'
   >
 ): {
   blockVolumeMm3: number;

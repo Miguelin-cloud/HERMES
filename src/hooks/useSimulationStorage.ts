@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CustomPropellant, DEFAULT_PROPELLANTS, GrainInput, MotorInput, NozzleInput } from '../lib/types';
+import { CustomGrainShape, CustomPropellant, DEFAULT_PROPELLANTS, GrainInput, MotorInput, NozzleInput } from '../lib/types';
 import { MissionControlSnapshot } from '../lib/missionControlStorage';
 import { normalizeMotorWithStructure } from '../lib/motorStructure';
 import { loadCustomPropellantsFromStorage, saveCustomPropellantsToStorage } from '../components/CustomPropellantModal';
+import { loadCustomGrainsFromStorage, saveCustomGrainsToStorage } from '../lib/grains';
 import { trackEvent } from '../lib/telemetry';
 import {
   applyThemeConfigToDocument,
@@ -33,6 +34,7 @@ export interface SavedSimulationEntry {
   grains: GrainInput[];
   missionControl?: MissionControlSnapshot;
   bundledPropellants?: CustomPropellant[];
+  bundledCustomGrains?: CustomGrainShape[];
   summary?: SavedSimulationSummary;
 }
 
@@ -210,6 +212,10 @@ export function useSimulationStorage() {
     return loadCustomPropellantsFromStorage();
   });
 
+  const [customGrainShapes, setCustomGrainShapes] = useState<CustomGrainShape[]>(() => {
+    return loadCustomGrainsFromStorage();
+  });
+
   const [grains, setGrains] = useState<GrainInput[]>(() => {
     try {
       const saved = localStorage.getItem('hermes_grains');
@@ -240,6 +246,21 @@ export function useSimulationStorage() {
     // Reset deleted custom propellant references back to default KNDX (id=1)
     const validIds = new Set([...DEFAULT_PROPELLANTS.map((p) => p.id), ...list.map((p) => p.id)]);
     setGrains((prev) => prev.map((g) => (validIds.has(Number(g.propellantType)) ? g : { ...g, propellantType: 1 })));
+  };
+
+  const handleSaveCustomGrains = (list: CustomGrainShape[]) => {
+    setCustomGrainShapes(list);
+    saveCustomGrainsToStorage(list);
+    const byId = new Map(list.map((shape) => [shape.id, shape]));
+    setGrains((prev) =>
+      prev.map((g) => {
+        if (g.shape !== 10 || !g.customGrainId) return g;
+        const updated = byId.get(g.customGrainId);
+        return updated
+          ? { ...g, customGrainSnapshot: updated }
+          : { ...g, customGrainId: undefined, customGrainSnapshot: undefined };
+      })
+    );
   };
 
   const addGrain = () => {
@@ -284,6 +305,8 @@ export function useSimulationStorage() {
     isEditingSlagRef,
     customPropellants,
     handleSavePropellants,
+    customGrainShapes,
+    handleSaveCustomGrains,
     allPropellants,
   };
 }

@@ -1,4 +1,4 @@
-import { CustomPropellant, GrainInput, GrainShapeId, MotorInput, NozzleInput } from '../types';
+import { CustomGrainShape, CustomPropellant, GrainInput, GrainShapeId, MotorInput, NozzleInput } from '../types';
 
 export type { GrainShapeId };
 
@@ -64,6 +64,7 @@ export interface GrainRuntimeContext {
   nozzle: NozzleInput;
   prop: CustomPropellant;
   customPropellants?: CustomPropellant[];
+  customGrainShapes?: CustomGrainShape[];
   geometryQuality?: 'fast' | 'high';
 }
 
@@ -153,7 +154,8 @@ export type GrainShapeKey =
   | 'cslot'
   | 'dgrain'
   | 'rodtube'
-  | 'wagonwheel';
+  | 'wagonwheel'
+  | 'custom';
 
 export interface GrainGeometryModule {
   readonly shape: GrainShapeId;
@@ -176,6 +178,8 @@ export interface GrainGeometryModule {
       | 'slotWidth'
       | 'slotDepth'
       | 'rodDiameter'
+      | 'customGrainId'
+      | 'customGrainSnapshot'
     > & Partial<Pick<GrainInput, 'osi' | 'ci' | 'ei'>>
   ): GrainInitialGeometry;
 
@@ -213,6 +217,8 @@ export interface GrainGeometryModule {
       | 'slotWidth'
       | 'slotDepth'
       | 'rodDiameter'
+      | 'customGrainId'
+      | 'customGrainSnapshot'
     >,
     xBurnMm?: number
   ): GrainCrossSectionPrimitives;
@@ -234,6 +240,8 @@ export interface GrainGeometryModule {
       | 'slotWidth'
       | 'slotDepth'
       | 'rodDiameter'
+      | 'customGrainId'
+      | 'customGrainSnapshot'
     >,
     xBurnMm: number,
     burnbackTable?: GrainBurnbackTable | null
@@ -330,7 +338,8 @@ function evalPchipSegment(
 export function evaluateBurnbackTableAtDepth(
   table: GrainBurnbackTable,
   xMm: number,
-  grain: Pick<GrainInput, 'D0' | 'd0' | 'd0mayor' | 'L0' | 'N' | 'ei' | 'ci' | 'osi'>,
+  grain: Pick<GrainInput, 'D0' | 'd0' | 'd0mayor' | 'L0' | 'N' | 'ei' | 'ci' | 'osi'> &
+    Partial<Pick<GrainInput, 'shape'>>,
   motorDcMm: number
 ): GrainStepEvaluation {
   const chamberArea = (Math.PI / 4) * Math.pow(motorDcMm, 2);
@@ -448,8 +457,16 @@ export function evaluateBurnbackTableAtDepth(
   const Aduct = Math.max(1e-6, chamberArea - crossArea);
   const tweb = Math.max(0, effectiveMaxX - clampedX);
   const D = Math.max(1e-4, grain.D0 - grain.osi * 2 * clampedX);
-  const d = Math.min(D, Math.max(0, grain.d0 || 0) + grain.ci * 2 * clampedX);
-  const dmayor = Math.min(D, Math.max(0, grain.d0mayor || 0) + grain.ci * 2 * clampedX);
+
+  let d = Math.min(D, Math.max(0, grain.d0 || 0) + grain.ci * 2 * clampedX);
+  let dmayor = Math.min(D, Math.max(0, grain.d0mayor || 0) + grain.ci * 2 * clampedX);
+  if (grain.shape === 10) {
+    const grainEnvArea = (Math.PI / 4) * D * D;
+    const portAreaApprox = Math.max(0, grainEnvArea - crossArea);
+    const dEq = Math.min(D, 2 * Math.sqrt(portAreaApprox / Math.PI));
+    d = dEq;
+    dmayor = dEq;
+  }
 
   return {
     isConsumed: false,

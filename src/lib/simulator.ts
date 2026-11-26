@@ -63,7 +63,7 @@ export function calculateThroatErosion(
   return { Dt, At, ydero };
 }
 
-export function runSimulation({ motor, grains, nozzle, customPropellants, geometryQuality }: SimulationInputs): SimulationResults {
+export function runSimulation({ motor, grains, nozzle, customPropellants, customGrainShapes, geometryQuality }: SimulationInputs): SimulationResults {
   const t: number[] = [];
   const P0_MPa: number[] = [];
   const P0_gage: number[] = [];
@@ -89,6 +89,7 @@ export function runSimulation({ motor, grains, nozzle, customPropellants, geomet
       nozzle,
       prop,
       customPropellants,
+      customGrainShapes,
       geometryQuality,
     });
   });
@@ -539,7 +540,15 @@ export function runSimulation({ motor, grains, nozzle, customPropellants, geomet
     F_kg,
     E_N,
     E_kg,
-    grains,
+    grains: grains.map((g, idx) =>
+      state[idx]?.customGrainSnapshot
+        ? {
+            ...g,
+            customGrainId: state[idx].customGrainId ?? g.customGrainId,
+            customGrainSnapshot: state[idx].customGrainSnapshot,
+          }
+        : g
+    ),
     grains_x,
     grains_Abc,
     grains_Abe,
@@ -548,6 +557,7 @@ export function runSimulation({ motor, grains, nozzle, customPropellants, geomet
     grains_burnback: state.map((s) => s.burnbackTable ?? null),
     propellantType: dominantPropellantType,
     customPropellants,
+    customGrainShapes,
     Kn: Kn_arr,
     At_mm2: At_mm2_arr,
     r_burn: r_burn_arr,

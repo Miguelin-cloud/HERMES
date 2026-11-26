@@ -183,41 +183,41 @@ export function GuideBookModal({
         difficulty: 'basic',
         estimatedMinutes: 4,
         icon: Layers,
-        titleEs: 'Granos de Propelente (9 Geometrías, rhorat y Validación)',
-        titleEn: 'Propellant Grains (9 Geometries, rhorat & Validation)',
-        titleFr: 'Grains de Propergol (9 Géométries, rhorat & Validation)',
-        titleIt: 'Grani di Propellente (9 Geometrie, rhorat e Validazione)',
+        titleEs: 'Granos de Propelente (10 Geometrías + Estudio de Dibujo, rhorat y Validación)',
+        titleEn: 'Propellant Grains (10 Geometries + Custom Sketch Studio, rhorat & Validation)',
+        titleFr: 'Grains de Propergol (10 Géométries + Studio Dessin, rhorat & Validation)',
+        titleIt: 'Grani di Propellente (10 Geometrie + Studio Disegno, rhorat e Validazione)',
         summaryEs:
-          'Configura segmentos con "+ Nuevo Grano", domina las 9 formas disponibles (BATES, Estrella, Macizo, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube y Wagon Wheel), densidad real rhorat, inhibición EXT/ENDS/INT y alertas geométricas.',
+          'Configura segmentos con "+ Nuevo Grano", domina las 9 formas paramétricas más la forma Personalizada dibujada (mano alzada suavizada, simetría radial, cortes secuenciales hueco/isla, guardado local por nombre), densidad rhorat, inhibición EXT/ENDS/INT y alertas.',
         summaryEn:
-          'Configure segments with "+ New Grain", master all 9 shapes (BATES, Star, Solid, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube, Wagon Wheel), density ratio rhorat, EXT/ENDS/INT inhibition, and geometry validation.',
+          'Configure segments with "+ New Grain", master all 9 parametric shapes plus Custom Drawn shapes (smoothed freehand, radial symmetry, sequential void/island cuts, named local library), rhorat, EXT/ENDS/INT inhibition, and validation.',
         summaryFr:
-          'Configurez vos blocs avec "+ Nouveau Grain", maîtrisez les 9 formes (BATES, Étoile, Plein, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube, Wagon Wheel), rhorat, l’inhibition EXT/ENDS/INT et les alertes.',
+          'Configurez vos blocs avec "+ Nouveau Grain", maîtrisez les 9 formes paramétriques et la forme Personnalisée dessinée (main levée lissée, symétrie radiale, coupes séquentielles vide/îlot, bibliothèque locale nommée), rhorat et inhibition.',
         summaryIt:
-          'Configura i blocchi con "+ Nuovo Grano", gestisci tutte le 9 geometrie (BATES, Stella, Solido, Finocyl, Moonburner, C-Slot, D-Grain, Rod & Tube, Wagon Wheel), rhorat, inibizione EXT/ENDS/INT e controlli.',
+          'Configura i blocchi con "+ Nuovo Grano", gestisci tutte le 9 geometrie parametriche più la forma Personalizzata disegnata (mano libera smussata, simmetria radiale, tagli sequenziali vuoto/isola, libreria locale per nome), rhorat e inibizione.',
         bulletPointsEs: [
-          '9 geometrías reales con parámetros dedicados y vistas transversales/longitudinales sincronizadas.',
-          'Factor rhorat (densidad real / teórica), dimensiones D₀, d₀, longitud L y número de bloques N.',
-          'Inhibición de caras: EXT (perímetro exterior), ENDS (caras planas) e INT (núcleo interno).',
-          'Validación en vivo: bloqueo por geometría imposible y aviso preventivo ante conflictos con cámara.'
+          '9 geometrías paramétricas + 10ª forma Personalizada dibujada con selector por nombre y botón Dibujar/Editar.',
+          'Estudio de Formas: mano alzada suavizada, polilínea, círculo, simetría 1×–12× y cortes secuenciales Hueco/Isla (incluso agujerear islas).',
+          'Factor rhorat, dimensiones D₀, d₀, longitud L, bloques N e inhibición de caras EXT / ENDS / INT.',
+          'Privacidad local: cada usuario guarda, nombra y borra sus formas solo en su navegador; se exportan si van dentro de un .hrms.'
         ],
         bulletPointsEn: [
-          'All 9 real geometries with dedicated dimensions and synchronized cross/longitudinal previews.',
-          'rhorat density factor (actual / theoretical), D₀, d₀, segment length L, and count N.',
-          'Face burning toggles: EXT (outer wall), ENDS (end faces), and INT (internal core).',
-          'Live validation: hard blocks for impossible geometry and warnings for casing clearance conflicts.'
+          '9 parametric geometries + 10th Custom Drawn shape with named library dropdown and Draw/Edit button.',
+          'Shape Studio: smoothed freehand, polyline, circle, 1×–12× symmetry, and sequential Void/Island cuts (even cutting inside islands).',
+          'rhorat density factor, D₀, d₀, length L, segment count N, and EXT / ENDS / INT burning faces.',
+          'Local privacy: saved shapes are named, deleted, and stored only in each user’s browser unless explicitly bundled inside a .hrms file.'
         ],
         bulletPointsFr: [
-          'Les 9 géométries réelles avec paramètres dédiés et vues synchronisées.',
-          'Facteur rhorat (densité réelle / théorique), cotes D₀, d₀, longueur L et nombre de blocs N.',
-          'Inhibition des faces : EXT (paroi externe), ENDS (extrémités) et INT (canal interne).',
-          'Validation en direct : blocage si géométrie impossible et alerte de jeu radial avec la chambre.'
+          '9 géométries paramétriques + 10e forme Personnalisée dessinée avec menu déroulant par nom et bouton Dessiner/Modifier.',
+          'Studio de Formes : main levée lissée, polyligne, cercle, symétrie 1×–12× et découpes séquentielles Vide/Îlot.',
+          'Facteur rhorat, cotes D₀, d₀, longueur L, blocs N et faces actives EXT / ENDS / INT.',
+          'Confidentialité locale : vos formes nommées restent privées dans votre navigateur sauf export volontaire en .hrms.'
         ],
         bulletPointsIt: [
-          'Tutte le 9 geometrie reali con parametri dedicati e viste sincronizzate.',
-          'Fattore rhorat (densità reale / teorica), quote D₀, d₀, lunghezza L e numero blocchi N.',
-          'Inibizione facce: EXT (parete esterna), ENDS (estremità) e INT (nucleo interno).',
-          'Validazione dal vivo: blocco per geometrie impossibili e avviso di conflitto con la camera.'
+          '9 geometrie parametriche + 10ª forma Personalizzata disegnata con elenco per nome e pulsante Disegna/Modifica.',
+          'Studio Forme: mano libera smussata, polilinea, cerchio, simmetria 1×–12× e tagli sequenziali Vuoto/Isola (anche dentro le isole).',
+          'Fattore rhorat, quote D₀, d₀, lunghezza L, blocchi N e facce attive EXT / ENDS / INT.',
+          'Privacy locale: le forme salvate con nome restano private nel proprio browser e si condividono solo nei pacchetti .hrms.'
         ],
         presetLabelEs: 'Cargar BATES 4x54mm',
         presetLabelEn: 'Load BATES 4x54mm',
@@ -602,13 +602,13 @@ export function GuideBookModal({
         titleFr: 'Sauvegarde, Bibliothèque & Fichiers .hrms',
         titleIt: 'Salvataggio, Libreria Organizzata e File .hrms',
         summaryEs:
-          'Guarda proyectos desde la cabecera con carpetas y detector de sobrescritura, importa/exporta archivos .hrms en 1 clic (incluyendo propulsantes personalizados) y gestiona tu Biblioteca desde la barra lateral.',
+          'Guarda proyectos desde la cabecera con carpetas y detector de sobrescritura, importa/exporta archivos .hrms en 1 clic (incluyendo propulsantes y formas de grano personalizadas) y gestiona tu Biblioteca desde la barra lateral.',
         summaryEn:
-          'Save projects from the header with folders and overwrite detection, import/export .hrms packages in 1 click (including custom propellants), and organize your Library from the sidebar.',
+          'Save projects from the header with folders and overwrite detection, import/export .hrms packages in 1 click (including custom propellants and custom grain shapes), and organize your Library from the sidebar.',
         summaryFr:
-          'Enregistrez depuis l’en-tête avec dossiers et détection d’écrasement, importez/exportez des paquets .hrms (propergols inclus) et gérez la Bibliothèque depuis la barre latérale.',
+          'Enregistrez depuis l’en-tête avec dossiers et détection d’écrasement, importez/exportez des paquets .hrms (propergols et formes de grain inclus) et gérez la Bibliothèque depuis la barre latérale.',
         summaryIt:
-          'Salva dall’intestazione con cartelle e rilevamento sovrascritture, importa/esporta pacchetti .hrms in 1 clic (inclusi propellenti personalizzati) e gestisci la Libreria dalla barra laterale.',
+          'Salva dall’intestazione con cartelle e rilevamento sovrascritture, importa/esporta pacchetti .hrms in 1 clic (inclusi propellenti e forme personalizzate) e gestisci la Libreria dalla barra laterale.',
         bulletPointsEs: [
           'Botón Save en cabecera: selector visual de carpetas existentes, vista previa de métricas y aviso de sobrescritura.',
           'Botón .hrms en cabecera: descarga portátil completa o importación directa a Simulate o Biblioteca.',

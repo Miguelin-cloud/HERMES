@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { SimulationResults } from './lib/types';
+import { CustomGrainShape, SimulationResults } from './lib/types';
 import {
   calculateMotorStructure,
   calculateTotalPropellantMassKg,
@@ -31,6 +31,7 @@ import { GuideBookModal } from './components/GuideBookModal';
 import { InteractiveTourOverlay, TourSequence } from './components/InteractiveTourOverlay';
 import { getTourSequences } from './lib/toursData';
 import { CustomPropellantModal } from './components/CustomPropellantModal';
+import { CustomGrainModal } from './components/CustomGrainModal';
 import { Language, translations } from './lib/i18n';
 import { Logo } from './components/Logo';
 import { recordAppLaunch, trackTabVisit, trackEvent } from './lib/telemetry';
@@ -47,7 +48,7 @@ import {
   loadMissionControlAero,
   parseAeroDataRaw,
 } from './lib/missionControlStorage';
-import { resolveImportedPropellants } from './lib/hermesFile';
+import { resolveImportedCustomGrains, resolveImportedPropellants } from './lib/hermesFile';
 import { createStudySeriesFromLibraryEntry } from './lib/studyEngine';
 import { loadActiveStudyState, saveActiveStudyState } from './lib/studyStorage';
 
@@ -119,6 +120,8 @@ export default function App() {
     isEditingSlagRef,
     customPropellants,
     handleSavePropellants: persistPropellants,
+    customGrainShapes,
+    handleSaveCustomGrains: persistCustomGrains,
   } = useSimulationStorage();
 
   const [showSplash, setShowSplash] = useState(true);
@@ -160,6 +163,9 @@ export default function App() {
 
   const [showPropellantModal, setShowPropellantModal] = useState<boolean>(false);
   const [targetGrainForModal, setTargetGrainForModal] = useState<string | null>(null);
+  const [showCustomGrainModal, setShowCustomGrainModal] = useState<boolean>(false);
+  const [targetGrainForCustomModal, setTargetGrainForCustomModal] = useState<string | null>(null);
+  const [startCustomGrainNew, setStartCustomGrainNew] = useState<boolean>(false);
   const [results, setResults] = useState<SimulationResults | null>(null);
 
   useEffect(() => {
@@ -204,6 +210,24 @@ export default function App() {
     if (targetGrainForModal) {
       setGrains(grains.map((g) => (g.id === targetGrainForModal ? { ...g, propellantType: propellantId } : g)));
       setTargetGrainForModal(null);
+    }
+  };
+
+  const handleSelectCustomGrainForGrain = (shape: CustomGrainShape) => {
+    if (targetGrainForCustomModal) {
+      setGrains((prev) =>
+        prev.map((g) =>
+          g.id === targetGrainForCustomModal
+            ? {
+                ...g,
+                shape: 10,
+                customGrainId: shape.id,
+                customGrainSnapshot: shape,
+              }
+            : g
+        )
+      );
+      setTargetGrainForCustomModal(null);
     }
   };
 
@@ -289,7 +313,7 @@ export default function App() {
     }
     try {
       setSimulationError(null);
-      const res = runSimulation({ motor, nozzle, grains, customPropellants });
+      const res = runSimulation({ motor, nozzle, grains, customPropellants, customGrainShapes });
       setResults(res);
       setActiveTab('results');
       trackEvent('simulation');
@@ -309,7 +333,13 @@ export default function App() {
     setGrains(newGrains);
     trackEvent('smart_search');
     try {
-      const res = runSimulation({ motor: mergedMotor, nozzle: newNozzle, grains: newGrains, customPropellants });
+      const res = runSimulation({
+        motor: mergedMotor,
+        nozzle: newNozzle,
+        grains: newGrains,
+        customPropellants,
+        customGrainShapes,
+      });
       setResults(res);
       trackEvent('simulation');
     } catch (err) {
@@ -400,7 +430,11 @@ export default function App() {
     if (payload.nextCustomPropellants) {
       persistPropellants(payload.nextCustomPropellants);
     }
+    if (payload.nextCustomGrains) {
+      persistCustomGrains(payload.nextCustomGrains);
+    }
     const effectiveProps = payload.nextCustomPropellants || customPropellants;
+    const effectiveCustomGrains = payload.nextCustomGrains || customGrainShapes;
     const effectiveMotor = payload.motor ? normalizeMotorWithStructure(payload.motor) : motor;
     const effectiveNozzle = payload.nozzle ?? nozzle;
     const effectiveGrains = payload.grains ?? grains;
@@ -422,6 +456,7 @@ export default function App() {
           nozzle: effectiveNozzle,
           grains: effectiveGrains,
           customPropellants: effectiveProps,
+          customGrainShapes: effectiveCustomGrains,
         });
         setResults(res);
       } catch (err) {
@@ -439,10 +474,18 @@ export default function App() {
     if (resolved.addedNames.length > 0) {
       persistPropellants(resolved.nextCustomPropellants);
     }
+    const resolvedCustomGrains = resolveImportedCustomGrains(
+      entry.bundledCustomGrains || [],
+      resolved.remappedGrains,
+      customGrainShapes
+    );
+    if (resolvedCustomGrains.addedNames.length > 0) {
+      persistCustomGrains(resolvedCustomGrains.nextCustomGrains);
+    }
     const normalizedMotor = normalizeMotorWithStructure(entry.motor);
     setMotor(normalizedMotor);
     setNozzle(entry.nozzle);
-    setGrains(resolved.remappedGrains);
+    setGrains(resolvedCustomGrains.remappedGrains);
     if (entry.missionControl) {
       missionControlManagedRef.current = false;
       applyImportedMissionControlSnapshot(entry.missionControl);
@@ -452,8 +495,12 @@ export default function App() {
       const res = runSimulation({
         motor: normalizedMotor,
         nozzle: entry.nozzle,
-        grains: resolved.remappedGrains,
+        grains: resolvedCustomGrains.remappedGrains,
         customPropellants: resolved.addedNames.length > 0 ? resolved.nextCustomPropellants : customPropellants,
+        customGrainShapes:
+          resolvedCustomGrains.addedNames.length > 0
+            ? resolvedCustomGrains.nextCustomGrains
+            : customGrainShapes,
       });
       setResults(res);
     } catch {
@@ -696,6 +743,7 @@ export default function App() {
               setSlagMagnitudeStr={setSlagMagnitudeStr}
               isEditingSlagRef={isEditingSlagRef}
               customPropellants={customPropellants}
+              customGrainShapes={customGrainShapes}
               motorStruct={motorStruct}
               motorValidation={motorValidation}
               totalPropellantMassKg={totalPropellantMassKg}
@@ -707,6 +755,11 @@ export default function App() {
               onOpenPropellantModal={(grainId) => {
                 setTargetGrainForModal(grainId);
                 setShowPropellantModal(true);
+              }}
+              onOpenCustomGrainModal={(grainId, startNew = false) => {
+                setTargetGrainForCustomModal(grainId);
+                setStartCustomGrainNew(Boolean(startNew));
+                setShowCustomGrainModal(true);
               }}
             />
           </TabsContent>
@@ -886,6 +939,7 @@ export default function App() {
           setExportFormat={setExportFormat}
           results={results}
           customPropellants={customPropellants}
+          customGrainShapes={customGrainShapes}
           simApogee={simApogee}
           showFeedbackModal={showFeedbackModal}
           setShowFeedbackModal={setShowFeedbackModal}
@@ -926,10 +980,12 @@ export default function App() {
           nozzle={nozzle}
           grains={grains}
           customPropellants={customPropellants}
+          customGrainShapes={customGrainShapes}
           motorClassHint={results?.summary.motorClass}
           onApplyImportedWorkspace={handleApplyHermesWorkspace}
           onSaveImportedToLibrary={(entry) => setSavedSimulations((prev) => [...prev, entry])}
           onPersistCustomPropellants={persistPropellants}
+          onPersistCustomGrains={persistCustomGrains}
         />
 
         <GuideBookModal
@@ -988,6 +1044,30 @@ export default function App() {
           onSelectPropellantForGrain={handleSelectPropellantForGrain}
           lang={lang}
           theme={theme}
+        />
+
+        <CustomGrainModal
+          isOpen={showCustomGrainModal}
+          onClose={() => {
+            setShowCustomGrainModal(false);
+            setTargetGrainForCustomModal(null);
+            setStartCustomGrainNew(false);
+          }}
+          lang={lang}
+          customGrainShapes={customGrainShapes}
+          onSaveCustomGrains={persistCustomGrains}
+          onSelectCustomGrainForGrain={
+            targetGrainForCustomModal ? handleSelectCustomGrainForGrain : undefined
+          }
+          referenceDiameterMm={
+            grains.find((g) => g.id === targetGrainForCustomModal)?.D0 ||
+            grains[0]?.D0 ||
+            56
+          }
+          initialSelectedId={
+            grains.find((g) => g.id === targetGrainForCustomModal)?.customGrainId || null
+          }
+          startNew={startCustomGrainNew}
         />
 
         <UsageAnalyticsModal

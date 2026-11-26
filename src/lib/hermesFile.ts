@@ -1,10 +1,12 @@
 import {
+  CustomGrainShape,
   CustomPropellant,
   DEFAULT_PROPELLANTS,
   GrainInput,
   MotorInput,
   NozzleInput,
 } from './types';
+import { computeCustomGrainHash, normalizeCustomGrainShape } from './grains/customGrainStorage';
 import { calculateMotorStructure, normalizeMotorWithStructure } from './motorStructure';
 import {
   MissionControlSnapshot,
@@ -31,6 +33,7 @@ export interface HermesProjectPreview {
   hasExperimentalData: boolean;
   expRowsCount: number;
   bundledPropellantNames: string[];
+  bundledCustomGrainNames?: string[];
 }
 
 export interface HermesProjectFileV1 {
@@ -45,6 +48,7 @@ export interface HermesProjectFileV1 {
     nozzle: NozzleInput;
     grains: GrainInput[];
     bundledPropellants: CustomPropellant[];
+    bundledCustomGrains?: CustomGrainShape[];
   };
   missionControl?: MissionControlSnapshot;
   preview?: HermesProjectPreview;
@@ -57,6 +61,7 @@ export interface BuildHermesPackageParams {
   nozzle: NozzleInput;
   grains: GrainInput[];
   customPropellants: CustomPropellant[];
+  customGrainShapes?: CustomGrainShape[];
   missionControl?: MissionControlSnapshot;
   includeExperimental?: boolean;
   motorClassHint?: string;
@@ -80,7 +85,7 @@ function normalizeNozzle(raw: any): NozzleInput {
 function normalizeGrain(raw: any, fallbackIdx: number): GrainInput {
   const g = raw && typeof raw === 'object' ? raw : {};
   const shapeNum = Number(g.shape);
-  const shape = ([1, 2, 3, 4, 5, 6, 7, 8, 9].includes(shapeNum) ? shapeNum : 1) as GrainInput['shape'];
+  const shape = ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(shapeNum) ? shapeNum : 1) as GrainInput['shape'];
   const out: GrainInput = {
     id: typeof g.id === 'string' && g.id.trim() ? g.id : `imported-grain-${fallbackIdx + 1}`,
     shape,
@@ -102,6 +107,15 @@ function normalizeGrain(raw: any, fallbackIdx: number): GrainInput {
   if (Number.isFinite(Number(g.slotWidth))) out.slotWidth = Number(g.slotWidth);
   if (Number.isFinite(Number(g.slotDepth))) out.slotDepth = Number(g.slotDepth);
   if (Number.isFinite(Number(g.rodDiameter))) out.rodDiameter = Number(g.rodDiameter);
+  if (typeof g.customGrainId === 'string' && g.customGrainId.trim()) {
+    out.customGrainId = g.customGrainId.trim();
+  }
+  const normalizedSnapshot = g.customGrainSnapshot
+    ? normalizeCustomGrainShape(g.customGrainSnapshot, fallbackIdx)
+    : null;
+  if (normalizedSnapshot) {
+    out.customGrainSnapshot = normalizedSnapshot;
+  }
   return out;
 }
 
@@ -113,16 +127,47 @@ export function getReferencedCustomPropellants(
   return customPropellants.filter((p) => usedIds.has(Number(p.id)));
 }
 
+export function getReferencedCustomGrains(
+  grains: GrainInput[],
+  customGrainShapes: CustomGrainShape[] = []
+): CustomGrainShape[] {
+  const map = new Map<string, CustomGrainShape>();
+  for (const g of grains) {
+    if (g.shape !== 10) continue;
+    const fromLib = g.customGrainId
+      ? customGrainShapes.find((c) => c.id === g.customGrainId)
+      : undefined;
+    const chosen = fromLib || g.customGrainSnapshot;
+    if (chosen && chosen.loops && chosen.loops.length > 0) {
+      map.set(chosen.id, chosen);
+    }
+  }
+  return Array.from(map.values());
+}
+
 export function buildHermesProjectFile(params: BuildHermesPackageParams): HermesProjectFileV1 {
   const includeInputs = params.scope === 'inputs' || params.scope === 'both';
   const includeMc = params.scope === 'mission_control' || params.scope === 'both';
 
   const normalizedMotor = normalizeMotorWithStructure(params.motor);
   const normalizedNozzle = normalizeNozzle(params.nozzle);
-  const normalizedGrains = params.grains.map((g, idx) => normalizeGrain(g, idx));
+  const customLib = params.customGrainShapes || [];
+  const normalizedGrains = params.grains.map((g, idx) => {
+    const norm = normalizeGrain(g, idx);
+    if (norm.shape === 10 && norm.customGrainId) {
+      const match = customLib.find((c) => c.id === norm.customGrainId);
+      if (match) {
+        norm.customGrainSnapshot = match;
+      }
+    }
+    return norm;
+  });
   const struct = calculateMotorStructure(normalizedMotor);
   const bundledPropellants = includeInputs
     ? getReferencedCustomPropellants(normalizedGrains, params.customPropellants)
+    : [];
+  const bundledCustomGrains = includeInputs
+    ? getReferencedCustomGrains(normalizedGrains, customLib)
     : [];
 
   let mcBlock: MissionControlSnapshot | undefined;
@@ -174,6 +219,7 @@ export function buildHermesProjectFile(params: BuildHermesPackageParams): Hermes
             nozzle: normalizedNozzle,
             grains: normalizedGrains,
             bundledPropellants,
+            ...(bundledCustomGrains.length > 0 ? { bundledCustomGrains } : {}),
           },
         }
       : {}),
@@ -201,6 +247,9 @@ export function buildHermesProjectFile(params: BuildHermesPackageParams): Hermes
       hasExperimentalData: expRows > 0,
       expRowsCount: expRows,
       bundledPropellantNames: bundledPropellants.map((p) => p.name),
+      ...(bundledCustomGrains.length > 0
+        ? { bundledCustomGrainNames: bundledCustomGrains.map((cg) => cg.name) }
+        : {}),
     },
   };
 }
@@ -291,6 +340,11 @@ export function parseAndValidateHermesFile(rawText: string, fallbackName = 'Impo
                 isCustom: true,
               }))
           : [],
+        bundledCustomGrains: Array.isArray(parsed.inputs.bundledCustomGrains)
+          ? (parsed.inputs.bundledCustomGrains as any[])
+              .map((cg, idx) => normalizeCustomGrainShape(cg, idx))
+              .filter((cg): cg is CustomGrainShape => cg !== null && cg.loops.length > 0)
+          : [],
       }
     : undefined;
 
@@ -358,6 +412,9 @@ export function parseAndValidateHermesFile(rawText: string, fallbackName = 'Impo
       bundledPropellantNames: normalizedInputs
         ? normalizedInputs.bundledPropellants.map((p) => p.name)
         : [],
+      ...(normalizedInputs && normalizedInputs.bundledCustomGrains && normalizedInputs.bundledCustomGrains.length > 0
+        ? { bundledCustomGrainNames: normalizedInputs.bundledCustomGrains.map((cg) => cg.name) }
+        : {}),
     },
   };
 
@@ -451,6 +508,85 @@ export function resolveImportedPropellants(
 
   return {
     nextCustomPropellants: nextCustom,
+    remappedGrains,
+    addedNames,
+    reusedNames,
+  };
+}
+
+export function resolveImportedCustomGrains(
+  bundled: CustomGrainShape[],
+  grains: GrainInput[],
+  existingCustom: CustomGrainShape[]
+): {
+  nextCustomGrains: CustomGrainShape[];
+  remappedGrains: GrainInput[];
+  addedNames: string[];
+  reusedNames: string[];
+} {
+  const nextCustom = [...existingCustom];
+  const idRemap = new Map<string, CustomGrainShape>();
+  const addedNames: string[] = [];
+  const reusedNames: string[] = [];
+  const usedIds = new Set(nextCustom.map((c) => c.id));
+
+  const incomingAll: CustomGrainShape[] = [...bundled];
+  for (const g of grains) {
+    if (
+      g.shape === 10 &&
+      g.customGrainSnapshot &&
+      g.customGrainSnapshot.loops.length > 0 &&
+      !incomingAll.some((x) => x.id === g.customGrainSnapshot!.id)
+    ) {
+      incomingAll.push(g.customGrainSnapshot);
+    }
+  }
+
+  for (const incoming of incomingAll) {
+    const incomingHash = computeCustomGrainHash(incoming);
+    const exactMatch = nextCustom.find(
+      (local) =>
+        local.name.trim().toLowerCase() === incoming.name.trim().toLowerCase() &&
+        computeCustomGrainHash(local) === incomingHash
+    );
+    if (exactMatch) {
+      idRemap.set(incoming.id, exactMatch);
+      reusedNames.push(exactMatch.name);
+      continue;
+    }
+
+    let assignedId = incoming.id || `cg-${Date.now()}-${nextCustom.length + 1}`;
+    while (usedIds.has(assignedId)) {
+      assignedId = `${incoming.id || 'cg'}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+    usedIds.add(assignedId);
+
+    const storedShape: CustomGrainShape = {
+      ...incoming,
+      id: assignedId,
+    };
+    nextCustom.push(storedShape);
+    idRemap.set(incoming.id, storedShape);
+    addedNames.push(storedShape.name);
+  }
+
+  const remappedGrains = grains.map((g) => {
+    if (g.shape !== 10) return g;
+    const mapped =
+      (g.customGrainId ? idRemap.get(g.customGrainId) : undefined) ||
+      (g.customGrainSnapshot ? idRemap.get(g.customGrainSnapshot.id) : undefined);
+    if (mapped) {
+      return {
+        ...g,
+        customGrainId: mapped.id,
+        customGrainSnapshot: mapped,
+      };
+    }
+    return g;
+  });
+
+  return {
+    nextCustomGrains: nextCustom,
     remappedGrains,
     addedNames,
     reusedNames,

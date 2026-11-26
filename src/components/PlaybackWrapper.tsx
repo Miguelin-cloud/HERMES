@@ -398,15 +398,22 @@ export function PlaybackWrapper({
                     const isComplexExhausted = isComplex && burnbackTable ? xBurn >= burnbackTable.xMaxMm : false;
                     const curL = isComplexExhausted ? 0 : Math.max(0, g.L0 - g.ei * xBurn * 2);
                     const curDOut = isComplexExhausted ? 0 : Math.max(0, g.D0 - g.osi * xBurn * 2);
+                    const evalNow =
+                      isComplex && burnbackTable
+                        ? evaluateBurnbackTableAtDepth(burnbackTable, xBurn, g, motor?.Dc || g.D0)
+                        : null;
                     const hasBore = g.shape !== 3 && g.shape !== 6 && g.shape !== 7;
                     const curDIn =
                       !hasBore
                         ? 0
-                        : Math.min(curDOut, (g.d0 || 0) + g.ci * xBurn * 2);
+                        : g.shape === 10
+                          ? isComplexExhausted
+                            ? 0
+                            : Math.min(curDOut, evalNow?.d ?? 0)
+                          : Math.min(curDOut, (g.d0 || 0) + g.ci * xBurn * 2);
                     let burnPct = 0;
-                    if (isComplex && burnbackTable) {
+                    if (isComplex && burnbackTable && evalNow) {
                       const eval0 = evaluateBurnbackTableAtDepth(burnbackTable, 0, g, motor?.Dc || g.D0);
-                      const evalNow = evaluateBurnbackTableAtDepth(burnbackTable, xBurn, g, motor?.Dc || g.D0);
                       burnPct = eval0.Vg > 0
                         ? Math.min(100, Math.max(0, (1 - evalNow.Vg / eval0.Vg) * 100))
                         : 100;
@@ -452,7 +459,7 @@ export function PlaybackWrapper({
                           </div>
                           <div>
                             <span className="text-slate-500 block text-[9px]">
-                              {g.shape === 6 || g.shape === 7 ? 'Cut' : 'd₀'}
+                              {g.shape === 6 || g.shape === 7 ? 'Cut' : g.shape === 10 ? 'd_eq' : 'd₀'}
                             </span>
                             <strong>
                               {g.shape === 3

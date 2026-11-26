@@ -11,9 +11,16 @@ import {
 import { MotorStructureResult, getMaxGrainOuterDiameter } from './motorStructure';
 import { ApogeeResult } from './apogee';
 import { MissionControlSnapshot } from './missionControlStorage';
-import { GrainContourLoop, getGrainModule, hasCrossSectionContours } from './grains';
+import {
+  GrainContourLoop,
+  MeridianSliceInfo,
+  computeMeridianLongitudinalCut,
+  getGrainModule,
+  hasCrossSectionContours,
+  resolveCustomGrainShape,
+} from './grains';
 import { getGrainShapeLabel } from './grains/labels';
-import { Language } from './i18n';
+import { Language, translations } from './i18n';
 
 export interface PdfReportOptions {
   reportTitle?: string;
@@ -797,6 +804,18 @@ function renderChamberSchematicDataUrl(
     else if (g.propellantType === 6 || g.propellantType === 7) fillColor = '#CBD5E1';
     else if (g.propellantType > 7) fillColor = '#C4B5FD';
 
+    let customMeridian: MeridianSliceInfo | null = null;
+    if (g.shape === 10) {
+      try {
+        const loops = getGrainModule(10).getCrossSectionContoursMm?.(g, 0) ?? null;
+        if (loops && loops.length > 0) {
+          customMeridian = computeMeridianLongitudinalCut(loops, Math.max(0.25, g.D0 / 2));
+        }
+      } catch {
+        customMeridian = null;
+      }
+    }
+
     for (let j = 0; j < nBlocks; j++) {
       const segX = cursorX + j * lBlockPx + gapPx * 0.5;
       const segW = Math.max(2, lBlockPx - gapPx);
@@ -811,56 +830,96 @@ function renderChamberSchematicDataUrl(
         ctx.strokeRect(segX, propTop + propH, segW, inhibPx);
       }
 
-      ctx.fillStyle = fillColor;
-      ctx.strokeStyle = grainOverlap ? '#DC2626' : '#334155';
-      ctx.lineWidth = grainOverlap ? 2.5 : 1.6;
-      ctx.fillRect(segX, propTop, segW, propH);
-      ctx.strokeRect(segX, propTop, segW, propH);
-
-      const coreH =
-        g.shape === 1 || g.shape === 5 || g.shape === 8
-          ? (g.d0 || 0) * scale
-          : g.shape === 2 || g.shape === 4 || g.shape === 9
-            ? Math.max(g.d0 || 0, g.d0mayor || 0) * scale
-            : 0;
-      const coreTop =
-        g.shape === 5
-          ? centerY - ((Number(g.coreOffset) || 0) + (g.d0 || 0) / 2) * scale
-          : centerY - coreH / 2;
-
-      if ((g.shape === 1 || g.shape === 5) && coreH > 0) {
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(segX, Math.max(propTop + 1, coreTop), segW, Math.min(propH - 2, coreH));
-        ctx.strokeStyle = '#64748B';
+      if (g.shape === 10 && customMeridian && (customMeridian.topEdgeExposed || customMeridian.bottomEdgeExposed)) {
+        ctx.strokeStyle = grainOverlap ? '#DC2626' : '#64748B';
+        ctx.lineWidth = grainOverlap ? 2.2 : 1.0;
         ctx.setLineDash([5, 3]);
-        ctx.strokeRect(segX, Math.max(propTop + 1, coreTop), segW, Math.min(propH - 2, coreH));
+        ctx.strokeRect(segX, propTop, segW, propH);
         ctx.setLineDash([]);
-      } else if ((g.shape === 2 || g.shape === 4 || g.shape === 9) && coreH > 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.fillRect(segX, Math.max(propTop + 1, coreTop), segW, Math.min(propH - 2, coreH));
-        const innerH = Math.max(0, (g.d0 || 0) * scale);
-        if (innerH > 0) {
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(
-            segX,
-            Math.max(propTop + 1, centerY - innerH / 2),
-            segW,
-            Math.min(propH - 2, innerH)
-          );
-        }
-      } else if ((g.shape === 6 || g.shape === 7) && (g.slotDepth || 0) > 0) {
-        const cutH = Math.min(propH - 2, Math.max(2, (Number(g.slotDepth) || g.D0 * 0.45) * scale));
-        ctx.fillStyle = g.shape === 7 ? '#FFFFFF' : 'rgba(255,255,255,0.75)';
-        ctx.fillRect(segX, propTop, segW, cutH);
-      } else if (g.shape === 8 && coreH > 0) {
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(segX, Math.max(propTop + 1, centerY - coreH / 2), segW, Math.min(propH - 2, coreH));
-        const rodH = Math.max(2, (Number(g.rodDiameter) || 0) * scale);
-        if (rodH > 0) {
+        customMeridian.solidIntervalsMm.forEach((band) => {
+          const bTop = centerY + band.yMin * scale;
+          const bH = Math.max(1, (band.yMax - band.yMin) * scale);
           ctx.fillStyle = fillColor;
-          ctx.fillRect(segX, centerY - rodH / 2, segW, rodH);
-          ctx.strokeStyle = '#334155';
-          ctx.strokeRect(segX, centerY - rodH / 2, segW, rodH);
+          ctx.strokeStyle = grainOverlap ? '#DC2626' : '#334155';
+          ctx.lineWidth = grainOverlap ? 2.2 : 1.4;
+          ctx.fillRect(segX, bTop, segW, bH);
+          ctx.strokeRect(segX, bTop, segW, bH);
+        });
+      } else {
+        ctx.fillStyle = fillColor;
+        ctx.strokeStyle = grainOverlap ? '#DC2626' : '#334155';
+        ctx.lineWidth = grainOverlap ? 2.5 : 1.6;
+        ctx.fillRect(segX, propTop, segW, propH);
+        ctx.strokeRect(segX, propTop, segW, propH);
+
+        const coreH =
+          g.shape === 1 || g.shape === 5 || g.shape === 8
+            ? (g.d0 || 0) * scale
+            : g.shape === 2 || g.shape === 4 || g.shape === 9
+              ? Math.max(g.d0 || 0, g.d0mayor || 0) * scale
+              : 0;
+        const coreTop =
+          g.shape === 5
+            ? centerY - ((Number(g.coreOffset) || 0) + (g.d0 || 0) / 2) * scale
+            : centerY - coreH / 2;
+
+        if (g.shape === 10 && customMeridian) {
+          customMeridian.voidIntervalsMm.forEach((vBand) => {
+            const vTop = Math.max(propTop + 1, centerY + vBand.yMin * scale);
+            const vBot = Math.min(propTop + propH - 1, centerY + vBand.yMax * scale);
+            const vH = Math.max(0, vBot - vTop);
+            if (vH > 1) {
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fillRect(segX, vTop, segW, vH);
+              ctx.strokeStyle = '#64748B';
+              ctx.setLineDash([5, 3]);
+              ctx.strokeRect(segX, vTop, segW, vH);
+              ctx.setLineDash([]);
+            }
+          });
+          if (customMeridian.voidIntervalsMm.length === 0 && customMeridian.projectedVoidRangeMm) {
+            const pTop = Math.max(propTop + 1, centerY + customMeridian.projectedVoidRangeMm.yMin * scale);
+            const pBot = Math.min(propTop + propH - 1, centerY + customMeridian.projectedVoidRangeMm.yMax * scale);
+            const pH = Math.max(0, pBot - pTop);
+            if (pH > 1) {
+              ctx.fillStyle = 'rgba(255,255,255,0.55)';
+              ctx.fillRect(segX, pTop, segW, pH);
+            }
+          }
+        } else if ((g.shape === 1 || g.shape === 5) && coreH > 0) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(segX, Math.max(propTop + 1, coreTop), segW, Math.min(propH - 2, coreH));
+          ctx.strokeStyle = '#64748B';
+          ctx.setLineDash([5, 3]);
+          ctx.strokeRect(segX, Math.max(propTop + 1, coreTop), segW, Math.min(propH - 2, coreH));
+          ctx.setLineDash([]);
+        } else if ((g.shape === 2 || g.shape === 4 || g.shape === 9) && coreH > 0) {
+          ctx.fillStyle = 'rgba(255,255,255,0.55)';
+          ctx.fillRect(segX, Math.max(propTop + 1, coreTop), segW, Math.min(propH - 2, coreH));
+          const innerH = Math.max(0, (g.d0 || 0) * scale);
+          if (innerH > 0) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(
+              segX,
+              Math.max(propTop + 1, centerY - innerH / 2),
+              segW,
+              Math.min(propH - 2, innerH)
+            );
+          }
+        } else if ((g.shape === 6 || g.shape === 7) && (g.slotDepth || 0) > 0) {
+          const cutH = Math.min(propH - 2, Math.max(2, (Number(g.slotDepth) || g.D0 * 0.45) * scale));
+          ctx.fillStyle = g.shape === 7 ? '#FFFFFF' : 'rgba(255,255,255,0.75)';
+          ctx.fillRect(segX, propTop, segW, cutH);
+        } else if (g.shape === 8 && coreH > 0) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(segX, Math.max(propTop + 1, centerY - coreH / 2), segW, Math.min(propH - 2, coreH));
+          const rodH = Math.max(2, (Number(g.rodDiameter) || 0) * scale);
+          if (rodH > 0) {
+            ctx.fillStyle = fillColor;
+            ctx.fillRect(segX, centerY - rodH / 2, segW, rodH);
+            ctx.strokeStyle = '#334155';
+            ctx.strokeRect(segX, centerY - rodH / 2, segW, rodH);
+          }
         }
       }
 
@@ -1082,6 +1141,7 @@ function renderGrainViewsDataUrl(grain: GrainInput, burnLabel: string, inhibLabe
 
   const mod = getGrainModule(grain.shape);
   const complex = hasCrossSectionContours(grain.shape);
+  let complexLoops0: GrainContourLoop[] | null = null;
 
   if (complex) {
     let loops: GrainContourLoop[] | null = null;
@@ -1090,6 +1150,7 @@ function renderGrainViewsDataUrl(grain: GrainInput, burnLabel: string, inhibLabe
     } catch {
       loops = null;
     }
+    complexLoops0 = loops;
     if (loops && loops.length > 0) {
       drawContourLoopsToCanvas(ctx, loops, cx, cy, scale);
       ctx.fillStyle = '#CBD5E1';
@@ -1196,9 +1257,58 @@ function renderGrainViewsDataUrl(grain: GrainInput, burnLabel: string, inhibLabe
   ctx.stroke();
   ctx.setLineDash([]);
 
+  const customMeridianPdf =
+    grain.shape === 10 && complexLoops0 && complexLoops0.length > 0
+      ? computeMeridianLongitudinalCut(complexLoops0, Math.max(0.25, safeD0 / 2))
+      : null;
+
   if (grain.shape === 3) {
     ctx.fillStyle = '#CBD5E1';
     ctx.fillRect(startX, topY, scaledL, scaledD);
+  } else if (grain.shape === 10) {
+    const rOutMm = Math.max(0.25, safeD0 / 2);
+    const edgeTolMm = Math.max(0.05, rOutMm * 0.025);
+    if (!customMeridianPdf || customMeridianPdf.solidIntervalsMm.length === 0) {
+      ctx.fillStyle = '#E2E8F0';
+      ctx.fillRect(startX, topY, scaledL, scaledD);
+    } else {
+      if (customMeridianPdf.topEdgeExposed || customMeridianPdf.bottomEdgeExposed) {
+        ctx.strokeStyle = '#94A3B8';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(startX, topY, scaledL, scaledD);
+        ctx.setLineDash([]);
+      }
+      customMeridianPdf.solidIntervalsMm.forEach((band) => {
+        const bTop = yC + band.yMin * pxPerMmY;
+        const bBot = yC + band.yMax * pxPerMmY;
+        const bH = Math.max(0, bBot - bTop);
+        ctx.fillStyle = '#CBD5E1';
+        ctx.fillRect(startX, bTop, scaledL, bH);
+        ctx.strokeStyle = intStroke;
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        if (band.yMin > -rOutMm + edgeTolMm) {
+          ctx.moveTo(startX, bTop);
+          ctx.lineTo(startX + scaledL, bTop);
+        }
+        if (band.yMax < rOutMm - edgeTolMm) {
+          ctx.moveTo(startX, bBot);
+          ctx.lineTo(startX + scaledL, bBot);
+        }
+        ctx.stroke();
+      });
+      if (customMeridianPdf.voidIntervalsMm.length === 0 && customMeridianPdf.projectedVoidRangeMm) {
+        const pTop = yC + customMeridianPdf.projectedVoidRangeMm.yMin * pxPerMmY;
+        const pH = Math.max(
+          0,
+          (customMeridianPdf.projectedVoidRangeMm.yMax - customMeridianPdf.projectedVoidRangeMm.yMin) *
+            pxPerMmY
+        );
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(startX, pTop, scaledL, pH);
+      }
+    }
   } else if (grain.shape === 5) {
     const offPx = Math.max(0, (Number(grain.coreOffset) || 0) * pxPerMmY);
     const boreTop = Math.max(topY + 2, yC - offPx - d0Px / 2);
@@ -1276,25 +1386,38 @@ function renderGrainViewsDataUrl(grain: GrainInput, burnLabel: string, inhibLabe
   ctx.strokeStyle = extStroke;
   ctx.lineWidth = grain.osi === 1 ? 3.2 : 4.5;
   ctx.beginPath();
-  if (grain.shape !== 7) {
+  if (grain.shape !== 7 && !(grain.shape === 10 && customMeridianPdf?.topEdgeExposed)) {
     ctx.moveTo(startX, topY);
     ctx.lineTo(startX + scaledL, topY);
   }
-  ctx.moveTo(startX, botY);
-  ctx.lineTo(startX + scaledL, botY);
+  if (!(grain.shape === 10 && customMeridianPdf?.bottomEdgeExposed)) {
+    ctx.moveTo(startX, botY);
+    ctx.lineTo(startX + scaledL, botY);
+  }
   ctx.stroke();
 
-  const endTopY =
-    grain.shape === 7
-      ? topY + Math.min(scaledD - 4, Math.max(4, (Number(grain.slotDepth) || safeD0 * 0.45) * pxPerMmY))
-      : topY;
   ctx.strokeStyle = endStroke;
   ctx.lineWidth = grain.ei === 1 ? 3.2 : 4.5;
   ctx.beginPath();
-  ctx.moveTo(startX, endTopY);
-  ctx.lineTo(startX, botY);
-  ctx.moveTo(startX + scaledL, endTopY);
-  ctx.lineTo(startX + scaledL, botY);
+  if (grain.shape === 10 && customMeridianPdf) {
+    customMeridianPdf.solidIntervalsMm.forEach((band) => {
+      const bTop = yC + band.yMin * pxPerMmY;
+      const bBot = yC + band.yMax * pxPerMmY;
+      ctx.moveTo(startX, bTop);
+      ctx.lineTo(startX, bBot);
+      ctx.moveTo(startX + scaledL, bTop);
+      ctx.lineTo(startX + scaledL, bBot);
+    });
+  } else {
+    const endTopY =
+      grain.shape === 7
+        ? topY + Math.min(scaledD - 4, Math.max(4, (Number(grain.slotDepth) || safeD0 * 0.45) * pxPerMmY))
+        : topY;
+    ctx.moveTo(startX, endTopY);
+    ctx.lineTo(startX, botY);
+    ctx.moveTo(startX + scaledL, endTopY);
+    ctx.lineTo(startX + scaledL, botY);
+  }
   ctx.stroke();
 
   if (grain.N > 1) {
@@ -1964,8 +2087,9 @@ export function buildPdfReportDocument(
 
   grains.forEach((g, idx) => {
     const prop = getPropellantData(g.propellantType, customPropellants);
-    const shapeName = getGrainShapeLabel(g.shape, lang);
-    let initGeom = { tweb0: 0, totalVolumeMm3: 0, crossSectionAreaMm2: 0 };
+    const tDict = translations[lang] || translations.en;
+    const shapeName = getGrainShapeLabel(g.shape, tDict);
+    let initGeom = { tweb0: 0, totalVolumeMm3: 0, crossSectionAreaMm2: 0, portAreaMm2: 0 };
     try {
       initGeom = getGrainModule(g.shape).getInitialGeometry(g);
     } catch {
@@ -2005,6 +2129,12 @@ export function buildPdfReportDocument(
       doc.addImage(grainImg, 'PNG', 16, y + 8, 92, 37.5);
     }
 
+    const dEqMm =
+      initGeom.portAreaMm2 > 0
+        ? Math.min(g.D0, 2 * Math.sqrt(initGeom.portAreaMm2 / Math.PI))
+        : 0;
+    const customShape = g.shape === 10 ? resolveCustomGrainShape(g) : null;
+
     const extraDims: string[] = [];
     if (g.shape === 2) extraDims.push(`Np=${g.Np}, Dp=${g.d0mayor}mm`);
     if (g.shape === 4) extraDims.push(`Np=${g.Np}, Dp=${g.d0mayor}mm, W=${g.finWidth ?? 4}mm`);
@@ -2013,9 +2143,18 @@ export function buildPdfReportDocument(
     if (g.shape === 7) extraDims.push(`Cut=${g.slotDepth ?? 15}mm`);
     if (g.shape === 8) extraDims.push(`ID=${g.d0}mm, Rod=${g.rodDiameter ?? 12}mm`);
     if (g.shape === 9) extraDims.push(`Np=${g.Np}, OutD=${g.d0mayor}mm, W=${g.spokeWidth ?? 5}mm`);
+    if (g.shape === 10) {
+      extraDims.push(
+        customShape?.name
+          ? `${customShape.name} (Deq=${dEqMm.toFixed(1)}mm)`
+          : `Deq=${dEqMm.toFixed(1)}mm`
+      );
+    }
 
     const detailRows: Array<[string, string]> = [
-      ['D0 / d0 / L0 / N', `${g.D0} / ${g.d0} / ${g.L0} mm  (N=${g.N})`],
+      g.shape === 10
+        ? ['D0 / Deq / L0 / N', `${g.D0} / ${dEqMm.toFixed(1)} / ${g.L0} mm  (N=${g.N})`]
+        : ['D0 / d0 / L0 / N', `${g.D0} / ${g.d0} / ${g.L0} mm  (N=${g.N})`],
       ...(extraDims.length > 0 ? ([[labels.shapeParamsRow, extraDims.join(', ')]] as Array<[string, string]>) : []),
       [labels.webRhoratRow, `${initGeom.tweb0.toFixed(2)} mm / ${(g.rhorat || 1).toFixed(2)}`],
       [

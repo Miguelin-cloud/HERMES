@@ -13,7 +13,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { CustomPropellant, GrainInput, MotorInput, NozzleInput } from '../lib/types';
+import { CustomGrainShape, CustomPropellant, GrainInput, MotorInput, NozzleInput } from '../lib/types';
 import {
   MissionControlSnapshot,
   getCompleteMissionControlSnapshot,
@@ -23,8 +23,10 @@ import {
   HermesProjectScope,
   buildHermesProjectFile,
   downloadHermesFile,
+  getReferencedCustomGrains,
   getReferencedCustomPropellants,
   parseAndValidateHermesFile,
+  resolveImportedCustomGrains,
   resolveImportedPropellants,
 } from '../lib/hermesFile';
 import { SavedSimulationEntry } from '../hooks/useSimulationStorage';
@@ -35,6 +37,7 @@ export interface HermesApplyPayload {
   nozzle?: NozzleInput;
   grains?: GrainInput[];
   nextCustomPropellants?: CustomPropellant[];
+  nextCustomGrains?: CustomGrainShape[];
   missionControl?: MissionControlSnapshot;
 }
 
@@ -47,10 +50,12 @@ interface HermesShareModalsProps {
   nozzle: NozzleInput;
   grains: GrainInput[];
   customPropellants: CustomPropellant[];
+  customGrainShapes: CustomGrainShape[];
   motorClassHint?: string;
   onApplyImportedWorkspace: (payload: HermesApplyPayload) => void;
   onSaveImportedToLibrary: (entry: SavedSimulationEntry) => void;
   onPersistCustomPropellants?: (nextProps: CustomPropellant[]) => void;
+  onPersistCustomGrains?: (nextGrains: CustomGrainShape[]) => void;
 }
 
 export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
@@ -62,10 +67,12 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
   nozzle,
   grains,
   customPropellants,
+  customGrainShapes,
   motorClassHint,
   onApplyImportedWorkspace,
   onSaveImportedToLibrary,
   onPersistCustomPropellants,
+  onPersistCustomGrains,
 }) => {
   const [activeTab, setActiveTab] = useState<'export' | 'import'>(initialTab);
   const [projectName, setProjectName] = useState('');
@@ -86,6 +93,8 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
     message: string;
     addedProps: string[];
     reusedProps: string[];
+    addedGrains: string[];
+    reusedGrains: string[];
   } | null>(null);
 
   const [mcSnapshot, setMcSnapshot] = useState<MissionControlSnapshot>(() =>
@@ -105,6 +114,11 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
   const referencedProps = useMemo(
     () => getReferencedCustomPropellants(grains, customPropellants),
     [grains, customPropellants]
+  );
+
+  const referencedCustomGrains = useMemo(
+    () => getReferencedCustomGrains(grains, customGrainShapes),
+    [grains, customGrainShapes]
   );
 
   const aeroPointCount = useMemo(() => {
@@ -127,6 +141,7 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
       nozzle,
       grains,
       customPropellants,
+      customGrainShapes,
       missionControl: freshMc,
       includeExperimental: includeExp,
       motorClassHint,
@@ -178,30 +193,48 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
 
     let addedProps: string[] = [];
     let reusedProps: string[] = [];
+    let addedGrains: string[] = [];
+    let reusedGrains: string[] = [];
     let resolvedGrains = parsedPkg.inputs?.grains;
     let nextCustomPropellants: CustomPropellant[] | undefined;
+    let nextCustomGrains: CustomGrainShape[] | undefined;
 
     if (willApplyInputs && parsedPkg.inputs) {
-      const resolved = resolveImportedPropellants(
+      const resolvedProps = resolveImportedPropellants(
         parsedPkg.inputs.bundledPropellants || [],
         parsedPkg.inputs.grains,
         customPropellants
       );
-      addedProps = resolved.addedNames;
-      reusedProps = resolved.reusedNames;
-      resolvedGrains = resolved.remappedGrains;
+      addedProps = resolvedProps.addedNames;
+      reusedProps = resolvedProps.reusedNames;
+      resolvedGrains = resolvedProps.remappedGrains;
       if (addedProps.length > 0) {
-        nextCustomPropellants = resolved.nextCustomPropellants;
+        nextCustomPropellants = resolvedProps.nextCustomPropellants;
+      }
+
+      const resolvedShapes = resolveImportedCustomGrains(
+        parsedPkg.inputs.bundledCustomGrains || [],
+        resolvedGrains,
+        customGrainShapes
+      );
+      addedGrains = resolvedShapes.addedNames;
+      reusedGrains = resolvedShapes.reusedNames;
+      resolvedGrains = resolvedShapes.remappedGrains;
+      if (addedGrains.length > 0) {
+        nextCustomGrains = resolvedShapes.nextCustomGrains;
       }
     }
 
     if ((mode === 'library' || mode === 'both') && willApplyInputs && parsedPkg.inputs) {
       const libraryGrains = resolvedGrains || parsedPkg.inputs.grains;
       const libraryPropCatalog = nextCustomPropellants || customPropellants;
+      const libraryGrainCatalog = nextCustomGrains || customGrainShapes;
       const libraryBundledProps = getReferencedCustomPropellants(libraryGrains, libraryPropCatalog);
+      const libraryBundledGrains = getReferencedCustomGrains(libraryGrains, libraryGrainCatalog);
 
-      if (mode === 'library' && nextCustomPropellants) {
-        onPersistCustomPropellants?.(nextCustomPropellants);
+      if (mode === 'library') {
+        if (nextCustomPropellants) onPersistCustomPropellants?.(nextCustomPropellants);
+        if (nextCustomGrains) onPersistCustomGrains?.(nextCustomGrains);
       }
 
       const entry: SavedSimulationEntry = {
@@ -214,6 +247,9 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
         grains: libraryGrains,
         ...(libraryBundledProps.length > 0
           ? { bundledPropellants: libraryBundledProps }
+          : {}),
+        ...(libraryBundledGrains.length > 0
+          ? { bundledCustomGrains: libraryBundledGrains }
           : {}),
         ...(willApplyMc && parsedPkg.missionControl
           ? { missionControl: parsedPkg.missionControl }
@@ -230,6 +266,7 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
               nozzle: parsedPkg.inputs.nozzle,
               grains: resolvedGrains || parsedPkg.inputs.grains,
               ...(nextCustomPropellants ? { nextCustomPropellants } : {}),
+              ...(nextCustomGrains ? { nextCustomGrains } : {}),
             }
           : {}),
         ...(willApplyMc && parsedPkg.missionControl
@@ -242,6 +279,8 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
       message: t.hermes_imported_ok,
       addedProps,
       reusedProps,
+      addedGrains,
+      reusedGrains,
     });
   };
 
@@ -411,6 +450,14 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
                           </span>
                         </div>
                       )}
+                      {referencedCustomGrains.length > 0 && (
+                        <div className="flex justify-between gap-2 border-b border-border/50 pb-1 sm:col-span-2">
+                          <span className="text-muted-foreground">{t.hermes_preview_custom_grains}:</span>
+                          <span className="font-semibold truncate">
+                            {referencedCustomGrains.map((cg) => cg.name).join(', ')}
+                          </span>
+                        </div>
+                      )}
                     </>
                   )}
                   {(scope === 'both' || scope === 'mission_control') && (
@@ -547,6 +594,14 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
                             </span>
                           </div>
                         )}
+                        {parsedPkg.inputs.bundledCustomGrains && parsedPkg.inputs.bundledCustomGrains.length > 0 && (
+                          <div className="flex justify-between gap-2 sm:col-span-2">
+                            <span className="text-muted-foreground">{t.hermes_preview_custom_grains}:</span>
+                            <span className="font-semibold truncate">
+                              {parsedPkg.inputs.bundledCustomGrains.map((cg) => cg.name).join(', ')}
+                            </span>
+                          </div>
+                        )}
                       </>
                     )}
                     {parsedPkg.missionControl && (
@@ -637,6 +692,16 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
                       {importStatus.reusedProps.length > 0 && (
                         <div className="text-[11px] font-mono pl-6">
                           {t.hermes_propellants_reused}: {importStatus.reusedProps.join(', ')}
+                        </div>
+                      )}
+                      {importStatus.addedGrains.length > 0 && (
+                        <div className="text-[11px] font-mono pl-6">
+                          {t.hermes_custom_grains_added}: {importStatus.addedGrains.join(', ')}
+                        </div>
+                      )}
+                      {importStatus.reusedGrains.length > 0 && (
+                        <div className="text-[11px] font-mono pl-6">
+                          {t.hermes_custom_grains_reused}: {importStatus.reusedGrains.join(', ')}
                         </div>
                       )}
                     </div>

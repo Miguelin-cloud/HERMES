@@ -24,7 +24,9 @@ export interface ComplexGrainSpec {
   shape: GrainShapeId;
   key: GrainShapeKey;
   preserveVoidOrientation?: boolean;
+  adaptiveRefine?: boolean;
   buildVoidLoopsMm: (grain: GrainInput, circleSegments?: number) => GrainContourLoop[];
+  extraGeometryKey?: (grain: GrainInput) => string;
   validateGeometry: (
     grain: GrainInput,
     motor: Pick<MotorInput, 'Dc' | 'Lc'>,
@@ -45,8 +47,8 @@ const burnbackCache = new Map<string, GrainBurnbackTable>();
 const sliceCache = new Map<string, GrainContourLoop[]>();
 const webCache = new Map<string, number>();
 
-function buildGeometryKey(grain: Partial<GrainInput>): string {
-  return [
+function buildGeometryKey(grain: Partial<GrainInput>, extraKey?: string): string {
+  const base = [
     grain.shape ?? 1,
     (Number(grain.D0) || 0).toFixed(3),
     (Number(grain.d0) || 0).toFixed(3),
@@ -59,6 +61,7 @@ function buildGeometryKey(grain: Partial<GrainInput>): string {
     (Number(grain.slotDepth) || 0).toFixed(3),
     (Number(grain.rodDiameter) || 0).toFixed(3),
   ].join('|');
+  return extraKey ? `${base}|${extraKey}` : base;
 }
 
 export function createComplexGrainModule(spec: ComplexGrainSpec): GrainGeometryModule {
@@ -83,7 +86,8 @@ export function createComplexGrainModule(spec: ComplexGrainSpec): GrainGeometryM
       options?.arcToleranceMm ?? Math.max(0.01, Math.min(0.025, outerR * 4e-4));
     const effectiveL0 = ci === 0 && osi === 0 ? Math.max(1, Number(grain.L0) || 50) : 0;
 
-    const cacheKey = `${buildGeometryKey(grain)}|${ci}|${osi}|${effectiveL0.toFixed(2)}|${circleSegments}|${voidCircleSegments ?? 0}|${sampleCount}|${arcToleranceMm.toFixed(4)}|${includeContours ? 1 : 0}`;
+    const extraKey = spec.extraGeometryKey?.(grain);
+    const cacheKey = `${buildGeometryKey(grain, extraKey)}|${ci}|${osi}|${effectiveL0.toFixed(2)}|${circleSegments}|${voidCircleSegments ?? 0}|${sampleCount}|${arcToleranceMm.toFixed(4)}|${includeContours ? 1 : 0}`;
     const cached = burnbackCache.get(cacheKey);
     if (cached) {
       burnbackCache.delete(cacheKey);
@@ -105,6 +109,7 @@ export function createComplexGrainModule(spec: ComplexGrainSpec): GrainGeometryM
       arcToleranceMm,
       includeContours,
       criticalDepthsMm,
+      adaptiveRefine: spec.adaptiveRefine,
     });
 
     if (burnbackCache.size >= BURNBACK_CACHE_LIMIT) {
@@ -139,7 +144,8 @@ export function createComplexGrainModule(spec: ComplexGrainSpec): GrainGeometryM
       const osi = fullGrain.osi !== undefined ? (fullGrain.osi ? 1 : 0) : 0;
       const ei = fullGrain.ei !== undefined ? (fullGrain.ei ? 1 : 0) : 0;
 
-      const webKey = `${buildGeometryKey(fullGrain)}|${ci}|${osi}|${ei}|${ei ? L0.toFixed(2) : '0'}`;
+      const extraKey = spec.extraGeometryKey?.(fullGrain);
+      const webKey = `${buildGeometryKey(fullGrain, extraKey)}|${ci}|${osi}|${ei}|${ei ? L0.toFixed(2) : '0'}`;
       let tweb0 = webCache.get(webKey);
       if (tweb0 === undefined) {
         tweb0 = estimateClipperWebThicknessMm({
@@ -291,7 +297,8 @@ export function createComplexGrainModule(spec: ComplexGrainSpec): GrainGeometryM
       const osi = fullGrain.osi ? 1 : 0;
       const xKey = Math.round(xClamped * 100) / 100;
 
-      const sliceKey = `${buildGeometryKey(fullGrain)}|${ci}|${osi}|${xKey.toFixed(2)}`;
+      const extraKey = spec.extraGeometryKey?.(fullGrain);
+      const sliceKey = `${buildGeometryKey(fullGrain, extraKey)}|${ci}|${osi}|${xKey.toFixed(2)}`;
       const cached = sliceCache.get(sliceKey);
       if (cached) {
         sliceCache.delete(sliceKey);

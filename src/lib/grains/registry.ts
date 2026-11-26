@@ -1,6 +1,7 @@
 import { GrainInput } from '../types';
 import { batesGrainModule } from './batesGrain';
 import { cSlotGrainModule } from './cSlotGrain';
+import { customSketchGrainModule } from './customSketchGrain';
 import { dGrainModule } from './dGrain';
 import { finocylGrainModule } from './finocylGrain';
 import { moonburnerGrainModule } from './moonburnerGrain';
@@ -20,6 +21,7 @@ const GRAIN_MODULES: Record<GrainShapeId, GrainGeometryModule> = {
   7: dGrainModule,
   8: rodAndTubeGrainModule,
   9: wagonWheelGrainModule,
+  10: customSketchGrainModule,
 };
 
 export function getGrainModule(shape: number): GrainGeometryModule {
@@ -41,8 +43,8 @@ export function hasCrossSectionContours(shape: number): boolean {
   return typeof getGrainModule(shape).getCrossSectionContoursMm === 'function';
 }
 
-export function getAllGrainModules(): GrainGeometryModule[] {
-  return [
+export function getAllGrainModules(includeCustom: boolean = false): GrainGeometryModule[] {
+  const list = [
     GRAIN_MODULES[1],
     GRAIN_MODULES[2],
     GRAIN_MODULES[3],
@@ -53,6 +55,10 @@ export function getAllGrainModules(): GrainGeometryModule[] {
     GRAIN_MODULES[8],
     GRAIN_MODULES[9],
   ];
+  if (includeCustom) {
+    list.push(GRAIN_MODULES[10]);
+  }
+  return list;
 }
 
 /**
@@ -112,6 +118,8 @@ export function getDefaultGrainParamsForShape(
       const spokeWidth = r(Math.min(maxW * 0.55, Math.max(1.5, safeD0 * 0.075)));
       return { shape: 9, d0, d0mayor, Np, spokeWidth, ci: 1 };
     }
+    case 10:
+      return { shape: 10, d0: 0, d0mayor: 0, ci: 1, osi: 0 };
     default:
       return { shape };
   }

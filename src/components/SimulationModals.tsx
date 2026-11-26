@@ -20,6 +20,7 @@ import {
   UploadCloud,
 } from 'lucide-react';
 import {
+  CustomGrainShape,
   CustomPropellant,
   DEFAULT_PROPELLANTS,
   GrainInput,
@@ -43,6 +44,7 @@ import { getCompleteMissionControlSnapshot } from '../lib/missionControlStorage'
 import {
   buildHermesProjectFile,
   downloadHermesFile,
+  getReferencedCustomGrains,
   getReferencedCustomPropellants,
 } from '../lib/hermesFile';
 
@@ -57,6 +59,7 @@ interface SimulationModalsProps {
   setExportFormat: (v: 'csv' | 'xlsx' | 'pdf') => void;
   results: SimulationResults | null;
   customPropellants: CustomPropellant[];
+  customGrainShapes: CustomGrainShape[];
   simApogee: ApogeeResult | null;
 
   showFeedbackModal: boolean;
@@ -101,6 +104,7 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
   setExportFormat,
   results,
   customPropellants,
+  customGrainShapes,
   simApogee,
   showFeedbackModal,
   setShowFeedbackModal,
@@ -684,6 +688,7 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
                   onClick={() => {
                     if (!saveName.trim()) return;
                     const bundled = getReferencedCustomPropellants(grains, customPropellants);
+                    const bundledCustomGrains = getReferencedCustomGrains(grains, customGrainShapes);
                     const nextEntry: SavedSimulationEntry = {
                       id: existingMatch ? existingMatch.id : Date.now().toString(),
                       name: saveName.trim(),
@@ -694,6 +699,7 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
                       grains,
                       summary: currentSummary,
                       ...(bundled.length > 0 ? { bundledPropellants: bundled } : {}),
+                      ...(bundledCustomGrains.length > 0 ? { bundledCustomGrains } : {}),
                       ...(saveIncludeMc ? { missionControl: getCompleteMissionControlSnapshot(true) } : {}),
                     };
                     if (existingMatch) {
@@ -978,6 +984,10 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
                                             customPropellants: [
                                               ...customPropellants,
                                               ...(sim.bundledPropellants || []),
+                                            ],
+                                            customGrainShapes: [
+                                              ...customGrainShapes,
+                                              ...(sim.bundledCustomGrains || []),
                                             ],
                                             missionControl: sim.missionControl,
                                             motorClassHint: sim.summary?.motorClass,
