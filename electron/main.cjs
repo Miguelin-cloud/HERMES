@@ -16,9 +16,8 @@ const isDev = process.env.NODE_ENV === 'development';
 
 const DEFAULT_MODULES = {
   core: true,
-  animations: true,
+  postprocess: true,
   agente_jesus: true,
-  propellant_char: true,
 };
 
 function readInstalledModulesManifest() {
@@ -32,9 +31,11 @@ function readInstalledModulesManifest() {
         const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8'));
         return {
           core: parsed.core !== false,
-          animations: parsed.animations !== false,
+          postprocess:
+            parsed.postprocess !== undefined
+              ? parsed.postprocess !== false
+              : parsed.propellant_char !== false,
           agente_jesus: parsed.agente_jesus !== false,
-          propellant_char: parsed.propellant_char !== false,
         };
       }
     } catch {

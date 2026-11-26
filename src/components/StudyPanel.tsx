@@ -64,6 +64,7 @@ import {
   toggleExperimentalSeriesTare,
 } from '../lib/studyEngine';
 import { exportStudyPdf } from '../lib/studyPdfReport';
+import { recordExportTelemetry } from '../lib/telemetry';
 
 interface TimeOffsetInputProps {
   value: number;
@@ -501,6 +502,7 @@ export const StudyPanel: React.FC<StudyPanelProps> = ({
                     filename: studyState.studyTitle.trim() || 'HERMES_Study',
                     lang,
                   });
+                  recordExportTelemetry('study_pdf');
                 } finally {
                   setIsExportingPdf(false);
                 }

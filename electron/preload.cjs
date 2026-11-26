@@ -8,9 +8,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     } catch {
       return {
         core: true,
-        animations: true,
+        postprocess: true,
         agente_jesus: true,
-        propellant_char: true,
       };
     }
   },

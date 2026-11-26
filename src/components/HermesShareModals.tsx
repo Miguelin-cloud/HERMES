@@ -30,7 +30,7 @@ import {
   resolveImportedPropellants,
 } from '../lib/hermesFile';
 import { SavedSimulationEntry } from '../hooks/useSimulationStorage';
-import { trackEvent } from '../lib/telemetry';
+import { recordExportTelemetry } from '../lib/telemetry';
 
 export interface HermesApplyPayload {
   motor?: MotorInput;
@@ -147,7 +147,7 @@ export const HermesShareModals: React.FC<HermesShareModalsProps> = ({
       motorClassHint,
     });
     downloadHermesFile(pkg, projectName || pkg.projectName);
-    trackEvent('export_data');
+    recordExportTelemetry('hrms');
     setExportFeedback(t.hermes_exported_ok);
   };
 

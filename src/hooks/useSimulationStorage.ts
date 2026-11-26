@@ -240,17 +240,26 @@ export function useSimulationStorage() {
   }, [grains]);
 
   const handleSavePropellants = (list: CustomPropellant[]) => {
+    const prevIds = new Set(customPropellants.map((p) => Number(p.id)));
+    const newlyCreatedCount = list.filter((p) => !prevIds.has(Number(p.id))).length;
     setCustomPropellants(list);
     saveCustomPropellantsToStorage(list);
-    trackEvent('propellant_created');
+    for (let i = 0; i < newlyCreatedCount; i++) {
+      trackEvent('propellant_created');
+    }
     // Reset deleted custom propellant references back to default KNDX (id=1)
     const validIds = new Set([...DEFAULT_PROPELLANTS.map((p) => p.id), ...list.map((p) => p.id)]);
     setGrains((prev) => prev.map((g) => (validIds.has(Number(g.propellantType)) ? g : { ...g, propellantType: 1 })));
   };
 
   const handleSaveCustomGrains = (list: CustomGrainShape[]) => {
+    const prevIds = new Set(customGrainShapes.map((shape) => shape.id));
+    const newlyCreatedCount = list.filter((shape) => !prevIds.has(shape.id)).length;
     setCustomGrainShapes(list);
     saveCustomGrainsToStorage(list);
+    for (let i = 0; i < newlyCreatedCount; i++) {
+      trackEvent('custom_grain_created');
+    }
     const byId = new Map(list.map((shape) => [shape.id, shape]));
     setGrains((prev) =>
       prev.map((g) => {

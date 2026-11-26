@@ -30,7 +30,7 @@ import {
 } from '../lib/types';
 import { MotorStructureResult, PadmGoverningLimit } from '../lib/motorStructure';
 import { SavedSimulationEntry, SavedSimulationSummary } from '../hooks/useSimulationStorage';
-import { trackEvent } from '../lib/telemetry';
+import { recordExportTelemetry } from '../lib/telemetry';
 import { ApogeeResult } from '../lib/apogee';
 import { Language } from '../lib/i18n';
 import {
@@ -407,7 +407,9 @@ export const SimulationModals: React.FC<SimulationModalsProps> = ({
                       setIsExporting(false);
                     }
                   }
-                  trackEvent('export_data');
+                  recordExportTelemetry(
+                    exportFormat === 'csv' ? 'csv' : exportFormat === 'xlsx' ? 'xlsx' : 'pdf'
+                  );
                   setShowExportModal(false);
                 }}
               >

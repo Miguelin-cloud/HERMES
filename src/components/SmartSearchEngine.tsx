@@ -92,6 +92,7 @@ import {
   CustomPropellant, 
   DEFAULT_PROPELLANTS 
 } from '../lib/types';
+import { recordSmartSearchRun } from '../lib/telemetry';
 
 interface SmartVarCardProps {
   title: string;
@@ -1091,6 +1092,9 @@ export function SmartSearchEngine({
 
       setSearchOutcome(outcome);
       setSelectedCandidateIndex(0);
+      if (outcome && !outcome.isCancelled) {
+        recordSmartSearchRun(outcome.safeCount > 0);
+      }
     } catch (err) {
       console.error('Optimization search error:', err);
     } finally {

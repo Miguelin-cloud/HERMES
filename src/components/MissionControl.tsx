@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -34,6 +34,7 @@ import { Language, translations } from "../lib/i18n";
 import { ThemeColors } from "../lib/theme";
 import { Download, FileSpreadsheet, Sparkles, CheckCircle2, Layers, UploadCloud, HelpCircle, X, Compass, ExternalLink, Lock, Wind, Umbrella, Ruler, AlertTriangle } from "lucide-react";
 import * as XLSX from "xlsx";
+import { recordFlightTelemetry } from "../lib/telemetry";
 
 import {
   ExpDataType,
@@ -598,6 +599,7 @@ export function MissionControl({
     "altitude",
   );
   const [chartScope, setChartScope] = useState<"ascent" | "full">("ascent");
+  const lastTrackedFlightSigRef = useRef<string>("");
 
   useEffect(() => {
     if (onApogeeUpdate && (simApogee !== null || !results)) {
@@ -636,6 +638,18 @@ export function MissionControl({
     );
     setSimApogee(simResult);
     setIsUpdating(false);
+    if (simResult.maxApogee > 0) {
+      const sig = `sim_${results.summary.It_total_N_s.toFixed(1)}_${simResult.maxApogee.toFixed(1)}_${simResult.maxVelocity.toFixed(1)}`;
+      if (lastTrackedFlightSigRef.current !== sig) {
+        lastTrackedFlightSigRef.current = sig;
+        recordFlightTelemetry({
+          maxApogeeM: simResult.maxApogee,
+          maxVelocityMs: simResult.maxVelocity,
+          maxMach: simResult.mach.length > 0 ? Math.max(...simResult.mach) : 0,
+          countAsFlightRun: true,
+        });
+      }
+    }
   }, [results, calcParams, motorMassKg]);
 
   // Rerun experimental apogee when experimental data / units / inputs change
@@ -735,6 +749,18 @@ export function MissionControl({
 
       setExpApogee(res);
       setIsUpdating(false);
+      if (res.maxApogee > 0) {
+        const sig = `exp_${res.maxApogee.toFixed(1)}_${res.maxVelocity.toFixed(1)}`;
+        if (lastTrackedFlightSigRef.current !== sig) {
+          lastTrackedFlightSigRef.current = sig;
+          recordFlightTelemetry({
+            maxApogeeM: res.maxApogee,
+            maxVelocityMs: res.maxVelocity,
+            maxMach: res.mach.length > 0 ? Math.max(...res.mach) : 0,
+            countAsFlightRun: true,
+          });
+        }
+      }
     }, 50);
   }, [calcExpParams, calcParams, results, nozzleParams, motorMassKg]);
 

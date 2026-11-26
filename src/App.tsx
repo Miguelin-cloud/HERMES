@@ -16,6 +16,7 @@ import {
   Settings,
   Save,
   Flame,
+  Lock,
 } from 'lucide-react';
 
 import { MotorInputsPanel } from './components/MotorInputsPanel';
@@ -34,7 +35,15 @@ import { CustomPropellantModal } from './components/CustomPropellantModal';
 import { CustomGrainModal } from './components/CustomGrainModal';
 import { Language, translations } from './lib/i18n';
 import { Logo } from './components/Logo';
-import { recordAppLaunch, trackTabVisit, trackEvent } from './lib/telemetry';
+import {
+  recordAppLaunch,
+  trackTabVisit,
+  trackEvent,
+  syncTelemetryLanguage,
+  recordActiveTimeDelta,
+  recordSimulationTelemetry,
+  recordFlightTelemetry,
+} from './lib/telemetry';
 import { UsageAnalyticsModal } from './components/UsageAnalyticsModal';
 import { SavedSimulationEntry, useSimulationStorage } from './hooks/useSimulationStorage';
 import { getInstalledModules } from './lib/modules';
@@ -88,10 +97,21 @@ export default function App() {
 
   useEffect(() => {
     setGuideLang(lang);
+    syncTelemetryLanguage(lang);
   }, [lang]);
 
   useEffect(() => {
     recordAppLaunch(lang);
+  }, []);
+
+  useEffect(() => {
+    const INTERVAL_SEC = 15;
+    const timer = window.setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        recordActiveTimeDelta(INTERVAL_SEC);
+      }
+    }, INTERVAL_SEC * 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const {
@@ -301,6 +321,14 @@ export default function App() {
       }
     );
     setSimApogee(baseline);
+    if (baseline.maxApogee > 0) {
+      recordFlightTelemetry({
+        maxApogeeM: baseline.maxApogee,
+        maxVelocityMs: baseline.maxVelocity,
+        maxMach: baseline.mach.length > 0 ? Math.max(...baseline.mach) : 0,
+        countAsFlightRun: false,
+      });
+    }
   }, [results, motorStruct.motorMassKg, motorStruct.outerDiameterMm, activeTab, mcSyncVersion]);
 
   const t = translations[lang];
@@ -316,7 +344,15 @@ export default function App() {
       const res = runSimulation({ motor, nozzle, grains, customPropellants, customGrainShapes });
       setResults(res);
       setActiveTab('results');
-      trackEvent('simulation');
+      const overpressure = Boolean(
+        motorStruct.maxAdmissiblePressureMPa > 0 && res.summary.Pmax_MPa > motorStruct.maxAdmissiblePressureMPa
+      );
+      recordSimulationTelemetry({
+        results: res,
+        grains,
+        customPropellants,
+        isSafe: !overpressure,
+      });
     } catch (err) {
       console.error(err);
       setSimulationError(t.sim_error_msg);
@@ -331,7 +367,7 @@ export default function App() {
     setMotor(mergedMotor);
     setNozzle(newNozzle);
     setGrains(newGrains);
-    trackEvent('smart_search');
+    trackEvent('smart_search_applied');
     try {
       const res = runSimulation({
         motor: mergedMotor,
@@ -341,7 +377,16 @@ export default function App() {
         customGrainShapes,
       });
       setResults(res);
-      trackEvent('simulation');
+      const appliedStruct = calculateMotorStructure(mergedMotor);
+      const overpressure = Boolean(
+        appliedStruct.maxAdmissiblePressureMPa > 0 && res.summary.Pmax_MPa > appliedStruct.maxAdmissiblePressureMPa
+      );
+      recordSimulationTelemetry({
+        results: res,
+        grains: newGrains,
+        customPropellants,
+        isSafe: !overpressure,
+      });
     } catch (err) {
       console.error(err);
     }
@@ -510,6 +555,12 @@ export default function App() {
   };
 
   const handleAddLibrarySimulationToStudy = (entry: SavedSimulationEntry) => {
+    if (!installedModules.postprocess) {
+      setWorkspaceMode('postprocess');
+      setPostTab('study');
+      trackTabVisit('study');
+      return;
+    }
     try {
       const currentStudy = loadActiveStudyState();
       const newSeries = createStudySeriesFromLibraryEntry(entry, customPropellants, currentStudy.series);
@@ -629,13 +680,16 @@ export default function App() {
                     setWorkspaceMode('postprocess');
                     trackTabVisit(postTab);
                   }}
-                  className={`px-3 h-full rounded-md text-xs font-mono font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  className={`px-3 h-full rounded-md text-xs font-mono font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
                     workspaceMode === 'postprocess'
                       ? 'bg-primary text-primary-foreground shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {t.mode_postprocess || 'Post-Process'}
+                  <span>{t.mode_postprocess || 'Post-Process'}</span>
+                  {!installedModules.postprocess && (
+                    <Lock className={`w-3 h-3 shrink-0 ${workspaceMode === 'postprocess' ? 'text-primary-foreground/90' : 'text-amber-500'}`} />
+                  )}
                 </button>
               </div>
 
@@ -682,7 +736,7 @@ export default function App() {
                     <TabsTrigger
                       value="cfd"
                       data-tour="tab-trigger-cfd"
-                      disabled={!results && installedModules.animations}
+                      disabled={!results}
                       className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
                     >
                       {t.cfd || 'CFD Animation'}
@@ -693,9 +747,10 @@ export default function App() {
                     <TabsTrigger
                       value="study"
                       data-tour="tab-trigger-study"
-                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs"
+                      className="font-semibold text-xs px-3 rounded-md whitespace-nowrap shrink-0 text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-xs flex items-center gap-1.5"
                     >
-                      {t.tab_study || 'Estudio'}
+                      <span>{t.tab_study || 'Estudio'}</span>
+                      {!installedModules.postprocess && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
                     </TabsTrigger>
                     <TabsTrigger
                       value="propellant_char"
@@ -708,6 +763,7 @@ export default function App() {
                     >
                       <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                       <span>{t.tab_propellant_char}</span>
+                      {!installedModules.postprocess && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
                     </TabsTrigger>
                   </>
                 )}
@@ -792,9 +848,7 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="cfd" data-tour="cfd-panel" className="flex-1 overflow-hidden w-full relative min-h-0 flex flex-col gap-2">
-            {!installedModules.animations ? (
-              <ModuleNotInstalledNotice moduleId="animations" lang={lang} theme={theme} />
-            ) : results && (
+            {results && (
               <ErrorBoundary fallbackTitle="Error en visualización 3D / CFD">
                 <Suspense fallback={<div className="p-6 text-xs font-mono text-muted-foreground">{t.mc_processing}</div>}>
                   <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col xl:flex-row gap-4 pb-10">
@@ -870,8 +924,8 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="propellant_char" data-tour="propellant-char-panel" className="flex-1 flex flex-col min-h-0 gap-4 p-3 md:p-6 overflow-y-auto">
-            {!installedModules.propellant_char ? (
-              <ModuleNotInstalledNotice moduleId="propellant_char" lang={lang} theme={theme} />
+            {!installedModules.postprocess ? (
+              <ModuleNotInstalledNotice moduleId="postprocess" lang={lang} theme={theme} />
             ) : (
               <ErrorBoundary>
                 <Suspense fallback={<div className="p-6 text-xs font-mono text-muted-foreground">{t.mc_processing}</div>}>
@@ -882,17 +936,21 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="study" data-tour="study-panel" className="flex-1 flex flex-col min-h-0 gap-2 px-1 overflow-y-auto pt-2">
-            <ErrorBoundary fallbackTitle="Error in Study Module">
-              <StudyPanel
-                lang={lang}
-                results={results}
-                motor={motor}
-                nozzle={nozzle}
-                grains={grains}
-                customPropellants={customPropellants}
-                savedSimulations={savedSimulations}
-              />
-            </ErrorBoundary>
+            {!installedModules.postprocess ? (
+              <ModuleNotInstalledNotice moduleId="postprocess" lang={lang} theme={theme} />
+            ) : (
+              <ErrorBoundary fallbackTitle="Error in Study Module">
+                <StudyPanel
+                  lang={lang}
+                  results={results}
+                  motor={motor}
+                  nozzle={nozzle}
+                  grains={grains}
+                  customPropellants={customPropellants}
+                  savedSimulations={savedSimulations}
+                />
+              </ErrorBoundary>
+            )}
           </TabsContent>
         </Tabs>
       </main>
@@ -1099,6 +1157,7 @@ export default function App() {
           onReturnToStart={() => setShowSplash(true)}
           showInstallBtn={showInstallBtn}
           onInstallApp={handleInstallClick}
+          isAgenteInstalled={installedModules.agente_jesus}
           t={t}
         />
 

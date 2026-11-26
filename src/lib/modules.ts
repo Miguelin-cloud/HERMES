@@ -1,17 +1,15 @@
-export type OptionalModuleId = 'animations' | 'agente_jesus' | 'propellant_char';
+export type OptionalModuleId = 'postprocess' | 'agente_jesus';
 
 export interface InstalledModulesManifest {
   core: boolean;
-  animations: boolean;
+  postprocess: boolean;
   agente_jesus: boolean;
-  propellant_char: boolean;
 }
 
 const DEFAULT_INSTALLED_MODULES: InstalledModulesManifest = {
   core: true,
-  animations: true,
+  postprocess: true,
   agente_jesus: true,
-  propellant_char: true,
 };
 
 declare global {
@@ -34,9 +32,8 @@ export function getInstalledModules(): InstalledModulesManifest {
       const manifest = window.hermesDesktop.getInstalledModules();
       return {
         core: manifest.core !== false,
-        animations: manifest.animations !== false,
+        postprocess: manifest.postprocess !== false,
         agente_jesus: manifest.agente_jesus !== false,
-        propellant_char: manifest.propellant_char !== false,
       };
     } catch {
       return DEFAULT_INSTALLED_MODULES;

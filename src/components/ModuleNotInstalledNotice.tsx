@@ -1,5 +1,5 @@
 import React from 'react';
-import { PackageX, RefreshCw, Info } from 'lucide-react';
+import { Lock, RefreshCw, Info } from 'lucide-react';
 import { Language, translations } from '../lib/i18n';
 import { OptionalModuleId } from '../lib/modules';
 
@@ -18,22 +18,18 @@ export const ModuleNotInstalledNotice: React.FC<ModuleNotInstalledNoticeProps> =
   const moduleName =
     moduleId === 'agente_jesus'
       ? t.pkg_name_agente_jesus
-      : moduleId === 'propellant_char'
-        ? t.pkg_name_propellant_char
-        : t.pkg_name_animations;
+      : t.pkg_name_postprocess;
 
   const moduleDesc =
     moduleId === 'agente_jesus'
       ? t.pkg_desc_agente_jesus
-      : moduleId === 'propellant_char'
-        ? t.pkg_desc_propellant_char
-        : t.pkg_desc_animations;
+      : t.pkg_desc_postprocess;
 
   return (
     <div className="max-w-2xl mx-auto my-8 w-full rounded-xl border border-amber-500/45 bg-card text-foreground overflow-hidden">
       <div className="px-6 py-4 bg-card-header border-b border-amber-500/25 flex items-start gap-3.5">
         <div className="w-11 h-11 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
-          <PackageX size={24} />
+          <Lock size={22} />
         </div>
         <div>
           <span className="block text-[10px] font-mono uppercase tracking-widest font-semibold text-amber-700 dark:text-amber-300">

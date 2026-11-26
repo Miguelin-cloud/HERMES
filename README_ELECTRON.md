@@ -51,13 +51,13 @@ Cuando el proceso termine (verás que pone "Done" o vuelve a aparecer el cursor)
 *   Verás que ha aparecido una carpeta nueva llamada **`release`**.
 *   Dentro de `release` encontrarás el instalador **`HERMES V2.1.0 Setup 2.1.0.exe`**.
 
-**¡Ese es tu instalador!** Puedes enviárselo a quien quieras, subirlo a una web o mandarlo por correo. Al ejecutarlo, se instalará en el PC con el icono de HERMES y el selector de módulos opcionales.
+**¡Ese es tu instalador!** Puedes enviárselo a quien quieras, subirlo a una web o mandarlo por correo. Al ejecutarlo, mostrará la bienvenida con la identidad oficial de **COHETEROS**, te permitirá elegir la carpeta de destino, seleccionar los módulos (Motor de simulación obligatorio con animaciones 3D/CFD, Post-procesado opcional y Módulo de IA Agente Jesús opcional) y, al finalizar, decidir si crear el acceso directo en el escritorio y ejecutar HERMES.
 
 ---
 
 ## 🎨 Personalización Final
-Si quieres cambiar el icono antes de crear el `.exe`:
-1.  Reemplaza los archivos `public/icon.png` y `public/icon.ico` por otros con el mismo nombre.
+Si quieres cambiar el icono o las imágenes del instalador antes de crear el `.exe`:
+1.  Reemplaza los archivos `public/icon.png` y `public/icon.ico` (icono de la app) o `build/installerSidebar.bmp` (`164×314`) y `build/installerHeader.bmp` (`150×57`).
 2.  Vuelve a ejecutar `npm run electron:build`.
 
 ---

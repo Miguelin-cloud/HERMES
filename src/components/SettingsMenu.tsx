@@ -19,6 +19,7 @@ import {
   Compass,
   Home,
   Download,
+  Lock,
 } from 'lucide-react';
 import { Language } from '../lib/i18n';
 import {
@@ -49,6 +50,7 @@ interface SettingsMenuProps {
   onReturnToStart: () => void;
   showInstallBtn?: boolean;
   onInstallApp?: () => void;
+  isAgenteInstalled?: boolean;
   t: Record<string, string>;
 }
 
@@ -86,6 +88,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   onReturnToStart,
   showInstallBtn,
   onInstallApp,
+  isAgenteInstalled = true,
   t,
 }) => {
   const [openTheme, setOpenTheme] = useState(false);
@@ -220,10 +223,15 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                   onClose();
                   onOpenAgenteJesus();
                 }}
-                className="h-9 px-2.5 rounded-md border border-amber-500/35 bg-amber-500/10 hover:bg-amber-500/20 text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap min-w-0"
+                className={`h-9 px-2.5 rounded-md border text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap min-w-0 ${
+                  isAgenteInstalled
+                    ? 'border-amber-500/35 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                    : 'border-border bg-muted/40 hover:bg-muted text-muted-foreground'
+                }`}
               >
                 <Bot className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{t.agente_open_btn}</span>
+                <span className="truncate flex-1 text-left">{t.agente_open_btn}</span>
+                {!isAgenteInstalled && <Lock className="w-3 h-3 shrink-0 text-amber-500" />}
               </button>
 
               <button
